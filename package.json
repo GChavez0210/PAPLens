@@ -1,0 +1,67 @@
+{
+  "name": "paplens",
+  "version": "1.1.0",
+  "description": "Self-contained Electron CPAP Viewer forked from xpaulso/cpap-viewer",
+  "main": "electron/main/index.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
+    "dev:renderer": "vite",
+    "dev:electron": "wait-on tcp:5173 && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron .",
+    "build": "vite build",
+    "start": "electron .",
+    "postinstall": "electron-builder install-app-deps",
+    "dist": "npm run build && electron-builder"
+  },
+  "keywords": [
+    "cpap",
+    "resmed",
+    "sleep",
+    "apnea",
+    "edf",
+    "electron",
+    "react",
+    "sqlite"
+  ],
+  "author": "",
+  "license": "MIT",
+  "build": {
+    "appId": "com.gabox.paplens",
+    "productName": "PAPLens",
+    "files": [
+      "electron/**/*",
+      "dist/renderer/**/*",
+      "package.json",
+      "report.html",
+      "ReportLogo.png"
+    ],
+    "directories": {
+      "buildResources": "build",
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.0",
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^36.5.0",
+    "electron-builder": "^26.0.12",
+    "vite": "^7.1.12",
+    "wait-on": "^9.0.3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.4.1",
+    "chart.js": "^4.4.9",
+    "handlebars": "^4.7.8",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  }
+}

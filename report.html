@@ -1,0 +1,750 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PAPLens - PAP Therapy Report</title>
+
+  <style>
+    /* ============================================================
+      PAPLens PDF (Printable / Paper Mode)
+      Purpose: clinic-friendly, high legibility, printer-safe
+      Palette: white background, indigo/cyan accents
+    ============================================================ */
+
+    :root{
+      --indigo:#4F46E5;      /* brand primary */
+      --cyan:#22D3EE;        /* brand accent */
+      --success:#10B981;
+      --warning:#F59E0B;
+      --critical:#EF4444;
+
+      --paper:#ffffff;
+      --ink:#0b1220;
+      --muted:#4b5563;
+      --line:#e5e7eb;
+      --soft:#f8fafc;
+      --soft2:#fafafa;
+
+      --radius:10px;
+    }
+
+    /* ------------------------------
+      Print Settings
+    ------------------------------ */
+    @page {
+      size: A4;
+      margin: 16mm 14mm;
+    }
+
+    body{
+      font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      margin: 0;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    .page{
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    /* ------------------------------
+      Header
+    ------------------------------ */
+    .header{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border-bottom: 2px solid var(--line);
+      padding-bottom: 10px;
+      margin-bottom: 14px;
+      gap: 10px;
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:12px;
+      min-width: 280px;
+    }
+
+    .brandLogo{
+      width: 44px;
+      height: 44px;
+      border-radius: 14px; /* squircle-ish */
+      overflow:hidden;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      border: 1px solid var(--line);
+      background: #0f172a; /* dark tile for logo contrast */
+    }
+
+    .brandLogo img{
+      width: 44px;
+      height: 44px;
+      object-fit: contain;
+      display:block;
+    }
+
+    .brandText{
+      display:flex;
+      flex-direction:column;
+      line-height:1.12;
+    }
+    .brandName{
+      font-weight: 900;
+      letter-spacing: .2px;
+      font-size: 18px;
+      color: var(--ink);
+    }
+    .brandTag{
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .reportMeta{
+      text-align:right;
+      line-height:1.35;
+      min-width: 220px;
+    }
+    .reportMeta .title{
+      font-weight: 900;
+      font-size: 13px;
+      color: var(--ink);
+    }
+    .reportMeta .meta{
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ------------------------------
+      Sections / Layout
+    ------------------------------ */
+    .section{
+      margin: 14px 0 16px;
+    }
+
+    .sectionTitle{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin: 0 0 10px;
+      font-weight: 900;
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .sectionTitle .dot{
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--indigo);
+    }
+
+    .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .grid3{
+      display:grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 10px;
+    }
+
+    .card{
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 12px;
+      background: var(--paper);
+    }
+
+    .label{
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .value{
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--ink);
+    }
+    .small{
+      font-size: 11px;
+      color: var(--muted);
+      line-height:1.35;
+      margin-top: 6px;
+    }
+
+    /* ------------------------------
+      KPI
+    ------------------------------ */
+    .kpi{
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      background: var(--paper);
+    }
+
+    .kpiTop{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+      margin-bottom: 6px;
+    }
+
+    .kpiName{
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .6px;
+    }
+
+    .kpiVal{
+      font-size: 20px;
+      font-weight: 950;
+      color: var(--ink);
+      line-height: 1.05;
+    }
+
+    .kpiUnit{
+      font-size: 11px;
+      font-weight: 800;
+      color: var(--muted);
+      margin-left: 4px;
+    }
+
+    .kpiNote{
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .chip{
+      display:inline-flex;
+      align-items:center;
+      gap:6px;
+      font-size: 11px;
+      font-weight: 900;
+      padding: 4px 9px;
+      border-radius: 999px;
+      background: #eef2ff;          /* indigo tint */
+      color: #1e1b4b;
+      border: 1px solid #dbeafe;
+      white-space: nowrap;
+    }
+    .chip .dot{
+      width:8px; height:8px; border-radius:50%;
+      background: var(--success);
+    }
+    .chip.warn{
+      background: #fffbeb;
+      border-color: #fde68a;
+      color: #78350f;
+    }
+    .chip.warn .dot{ background: var(--warning); }
+    .chip.crit{
+      background: #fef2f2;
+      border-color: #fecaca;
+      color: #7f1d1d;
+    }
+    .chip.crit .dot{ background: var(--critical); }
+
+    /* ------------------------------
+      Callout narrative block
+    ------------------------------ */
+    .callout{
+      border-left: 4px solid var(--indigo);
+      background: var(--soft);
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-top: 10px;
+    }
+    .callout h4{
+      margin:0 0 6px;
+      font-size: 12px;
+      font-weight: 950;
+      color: var(--ink);
+    }
+    .callout p{
+      margin:0;
+      font-size: 11px;
+      color: var(--ink);
+      line-height:1.45;
+    }
+
+    /* ------------------------------
+      Charts
+    ------------------------------ */
+    .chartWrap{
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      background: var(--paper);
+    }
+    .chartTitle{
+      font-size: 12px;
+      font-weight: 950;
+      margin: 0 0 8px;
+      color: var(--ink);
+    }
+    .chartNote{
+      margin-top: 6px;
+      font-size: 10.5px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+    .chartImg{
+      width: 100%;
+      height: 210px; /* adjust per chart */
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background: var(--soft2);
+      overflow:hidden;
+    }
+    .chartImg img{
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display:block;
+    }
+
+    /* ------------------------------
+      Tables
+    ------------------------------ */
+    table{
+      width:100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    th, td{
+      border-bottom: 1px solid var(--line);
+      padding: 8px 6px;
+      text-align:left;
+      vertical-align: top;
+    }
+    th{
+      font-size: 11px;
+      color: var(--muted);
+      font-weight: 950;
+      text-transform: uppercase;
+      letter-spacing: .4px;
+      background: var(--soft2);
+    }
+    tr:last-child td{ border-bottom: none; }
+
+    /* ------------------------------
+      Footer
+    ------------------------------ */
+    .footer{
+      margin-top: 14px;
+      padding-top: 10px;
+      border-top: 1px solid var(--line);
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      font-size: 10.5px;
+      color: var(--muted);
+    }
+    .disclaimer{
+      font-size: 10.5px;
+      color: var(--muted);
+      line-height: 1.35;
+      max-width: 78%;
+    }
+    .pageNum{
+      white-space: nowrap;
+    }
+
+    /* Page break helpers */
+    .pageBreak{ page-break-before: always; }
+    .avoidBreak{ break-inside: avoid; page-break-inside: avoid; }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+
+    <!-- =========================================================
+      HEADER
+    ========================================================== -->
+    <div class="header">
+      <div class="brand">
+        <div class="brandLogo">
+          <!-- Recommended: embed base64 PNG -->
+          <img src="{{brand.logoDataUri}}" alt="PAPLens Logo" />
+        </div>
+        <div class="brandText">
+          <div class="brandName">PAPLens</div>
+          <div class="brandTag">PAP Therapy Report • Clinical Review Summary</div>
+        </div>
+      </div>
+
+      <div class="reportMeta">
+        <div class="title">Report for Professional Review</div>
+        <div class="meta">Generated: <strong>{{report.generatedAt}}</strong></div>
+        <div class="meta">Range: <strong>{{report.rangeLabel}}</strong></div>
+        <div class="meta">Profile: <strong>{{profile.name}}</strong></div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+      SECTION: General info
+    ========================================================== -->
+    <div class="section">
+      <div class="sectionTitle"><span class="dot"></span>General Information</div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="label">User / Profile</div>
+          <div class="value">{{profile.name}}</div>
+          <div class="small">
+            {{#if profile.age}}Age: <strong>{{profile.age}}</strong><br/>{{/if}}
+            {{#if profile.notes}}Notes: {{profile.notes}}{{/if}}
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="label">Device</div>
+          <div class="value">{{device.model}}</div>
+          <div class="small">
+            Manufacturer: <strong>{{device.manufacturer}}</strong><br/>
+            Serial: <strong>{{device.serialNumber}}</strong><br/>
+            Firmware: <strong>{{device.firmware}}</strong>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+      SECTION: Executive summary
+    ========================================================== -->
+    <div class="section avoidBreak">
+      <div class="sectionTitle"><span class="dot"></span>Executive Summary (last {{report.windowDays}} days)</div>
+
+      <div class="grid3">
+        <div class="kpi">
+          <div class="kpiTop">
+            <div>
+              <div class="kpiName">Average AHI</div>
+              <div><span class="kpiVal">{{summary.ahiAvg}}</span><span class="kpiUnit">events/hr</span></div>
+            </div>
+            <span class="chip {{summary.ahiBadgeClass}}">
+              <span class="dot"></span>{{summary.ahiBadgeLabel}}
+            </span>
+          </div>
+          <div class="kpiNote">Reference: &lt;5 adequate, 5–15 mild, 15–30 moderate, &gt;30 severe.</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpiTop">
+            <div>
+              <div class="kpiName">Average Usage</div>
+              <div><span class="kpiVal">{{summary.usageAvg}}</span><span class="kpiUnit">hrs/night</span></div>
+            </div>
+            <span class="chip {{summary.complianceBadgeClass}}">
+              <span class="dot"></span>{{summary.complianceBadgeLabel}}
+            </span>
+          </div>
+          <div class="kpiNote">Typical compliance threshold: ≥4 hours/night.</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpiTop">
+            <div>
+              <div class="kpiName">Leak (Typical)</div>
+              <div><span class="kpiVal">{{summary.leakTypical}}</span><span class="kpiUnit">L/min</span></div>
+            </div>
+            <span class="chip {{summary.leakBadgeClass}}">
+              <span class="dot"></span>{{summary.leakBadgeLabel}}
+            </span>
+          </div>
+          <div class="kpiNote">Common reference (95p): &lt;24 normal, 24–36 elevated, &gt;36 high.</div>
+        </div>
+      </div>
+
+      <div class="grid3" style="margin-top:10px;">
+        <div class="kpi">
+          <div class="kpiTop">
+            <div>
+              <div class="kpiName">Stability Score</div>
+              <div><span class="kpiVal">{{summary.stabilityAvg}}</span><span class="kpiUnit">/100</span></div>
+            </div>
+            <span class="chip"><span class="dot"></span>Derived</span>
+          </div>
+          <div class="kpiNote">Composite stability indicator based on variability (AHI, leak, pressure, ventilation).</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpiTop">
+            <div>
+              <div class="kpiName">Mask Fit Score</div>
+              <div><span class="kpiVal">{{summary.maskFitAvg}}</span><span class="kpiUnit">/100</span></div>
+            </div>
+            <span class="chip"><span class="dot"></span>Derived</span>
+          </div>
+          <div class="kpiNote">Computed from leak level/variability and leak↔AHI correlation.</div>
+        </div>
+
+        <div class="kpi">
+          <div class="kpiTop">
+            <div>
+              <div class="kpiName">Compliance Risk</div>
+              <div><span class="kpiVal">{{summary.complianceRisk}}</span></div>
+            </div>
+            <span class="chip {{summary.riskBadgeClass}}">
+              <span class="dot"></span>{{summary.riskBadgeLabel}}
+            </span>
+          </div>
+          <div class="kpiNote">Estimated using recent usage levels and 14-day trend.</div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <h4>Quick Interpretation</h4>
+        <p>{{summary.narrative}}</p>
+      </div>
+    </div>
+
+    <!-- =========================================================
+      SECTION: Key Findings table
+    ========================================================== -->
+    <div class="section avoidBreak">
+      <div class="sectionTitle"><span class="dot"></span>Key Findings</div>
+
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:26%;">Insight</th>
+              <th style="width:20%;">Result</th>
+              <th>Clinical Review Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{#each insights.keyFindings}}
+            <tr>
+              <td><strong>{{this.title}}</strong></td>
+              <td>{{this.result}}</td>
+              <td>{{this.comment}}</td>
+            </tr>
+            {{/each}}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="small" style="margin-top:8px;">
+        Note: These insights are analytic outputs derived from PAP therapy data and do not constitute a medical diagnosis.
+      </div>
+    </div>
+
+    <!-- =========================================================
+      SECTION: Trends & Charts
+    ========================================================== -->
+    <div class="section">
+      <div class="sectionTitle"><span class="dot"></span>Trends & Charts (last {{report.windowDays}} days)</div>
+
+      <div class="grid2">
+        <div class="chartWrap avoidBreak">
+          <div class="chartTitle">AHI Trend</div>
+          <div class="chartImg">
+            <img src="{{charts.ahiDataUri}}" alt="AHI Trend" />
+          </div>
+          <div class="chartNote">{{charts.ahiCaption}}</div>
+        </div>
+
+        <div class="chartWrap avoidBreak">
+          <div class="chartTitle">Usage Hours</div>
+          <div class="chartImg">
+            <img src="{{charts.usageDataUri}}" alt="Usage Hours" />
+          </div>
+          <div class="chartNote">{{charts.usageCaption}}</div>
+        </div>
+
+        <div class="chartWrap avoidBreak">
+          <div class="chartTitle">Pressure & Leak</div>
+          <div class="chartImg">
+            <img src="{{charts.pressureLeakDataUri}}" alt="Pressure and Leak" />
+          </div>
+          <div class="chartNote">{{charts.pressureLeakCaption}}</div>
+        </div>
+
+        <div class="chartWrap avoidBreak">
+          <div class="chartTitle">Ventilation / Flow</div>
+          <div class="chartImg">
+            <img src="{{charts.flowDataUri}}" alt="Flow" />
+          </div>
+          <div class="chartNote">{{charts.flowCaption}}</div>
+        </div>
+
+        <div class="chartWrap avoidBreak">
+          <div class="chartTitle">Tidal Volume</div>
+          <div class="chartImg">
+            <img src="{{charts.tidalDataUri}}" alt="Tidal Volume" />
+          </div>
+          <div class="chartNote">{{charts.tidalCaption}}</div>
+        </div>
+
+        <div class="chartWrap avoidBreak">
+          <div class="chartTitle">Correlation Summary</div>
+          <div class="card" style="border:none; padding:0;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Pair</th>
+                  <th>r</th>
+                  <th>n</th>
+                  <th>Interpretation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#each correlations.items}}
+                <tr>
+                  <td><strong>{{this.pair}}</strong></td>
+                  <td>{{this.r}}</td>
+                  <td>{{this.n}}</td>
+                  <td>{{this.label}}</td>
+                </tr>
+                {{/each}}
+              </tbody>
+            </table>
+          </div>
+          <div class="chartNote">{{correlations.caption}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+      SECTION: Burden & Outliers
+    ========================================================== -->
+    <div class="section avoidBreak">
+      <div class="sectionTitle"><span class="dot"></span>Control & Notable Events</div>
+
+      <div class="grid2">
+        <div class="card">
+          <div class="label">Residual Burden (last 30 days)</div>
+          <div class="value">{{burden.summaryLine}}</div>
+          <div class="small">
+            Nights with AHI &gt; 5: <strong>{{burden.nightsOver5}}</strong><br/>
+            Nights with AHI &gt; 10: <strong>{{burden.nightsOver10}}</strong><br/>
+            AHI 95th percentile (30d): <strong>{{burden.ahiP95}}</strong>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="label">Detected Outlier Nights</div>
+          {{#if outliers.hasOutliers}}
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Severity</th>
+                  <th>Metrics</th>
+                </tr>
+              </thead>
+              <tbody>
+                {{#each outliers.items}}
+                <tr>
+                  <td><strong>{{this.date}}</strong></td>
+                  <td>{{this.severity}}</td>
+                  <td>{{this.metrics}}</td>
+                </tr>
+                {{/each}}
+              </tbody>
+            </table>
+          {{else}}
+            <div class="small">No outlier nights were detected in the selected range.</div>
+          {{/if}}
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+      PAGE BREAK: Appendix
+    ========================================================== -->
+    <div class="pageBreak"></div>
+
+    <!-- =========================================================
+      Appendix: Technical + Night table
+    ========================================================== -->
+    <div class="section">
+      <div class="sectionTitle"><span class="dot"></span>Technical Appendix</div>
+
+      <div class="card">
+        <div class="small">
+          <strong>Data Source:</strong> ResMed EDF files imported locally by PAPLens.<br/>
+          <strong>Night Boundary:</strong> {{report.sleepBoundaryLabel}} (default: noon-to-noon).<br/>
+          <strong>Integrity:</strong> When metrics are missing, PAPLens reports “insufficient data” and avoids fabricated values.
+        </div>
+      </div>
+
+      <div class="section avoidBreak">
+        <div class="sectionTitle"><span class="dot"></span>Nights Table (selected range)</div>
+        <div class="card">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>AHI</th>
+                <th>Usage (h)</th>
+                <th>Pressure (med)</th>
+                <th>Leak (p50)</th>
+                <th>MV (p50)</th>
+                <th>RR (p50)</th>
+                <th>TV (p50)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {{#each tables.nights}}
+              <tr>
+                <td><strong>{{this.date}}</strong></td>
+                <td>{{this.ahi}}</td>
+                <td>{{this.usage}}</td>
+                <td>{{this.pressure}}</td>
+                <td>{{this.leak}}</td>
+                <td>{{this.mv}}</td>
+                <td>{{this.rr}}</td>
+                <td>{{this.tv}}</td>
+              </tr>
+              {{/each}}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="section avoidBreak">
+        <div class="sectionTitle"><span class="dot"></span>Short Glossary</div>
+        <div class="card small">
+          <strong>AHI:</strong> apnea-hypopnea index (events per hour).<br/>
+          <strong>Leak:</strong> air leak; high values can reduce therapy effectiveness.<br/>
+          <strong>MV:</strong> minute ventilation (L/min).<br/>
+          <strong>RR:</strong> respiratory rate (breaths/min).<br/>
+          <strong>TV:</strong> tidal volume (mL).<br/>
+        </div>
+      </div>
+    </div>
+
+    <!-- =========================================================
+      Footer
+    ========================================================== -->
+    <div class="footer">
+      <div class="disclaimer">
+        This report was generated by PAPLens as an analytic aid for professional review. It does not replace medical evaluation.
+      </div>
+      <div class="pageNum">
+        {{report.footerRight}}
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

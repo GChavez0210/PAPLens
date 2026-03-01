@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Electron
+*.asar
+
+# CPAP data (don't commit personal health data)
+NO NAME/
+DATALOG/
+*.edf
+*.crc
+*.tgt
+*.dat
+
+# Publishing Exclusions
+release/
+release_debug/
+Test Data/
