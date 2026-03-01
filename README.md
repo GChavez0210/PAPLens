@@ -1,4 +1,14 @@
+<div align="center">
+
+![PAPLens Logo](PAPLens-Logo.png)
+
 # PAPLens
+
+[![GitHub Repo](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/GChavez0210/PAPLens)
+
+**Standalone Desktop CPAP Analytics for ResMed AirSense 10/11**
+
+</div>
 
 PAPLens is a standalone, high-performance desktop analytics application for in-depth analysis of ResMed AirSense 10 and AirSense 11 CPAP datasets.
 
