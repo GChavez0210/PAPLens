@@ -71,8 +71,9 @@ body {
   gap: 14px;
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 12px 14px;
+  border-radius: 12px;
+  padding: 16px 18px;
+  min-height: 84px;
 }
 
 .brand {
@@ -101,9 +102,17 @@ body {
 
 .nav-controls {
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+.top-nav .btn-primary,
+.top-nav .btn-secondary {
+  padding: 11px 16px;
+  border-radius: 10px;
+  font-size: 1.04rem;
+  font-weight: 600;
 }
 
 button,
@@ -268,9 +277,17 @@ button {
   height: 85vh;
   z-index: 9999;
   background: var(--card);
-  box-shadow: 0 0 50px var(--shadow-lg), 0 0 0 100vw rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 50px var(--shadow-lg);
   display: flex;
   flex-direction: column;
+  cursor: default;
+}
+
+.chart-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0, 0, 0, 0.58);
 }
 
 .chart-card.expanded h3 {
@@ -289,6 +306,7 @@ button {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  margin-bottom: 12px;
 }
 
 .control-row h2 {
@@ -296,6 +314,25 @@ button {
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.3px;
+  margin: 0;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  margin: 0;
+  line-height: 1.2;
+}
+
+.list-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .panel h3 {

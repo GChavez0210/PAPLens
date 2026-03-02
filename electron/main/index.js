@@ -15,6 +15,14 @@ let currentProfileDatabase = null;
 let activeProfileId = null;
 let secureSettings = null;
 
+function resolveAssetPath(relativePath) {
+  const devPath = path.join(__dirname, "..", "..", relativePath);
+  if (fs.existsSync(devPath)) return devPath;
+  const packagedPath = path.join(process.resourcesPath, "app.asar", relativePath);
+  if (fs.existsSync(packagedPath)) return packagedPath;
+  return devPath;
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1400,
@@ -27,7 +35,7 @@ function createMainWindow() {
       nodeIntegration: false
     },
     title: "PAPLens",
-    icon: path.join(__dirname, "..", "..", "build", "PAPLens.ico")
+    icon: resolveAssetPath(path.join("src", "renderer", "assets", "PLIcon.ico"))
   });
 
   if (process.env.VITE_DEV_SERVER_URL) {
@@ -176,13 +184,13 @@ function registerIpc() {
         const deviceId = db.prepare('SELECT id FROM devices WHERE serial_number = ?').get(reportData.device.serialNumber)?.id;
 
         if (deviceId) {
-          const logoPath = isDev ? path.join(__dirname, "..", "..", "ReportLogo.png") : path.join(process.resourcesPath, "app.asar", "ReportLogo.png");
+          const logoPath = resolveAssetPath(path.join("src", "renderer", "assets", "PLReportLogo.png"));
           let logoDataUri = "";
           try {
             const logoBuffer = fs.readFileSync(logoPath);
             logoDataUri = `data:image/png;base64,${logoBuffer.toString("base64")}`;
           } catch (err) {
-            console.error("ReportLogo.png not found", err);
+            console.error("PLReportLogo.png not found", err);
           }
           reportData.header = { logoUrl: logoDataUri };
 
@@ -230,7 +238,7 @@ function registerIpc() {
           // Frontend payload builder now supplies reportData.summaryScores and reportData.correlations
           // The handler simply acts as a passthrough to the Handlebars compilation step.
 
-          const defaultLogoPath = path.join(__dirname, "..", "..", "src", "assets", "PAPLens-logo.png");
+          const defaultLogoPath = resolveAssetPath(path.join("src", "renderer", "assets", "PLReportLogo.png"));
           if (fs.existsSync(defaultLogoPath)) {
             const logof = fs.readFileSync(defaultLogoPath);
             reportData.brand = { logoDataUri: "data:image/png;base64," + logof.toString('base64') };

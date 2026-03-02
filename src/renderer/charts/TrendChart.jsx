@@ -11,6 +11,19 @@ export function TrendChart({ title, labels, datasets, type = "line", options = {
   const chartRef = useRef(null);
 
   useEffect(() => {
+    if (!isExpanded) return undefined;
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsExpanded(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isExpanded]);
+
+  useEffect(() => {
     if (!canvasRef.current) {
       return undefined;
     }
@@ -82,11 +95,20 @@ export function TrendChart({ title, labels, datasets, type = "line", options = {
   }, [title, labels, datasets, isExpanded, theme]);
 
   return (
-    <div className={`chart-card ${isExpanded ? "expanded" : ""}`} onClick={() => setIsExpanded(!isExpanded)} title={isExpanded ? "Click to minimize" : "Click to expand"}>
-      <h3>{title}</h3>
-      <div className="canvas-container">
-        <canvas ref={canvasRef} />
+    <>
+      {isExpanded && <div className="chart-backdrop" onClick={() => setIsExpanded(false)} />}
+      <div
+        className={`chart-card ${isExpanded ? "expanded" : ""}`}
+        onClick={() => {
+          if (!isExpanded) setIsExpanded(true);
+        }}
+        title={isExpanded ? "Click outside chart to minimize" : "Click to expand"}
+      >
+        <h3 onClick={(e) => isExpanded && e.stopPropagation()}>{title}</h3>
+        <div className="canvas-container" onClick={(e) => isExpanded && e.stopPropagation()}>
+          <canvas ref={canvasRef} />
+        </div>
       </div>
-    </div>
+    </>
   );
 }

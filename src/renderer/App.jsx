@@ -334,14 +334,14 @@ export function App() {
     <main className="app-shell">
       <header className="top-nav">
         <div className="brand">
-          <img src={theme === 'light' ? new URL("./assets/PAPLensLogoLM.png", import.meta.url).href : new URL("./assets/PAPLens-Logo.png", import.meta.url).href} alt="PAPLens" style={{ height: "36px", width: "auto" }} />
+          <img src={theme === 'light' ? new URL("./assets/PLLogoL.png", import.meta.url).href : new URL("./assets/PLLogoD.png", import.meta.url).href} alt="PAPLens" style={{ height: "48px", width: "auto" }} />
         </div>
         <div className="nav-controls" style={{ marginLeft: "auto" }}>
           {deviceInfo.productName && (() => {
             const name = (deviceInfo.productName || "").toLowerCase();
             const model = name.includes("11") ? "AirSense 11" : name.includes("10") ? "AirSense 10" : deviceInfo.productName;
             return (
-              <span style={{ fontSize: '0.75rem', color: 'var(--muted)', background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '0.9rem', color: 'var(--muted)', background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: '0.9rem' }}>🖥️</span> {model}
               </span>
             );
@@ -349,7 +349,7 @@ export function App() {
           <button
             onClick={toggleTheme}
             title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            style={{ fontSize: '1.1rem', padding: '6px 10px', background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', lineHeight: 1 }}
+            style={{ fontSize: '1.2rem', padding: '10px 14px', background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', lineHeight: 1 }}
           >
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
@@ -369,7 +369,7 @@ export function App() {
 
       <div className="print-header">
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <img src={new URL("./assets/PAPLens-ReportLogo.png", import.meta.url).href} alt="PAPLens Logo" style={{ height: "48px", width: "auto" }} />
+          <img src={new URL("./assets/PLReportLogo.png", import.meta.url).href} alt="PAPLens Logo" style={{ height: "48px", width: "auto" }} />
           <div>
             <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Clinical Report</h1>
             <div style={{ color: "#555" }}>Processed securely offline</div>

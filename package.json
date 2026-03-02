@@ -1,6 +1,6 @@
 {
   "name": "paplens",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Self-contained Electron CPAP Viewer forked from xpaulso/cpap-viewer",
   "main": "electron/main/index.js",
   "scripts": {
@@ -34,13 +34,15 @@
       "dist/renderer/**/*",
       "package.json",
       "report.html",
-      "ReportLogo.png"
+      "src/renderer/assets/PLReportLogo.png",
+      "src/renderer/assets/PLIcon.ico"
     ],
     "directories": {
       "buildResources": "build",
       "output": "release"
     },
     "win": {
+      "icon": "src/renderer/assets/PLIcon.ico",
       "target": [
         {
           "target": "nsis",

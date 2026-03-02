@@ -175,6 +175,22 @@ function BurdenStat({ value, total, label, color }) {
     );
 }
 
+function Ahi95Stat({ value }) {
+    const pctOfTarget = Math.min(100, Math.round((value / 5) * 100));
+    return (
+        <div style={{ textAlign: "center" }}>
+            <div style={{ fontSize: "2rem", fontWeight: 800, color: "#22D3EE" }}>
+                {Number(value || 0).toFixed(1)}
+            </div>
+            <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: 6 }}>AHI 95th Percentile</div>
+            <div style={{ background: "var(--card-inner)", borderRadius: 4, height: 4, width: "80%", margin: "0 auto" }}>
+                <div style={{ width: `${pctOfTarget}%`, background: "#22D3EE", height: "100%", borderRadius: 4, transition: "width 0.8s" }} />
+            </div>
+            <div style={{ fontSize: "0.65rem", color: "#9ca3af", marginTop: 4 }}>events / hr</div>
+        </div>
+    );
+}
+
 // ── Insight card ─────────────────────────────────────────────────────────────
 function InsightCard({ insight }) {
     const theme = KEY_COLOR[insight.key] || KEY_COLOR.default;
@@ -333,13 +349,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
                         <BurdenStat value={burden.nights_over_5 ?? 0} total={totalNights} label="Nights AHI > 5" color="#f59e0b" />
                         <BurdenStat value={burden.nights_over_10 ?? 0} total={totalNights} label="Nights AHI > 10" color="#ef4444" />
-                        <div style={{ textAlign: "center" }}>
-                            <div style={{ fontSize: "2rem", fontWeight: 800, color: "#22D3EE" }}>
-                                {Number(burden.AHI_p95_30 || 0).toFixed(1)}
-                            </div>
-                            <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: 6 }}>AHI 95th Percentile</div>
-                            <div style={{ fontSize: "0.65rem", color: "#9ca3af" }}>events / hr</div>
-                        </div>
+                        <Ahi95Stat value={burden.AHI_p95_30} />
                     </div>
                 </section>
             )}
