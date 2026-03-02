@@ -3,39 +3,29 @@
 
 <head>
     <meta charset="utf-8" />
-    <title>PAPLens – PAP Therapy Report</title>
+    <title>PAPLens - PAP Therapy Report</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <style>
         @page {
             size: Letter;
-            margin: 14mm 14mm;
+            margin: 12mm;
         }
 
         :root {
             --paper: #ffffff;
             --ink: #0f172a;
-            /* slate-900 */
             --muted: #475569;
-            /* slate-600 */
             --faint: #64748b;
-            /* slate-500 */
-            --line: #e2e8f0;
-            /* slate-200 */
-            --card: #f8fafc;
-            /* slate-50 */
-            --card2: #ffffff;
-
-            --good: #059669;
-            /* emerald-600 */
-            --warn: #d97706;
-            /* amber-600 */
-            --bad: #dc2626;
-            /* red-600 */
-            --accent: #2563eb;
-            /* blue-600 */
-
-            --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-            --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial;
+            --line: #dbe3ee;
+            --soft: #f8fafc;
+            --soft-2: #f1f5f9;
+            --good: #047857;
+            --warn: #b45309;
+            --bad: #b91c1c;
+            --accent: #1d4ed8;
+            --accent-soft: #e8f0ff;
+            --sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+            --mono: Consolas, "Liberation Mono", "Courier New", monospace;
         }
 
         * {
@@ -44,9 +34,9 @@
 
         body {
             margin: 0;
-            font-family: var(--sans);
             color: var(--ink);
             background: var(--paper);
+            font-family: var(--sans);
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
@@ -55,14 +45,18 @@
             page-break-after: always;
         }
 
+        .page:last-of-type {
+            page-break-after: auto;
+        }
+
         .header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            gap: 14px;
             border-bottom: 1px solid var(--line);
-            padding-bottom: 12px;
-            margin-bottom: 12px;
+            padding-bottom: 10px;
+            margin-bottom: 10px;
+            gap: 12px;
         }
 
         .brand {
@@ -73,15 +67,16 @@
         }
 
         .logo {
-            width: 36px;
-            height: 36px;
-            border-radius: 10px;
+            width: 38px;
+            height: 38px;
             border: 1px solid var(--line);
+            border-radius: 10px;
             background: #fff;
             display: flex;
             align-items: center;
             justify-content: center;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .logo img {
@@ -90,23 +85,22 @@
             object-fit: contain;
         }
 
-        .app {
+        .title {
             margin: 0;
-            font-weight: 900;
             font-size: 14px;
+            font-weight: 900;
             letter-spacing: .2px;
         }
 
-        .sub {
+        .subtitle {
             margin: 2px 0 0;
+            font-size: 10.5px;
             color: var(--muted);
-            font-size: 11px;
-            line-height: 1.3;
         }
 
         .meta {
             text-align: right;
-            font-size: 10.5px;
+            font-size: 10px;
             color: var(--muted);
             line-height: 1.45;
             white-space: nowrap;
@@ -114,23 +108,43 @@
 
         .meta strong {
             color: var(--ink);
-            font-weight: 800;
         }
 
-        .footer {
+        .hero {
+            border: 1px solid rgba(29, 78, 216, .18);
+            background: linear-gradient(180deg, var(--accent-soft), #ffffff);
+            border-radius: 14px;
+            padding: 10px 12px;
+            margin-bottom: 10px;
+        }
+
+        .hero-head {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-top: 1px solid var(--line);
-            margin-top: 14px;
-            padding-top: 10px;
-            font-size: 10px;
-            color: var(--faint);
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+
+        .hero-title {
+            margin: 0;
+            font-size: 12px;
+            font-weight: 900;
+        }
+
+        .chip {
+            border: 1px solid var(--line);
+            border-radius: 999px;
+            background: #fff;
+            color: var(--muted);
+            font-size: 9.5px;
+            padding: 2px 8px;
+            white-space: nowrap;
         }
 
         .grid {
             display: grid;
-            gap: 12px;
+            gap: 10px;
         }
 
         .grid-2 {
@@ -144,84 +158,47 @@
         .card {
             border: 1px solid var(--line);
             border-radius: 14px;
-            background: var(--card2);
-            padding: 12px;
+            background: #fff;
+            padding: 10px;
         }
 
         .card.soft {
-            background: var(--card);
+            background: var(--soft);
         }
 
-        .h {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            gap: 10px;
-            margin-bottom: 8px;
-        }
-
-        h3 {
-            margin: 0;
-            font-size: 12px;
+        .section-title {
+            margin: 0 0 8px;
+            font-size: 11px;
             font-weight: 900;
-            letter-spacing: .15px;
+            letter-spacing: .1px;
         }
 
-        .tag {
+        .kpi-value {
+            font-size: 20px;
+            font-weight: 900;
+            line-height: 1;
+            margin-bottom: 4px;
+        }
+
+        .kpi-label {
             font-size: 10px;
             color: var(--muted);
-            border: 1px solid var(--line);
-            border-radius: 999px;
-            padding: 3px 8px;
-            white-space: nowrap;
-            background: #fff;
-        }
-
-        .note {
-            font-size: 10.5px;
-            color: var(--muted);
-            line-height: 1.5;
-        }
-
-        .mono {
-            font-family: var(--mono);
-        }
-
-        .avoid-break {
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }
-
-        .kpi {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .kpi .value {
-            font-size: 22px;
-            font-weight: 950;
-            line-height: 1.1;
-            letter-spacing: .2px;
-        }
-
-        .kpi .label {
-            font-size: 10.5px;
-            color: var(--muted);
+            margin-bottom: 4px;
         }
 
         .status {
-            display: flex;
+            display: inline-flex;
             align-items: center;
             gap: 6px;
-            font-size: 10.5px;
+            font-size: 10px;
             color: var(--muted);
+            margin-bottom: 4px;
         }
 
         .dot {
             width: 8px;
             height: 8px;
-            border-radius: 99px;
+            border-radius: 50%;
             display: inline-block;
         }
 
@@ -237,304 +214,366 @@
             background: var(--bad);
         }
 
-        .pill {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            border-radius: 999px;
-            padding: 2px 8px;
-            border: 1px solid var(--line);
-            background: #fff;
-            font-size: 10px;
+        .mini {
+            font-size: 9.5px;
             color: var(--muted);
-            white-space: nowrap;
-        }
-
-        .pill.good {
-            border-color: rgba(5, 150, 105, .25);
-            color: var(--good);
-        }
-
-        .pill.warn {
-            border-color: rgba(217, 119, 6, .25);
-            color: var(--warn);
-        }
-
-        .pill.bad {
-            border-color: rgba(220, 38, 38, .25);
-            color: var(--bad);
+            line-height: 1.35;
         }
 
         .callout {
-            border: 1px solid rgba(37, 99, 235, .18);
-            background: rgba(37, 99, 235, .06);
-            border-left: 3px solid rgba(37, 99, 235, .8);
-            border-radius: 14px;
-            padding: 10px 12px;
+            border-radius: 10px;
+            border-left: 3px solid var(--accent);
+            border: 1px solid rgba(29, 78, 216, .22);
+            background: rgba(29, 78, 216, .06);
+            padding: 8px 10px;
+        }
+
+        .list {
+            margin: 0;
+            padding-left: 16px;
+            font-size: 10px;
+            color: var(--muted);
+            line-height: 1.45;
+        }
+
+        .list li {
+            margin-bottom: 4px;
+        }
+
+        .kv {
+            display: grid;
+            grid-template-columns: 112px 1fr;
+            gap: 4px 8px;
+            font-size: 10px;
+            margin-top: 6px;
+        }
+
+        .kv strong {
+            color: var(--ink);
+        }
+
+        .formula {
+            border: 1px dashed var(--line);
+            border-radius: 10px;
+            background: var(--soft-2);
+            padding: 6px 8px;
+            margin-bottom: 6px;
+        }
+
+        .formula .name {
+            font-size: 9.5px;
+            font-weight: 800;
+            color: var(--ink);
+            margin-bottom: 2px;
+        }
+
+        .formula .expr {
+            font-size: 9.5px;
+            font-family: var(--mono);
+            color: #1e293b;
+            margin-bottom: 2px;
+        }
+
+        .formula .why {
+            font-size: 9.5px;
+            color: var(--muted);
+            line-height: 1.3;
         }
 
         .chart {
             border: 1px solid var(--line);
-            border-radius: 14px;
+            border-radius: 12px;
+            padding: 8px;
             background: #fff;
-            padding: 10px;
         }
 
         .chart img {
             width: 100%;
             height: auto;
             display: block;
-            border-radius: 10px;
+            border-radius: 8px;
         }
 
-        .cap {
-            margin-top: 8px;
-            font-size: 10px;
+        .caption {
+            margin-top: 6px;
+            font-size: 9.5px;
             color: var(--muted);
             line-height: 1.35;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 10.5px;
+        .footer {
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            font-size: 9.5px;
+            color: var(--faint);
         }
 
-        th,
-        td {
-            padding: 8px 6px;
-            border-bottom: 1px solid var(--line);
-            vertical-align: top;
+        .avoid-break {
+            break-inside: avoid;
+            page-break-inside: avoid;
         }
 
-        th {
-            text-align: left;
-            color: var(--muted);
-            font-weight: 900;
-            font-size: 10px;
-            letter-spacing: .12px;
-        }
-
-        .right {
-            text-align: right;
+        @media print {
+            .grid-3 {
+                grid-template-columns: 1fr 1fr 1fr;
+            }
         }
     </style>
 </head>
 
 <body>
 
-    <!-- PAGE 1 — EXECUTIVE SNAPSHOT -->
     <section class="page">
         <div class="header">
             <div class="brand">
                 <div class="logo">
-                    {{#if branding.logoDataUri}}<img src="{{branding.logoDataUri}}" alt="PAPLens" />{{/if}}
+                    {{#if branding.logoDataUri}}
+                    <img src="{{branding.logoDataUri}}" alt="PAPLens" />
+                    {{else}}
+                    {{#if brand.logoDataUri}}
+                    <img src="{{brand.logoDataUri}}" alt="PAPLens" />
+                    {{else}}
+                    {{#if header.logoUrl}}<img src="{{header.logoUrl}}" alt="PAPLens" />{{/if}}
+                    {{/if}}
+                    {{/if}}
                 </div>
                 <div>
-                    <p class="app">PAPLens</p>
-                    <p class="sub">PAP Therapy Report • Summary for Clinical Review</p>
+                    <p class="title">PAPLens Therapy Report</p>
+                    <p class="subtitle">Print-ready summary for patient and clinician review</p>
                 </div>
             </div>
-
             <div class="meta">
                 <div><strong>Generated:</strong> {{report.generatedAt}}</div>
-                <div><strong>Range:</strong> {{report.rangeLabel}}</div>
+                <div><strong>Date range:</strong> {{report.rangeLabel}}</div>
                 <div><strong>Sleep boundary:</strong> {{report.sleepBoundaryLabel}}</div>
             </div>
         </div>
 
-        <div class="grid grid-2">
+        <div class="hero avoid-break">
+            <div class="hero-head">
+                <h2 class="hero-title">How to use this at your appointment</h2>
+                <span class="chip">Local deterministic analysis</span>
+            </div>
+            <div class="mini">
+                Page 1 highlights what is most important now. Page 2 shows trend charts and correlation notes that help clinicians decide whether mask fit,
+                pressure strategy, or adherence are the main therapy constraints.
+            </div>
+            <div class="kv">
+                <strong>Patient</strong>
+                <span>{{profile.name}} {{#if profile.age}}(Age {{profile.age}}){{/if}}</span>
+                <strong>Device</strong>
+                <span>{{device.model}} ({{device.manufacturer}})</span>
+                <strong>Serial</strong>
+                <span class="mono">{{device.serialNumber}}</span>
+                <strong>Firmware</strong>
+                <span class="mono">{{device.firmware}}</span>
+                {{#if clinicalContext.therapyMode}}
+                <strong>Observed mode</strong>
+                <span>{{clinicalContext.therapyMode}}</span>
+                {{/if}}
+            </div>
+        </div>
+
+        {{#if summary}}
+        <div class="grid grid-3">
             <div class="card soft avoid-break">
-                <div class="h">
-                    <h3>General Information</h3>
-                    <span class="tag">Deterministic analysis</span>
+                <div class="kpi-value">{{summary.avgAhi}}</div>
+                <div class="kpi-label">Average AHI (events/hr)</div>
+                <div class="status"><span class="dot {{summary.ahiStatusClass}}"></span>{{summary.ahiStatusLabel}}</div>
+                <div class="mini">Calculated from nightly AHI values over this period. Typical treatment goal is under 5 events/hr.</div>
+            </div>
+
+            <div class="card soft avoid-break">
+                <div class="kpi-value">{{summary.avgUsage}}</div>
+                <div class="kpi-label">Average usage (hrs/night)</div>
+                <div class="status"><span class="dot {{summary.usageStatusClass}}"></span>{{summary.usageStatusLabel}}</div>
+                <div class="mini">Calculated from all analyzed nights. Clinical adherence often uses >= 4 hrs/night.</div>
+            </div>
+
+            <div class="card soft avoid-break">
+                <div class="kpi-value">{{summary.leakTypical}}</div>
+                <div class="kpi-label">Leak 95th percentile (L/min)</div>
+                <div class="status"><span class="dot {{summary.leakStatusClass}}"></span>{{summary.leakStatusLabel}}</div>
+                <div class="mini">Represents high-end leak exposure. Values near or above 24 L/min can reduce treatment effectiveness.</div>
+            </div>
+
+            {{#if clinicalContext}}
+            <div class="card avoid-break">
+                <h3 class="section-title">Respiratory Event Profile</h3>
+                <div class="mini">Average composition of residual events across analyzed nights:</div>
+                <div class="kv">
+                    <strong>CAI</strong><span>{{clinicalContext.avgCAI}} events/hr</span>
+                    <strong>OAI/AI</strong><span>{{clinicalContext.avgOAI}} events/hr</span>
+                    <strong>HI</strong><span>{{clinicalContext.avgHI}} events/hr</span>
+                    <strong>Nights analyzed</strong><span>{{clinicalContext.nightsAnalyzed}}</span>
                 </div>
+                <div class="mini" style="margin-top:6px;">Clinical value: event mix helps determine whether unresolved burden appears more obstructive, central, or mixed.</div>
+            </div>
 
-                <div class="grid" style="gap:10px;">
-                    <div class="grid grid-2" style="gap:10px;">
-                        <div>
-                            <div class="note" style="font-weight:900; letter-spacing:.12px;">Profile</div>
-                            <div style="margin-top:6px; font-size:12px; font-weight:950;">{{profile.name}}</div>
-                            <div class="note" style="margin-top:6px;">Age: {{profile.age}}</div>
-                            <div class="note">Notes: {{profile.notes}}</div>
-                        </div>
-                        <div>
-                            <div class="note" style="font-weight:900; letter-spacing:.12px;">Device</div>
-                            <div style="margin-top:6px; font-size:12px; font-weight:950;">{{device.model}}</div>
-                            <div class="note" style="margin-top:6px;">Manufacturer: {{device.manufacturer}}</div>
-                            <div class="note">Serial: <span class="mono">{{device.serialNumber}}</span></div>
-                            <div class="note">Firmware: <span class="mono">{{device.firmware}}</span></div>
-                        </div>
-                    </div>
+            <div class="card avoid-break">
+                <h3 class="section-title">Adherence Snapshot</h3>
+                <div class="kpi-value">{{clinicalContext.adherenceRate}}%</div>
+                <div class="kpi-label">Nights with usage >= 4 hours</div>
+                <div class="mini">Formula: compliant nights / analyzed nights x 100</div>
+                <div class="mini" style="margin-top:6px;">Clinical value: helps separate therapy efficacy issues from insufficient exposure time.</div>
+            </div>
+            {{/if}}
 
-                    <div class="callout">
-                        <div style="font-size:11px; font-weight:950; margin-bottom:6px;">How to read this report</div>
-                        <div class="note">
-                            This report is computed locally using fixed formulas and rule-based thresholds. It
-                            summarizes trends and highlights exceptions.
-                        </div>
-                    </div>
+            {{#if summaryScores.stabilityScore}}
+            <div class="card avoid-break">
+                <h3 class="section-title">Stability Score</h3>
+                <div class="kpi-value">{{summaryScores.stabilityScore}}<span style="font-size:11px; color:var(--muted);">/100</span></div>
+                <div class="status"><span class="dot {{summaryScores.stabilityClass}}"></span>{{summaryScores.stabilityLabel}}</div>
+                <div class="mini">{{summaryScores.explanations.stability}}</div>
+            </div>
+            {{/if}}
+
+            {{#if summaryScores.maskFitScore}}
+            <div class="card avoid-break">
+                <h3 class="section-title">Mask Fit Score</h3>
+                <div class="kpi-value">{{summaryScores.maskFitScore}}<span style="font-size:11px; color:var(--muted);">/100</span></div>
+                <div class="status"><span class="dot {{summaryScores.maskFitClass}}"></span>{{summaryScores.maskFitLabel}}</div>
+                <div class="mini">{{summaryScores.explanations.maskFit}}</div>
+            </div>
+            {{/if}}
+        </div>
+        {{else}}
+        <div class="card soft">
+            <div class="mini">Summary metrics are unavailable for this range. Verify that nightly statistics were loaded before exporting the report.</div>
+        </div>
+        {{/if}}
+
+        <div class="grid grid-2" style="margin-top:10px;">
+            <div class="card avoid-break">
+                <h3 class="section-title">How key metrics are calculated</h3>
+                <div class="formula">
+                    <div class="name">Average AHI</div>
+                    <div class="expr">sum(nightly AHI) / number of nights</div>
+                    <div class="why">Clinical value: tracks residual sleep-disordered breathing burden under therapy.</div>
+                </div>
+                <div class="formula">
+                    <div class="name">Adherence Rate</div>
+                    <div class="expr">nights with usage >= 4h / analyzed nights x 100</div>
+                    <div class="why">Clinical value: low adherence can explain persistent symptoms despite otherwise adequate settings.</div>
+                </div>
+                <div class="formula">
+                    <div class="name">Leak 95th Percentile</div>
+                    <div class="expr">95th percentile of nightly leak values</div>
+                    <div class="why">Clinical value: high leak can reduce delivered pressure and event detection accuracy.</div>
+                </div>
+                <div class="formula" style="margin-bottom:0;">
+                    <div class="name">Correlation r</div>
+                    <div class="expr">Pearson coefficient from -1.00 to +1.00</div>
+                    <div class="why">Clinical value: shows what variables move together. Correlation does not prove causation.</div>
                 </div>
             </div>
 
             <div class="card avoid-break">
-                <div class="h">
-                    <h3>Executive Summary</h3>
-                    <span class="tag">Key therapy indicators</span>
-                </div>
-
-                <div class="grid grid-2" style="gap:10px;">
-                    <div class="card soft" style="padding:10px;">
-                        <div class="kpi">
-                            <div class="value">{{summary.avgAhi}}</div>
-                            <div class="label">Average AHI (events/hr)</div>
-                            <div class="status"><span
-                                    class="dot {{summary.ahiStatusClass}}"></span>{{summary.ahiStatusLabel}}</div>
-                            <div class="note">Common target: under 5 events/hr.</div>
-                        </div>
-                    </div>
-
-                    <div class="card soft" style="padding:10px;">
-                        <div class="kpi">
-                            <div class="value">{{summary.avgUsage}}</div>
-                            <div class="label">Average usage (hrs/night)</div>
-                            <div class="status"><span
-                                    class="dot {{summary.usageStatusClass}}"></span>{{summary.usageStatusLabel}}</div>
-                            <div class="note">Common compliance threshold: ≥4 hrs/night.</div>
-                        </div>
-                    </div>
-
-                    <div class="card soft" style="padding:10px;">
-                        <div class="kpi">
-                            <div class="value">{{summary.leakTypical}}</div>
-                            <div class="label">Leak (typical, L/min)</div>
-                            <div class="status"><span
-                                    class="dot {{summary.leakStatusClass}}"></span>{{summary.leakStatusLabel}}</div>
-                            <div class="note">Large leak is often referenced near 24 L/min (95th percentile).</div>
-                        </div>
-                    </div>
-
-                    <!-- These can be added to schema; show only if present -->
-                    {{#if summaryScores}}
-                    <div class="card soft" style="padding:10px;">
-                        <div class="kpi">
-                            <div class="value">{{summaryScores.stabilityScore}}<span
-                                    style="font-size:12px;color:var(--muted);font-weight:900;">/100</span></div>
-                            <div class="label">Stability score</div>
-                            <div class="status"><span
-                                    class="dot {{summaryScores.stabilityClass}}"></span>{{summaryScores.stabilityLabel}}
-                            </div>
-                            <div class="note">{{summaryScores.explanations.stability}}</div>
-                        </div>
-                    </div>
-                    {{/if}}
-                </div>
-
-                {{#if summaryScores}}
-                <div class="note" style="margin-top:10px;">
-                    Mask Fit Score: <strong>{{summaryScores.maskFitScore}}/100</strong> —
-                    {{summaryScores.explanations.maskFit}}
-                </div>
-                {{/if}}
-
-                <div class="note" style="margin-top:10px;">
-                    Disclaimer: This report is an analytic aid and does not replace professional medical evaluation.
+                <h3 class="section-title">Bring these questions to your clinician</h3>
+                <ol class="list">
+                    <li>Are my residual events mostly obstructive, central, or mixed based on this event profile and trend charts?</li>
+                    <li>If leak is elevated, should we adjust mask type/fit before pressure setting changes?</li>
+                    <li>Does my pressure pattern look reactive (events first, pressure second) or insufficient baseline support?</li>
+                    <li>Given adherence and symptom history, what is the most useful next intervention before my next follow-up?</li>
+                </ol>
+                <div class="callout" style="margin-top:8px;">
+                    <div class="mini"><strong>Note:</strong> This report is an analytics aid and does not replace medical diagnosis or treatment decisions.</div>
                 </div>
             </div>
         </div>
 
         <div class="footer">
-            <div>PAPLens • Local deterministic report</div>
+            <div>PAPLens - Printable therapy summary</div>
             <div>{{report.footerRight}}</div>
         </div>
     </section>
 
-    <!-- PAGE 2 — CHARTS -->
     <section class="page">
         <div class="header">
             <div class="brand">
                 <div class="logo">
-                    {{#if branding.logoDataUri}}<img src="{{branding.logoDataUri}}" alt="PAPLens" />{{/if}}
+                    {{#if branding.logoDataUri}}
+                    <img src="{{branding.logoDataUri}}" alt="PAPLens" />
+                    {{else}}
+                    {{#if brand.logoDataUri}}
+                    <img src="{{brand.logoDataUri}}" alt="PAPLens" />
+                    {{else}}
+                    {{#if header.logoUrl}}<img src="{{header.logoUrl}}" alt="PAPLens" />{{/if}}
+                    {{/if}}
+                    {{/if}}
                 </div>
                 <div>
-                    <p class="app">Trends & Charts</p>
-                    <p class="sub">{{report.rangeLabel}} • Visual overview</p>
+                    <p class="title">Trend Charts and Clinical Interpretation</p>
+                    <p class="subtitle">{{report.rangeLabel}} visual evidence for follow-up decisions</p>
                 </div>
             </div>
             <div class="meta">
-                <div><strong>Profile:</strong> {{profile.name}}</div>
+                <div><strong>Patient:</strong> {{profile.name}}</div>
                 <div><strong>Device:</strong> {{device.model}}</div>
             </div>
         </div>
 
         <div class="grid grid-2">
             <div class="chart avoid-break">
-                <img src="{{charts.ahiDataUri}}" alt="AHI Trend" />
-                <div class="cap">{{charts.ahiCaption}}</div>
+                <img src="{{charts.ahiDataUri}}" alt="AHI trend" />
+                <div class="caption"><strong>AHI trend:</strong> {{charts.ahiCaption}} Clinical value: confirms whether control is sustained or variable across nights.</div>
             </div>
 
             <div class="chart avoid-break">
-                <img src="{{charts.usageDataUri}}" alt="Usage Hours" />
-                <div class="cap">{{charts.usageCaption}}</div>
+                <img src="{{charts.usageDataUri}}" alt="usage trend" />
+                <div class="caption"><strong>Usage trend:</strong> {{charts.usageCaption}} Clinical value: supports adherence interpretation and payer-compliance checks.</div>
             </div>
 
             <div class="chart avoid-break">
-                <img src="{{charts.pressureLeakDataUri}}" alt="Pressure & Leak" />
-                <div class="cap">{{charts.pressureLeakCaption}}</div>
+                <img src="{{charts.pressureLeakDataUri}}" alt="pressure and leak" />
+                <div class="caption"><strong>Pressure and leak:</strong> {{charts.pressureLeakCaption}} Clinical value: highlights possible pressure-leak tradeoffs.</div>
             </div>
 
             <div class="chart avoid-break">
-                <img src="{{charts.flowDataUri}}" alt="Ventilation / Flow" />
-                <div class="cap">{{charts.flowCaption}}</div>
+                <img src="{{charts.flowDataUri}}" alt="flow and ventilation" />
+                <div class="caption"><strong>Ventilation and flow:</strong> {{charts.flowCaption}} Clinical value: gives context for breathing stability and work of breathing.</div>
             </div>
 
             <div class="chart avoid-break">
-                <img src="{{charts.tidalDataUri}}" alt="Tidal Volume" />
-                <div class="cap">{{charts.tidalCaption}}</div>
+                <img src="{{charts.tidalDataUri}}" alt="tidal volume" />
+                <div class="caption"><strong>Tidal volume:</strong> {{charts.tidalCaption}} Clinical value: helps detect unusual variability or trends that merit further review.</div>
             </div>
 
-            <!-- Correlation summary slot -->
             <div class="card soft avoid-break">
-                <div class="h">
-                    <h3>Relationships (Correlation)</h3>
-                    <span class="tag">Computed</span>
+                <h3 class="section-title">Clinician interpretation panel</h3>
+                <div class="mini" style="margin-bottom:6px;">Quick reference when reviewing this report in clinic:</div>
+
+                {{#if clinicalContext}}
+                <div class="kv" style="margin-top:0; margin-bottom:8px;">
+                    <strong>Observed mode</strong><span>{{clinicalContext.therapyMode}}</span>
+                    <strong>Nights analyzed</strong><span>{{clinicalContext.nightsAnalyzed}}</span>
+                    <strong>Adherence</strong><span>{{clinicalContext.adherenceRate}}%</span>
+                    <strong>Leak 95th</strong><span>{{clinicalContext.leak95th}} L/min</span>
+                </div>
+                {{/if}}
+
+                <div class="mini" style="font-weight:700; color:var(--ink); margin-bottom:4px;">Correlation interpretation guide</div>
+                <div class="mini" style="margin-bottom:8px;">
+                    |r| < 0.20: minimal, 0.20-0.39: mild, 0.40-0.59: moderate, >= 0.60: strong.
                 </div>
 
                 {{#if correlations}}
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Pair</th>
-                            <th class="right">r</th>
-                            <th class="right">n</th>
-                            <th>Meaning</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{#each correlations.pairs}}
-                        <tr>
-                            <td>{{this.pair}}</td>
-                            <td class="right mono">{{this.r}}</td>
-                            <td class="right mono">{{this.n}}</td>
-                            <td class="note">{{this.plain}}</td>
-                        </tr>
-                        {{/each}}
-                    </tbody>
-                </table>
-                <div class="note" style="margin-top:8px;">
-                    Note: Correlation describes co-movement, not cause-and-effect.
-                </div>
+                <ol class="list" style="margin-bottom:0;">
+                    {{#each correlations.pairs}}
+                    <li><strong>{{this.pair}}</strong> (r={{this.r}}, n={{this.n}}): {{this.plain}}</li>
+                    {{/each}}
+                </ol>
                 {{else}}
-                <div class="note">
-                    Correlation pairs can be added to the report payload to provide a quick “what moves together” view
-                    for clinicians.
-                </div>
+                <div class="mini">No correlation payload was provided for this export window.</div>
                 {{/if}}
             </div>
         </div>
 
         <div class="footer">
-            <div>PAPLens • Trends</div>
+            <div>PAPLens - Chart evidence for visit discussion</div>
             <div>{{report.footerRight}}</div>
         </div>
     </section>

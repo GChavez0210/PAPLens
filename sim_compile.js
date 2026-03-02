@@ -64,12 +64,14 @@ const mockPayload = {
 const compiledHtml = template(mockPayload);
 
 console.log("=== HANDLEBARS ASSERTION TEST ===");
-const hasStability = compiledHtml.includes('92<span');
-const hasMaskFit = compiledHtml.includes('Mask Fit Score: <strong>88/100</strong>');
-const hasCorr = compiledHtml.includes('Leak ↔ AHI</td>');
-const hasCorrLabel = compiledHtml.includes('Strong positive. Leak is a major driver of elevated AHI');
+const hasStability = compiledHtml.includes("Stability Score") && compiledHtml.includes("92");
+const hasMaskFit = compiledHtml.includes("Mask Fit Score") && compiledHtml.includes("88");
+const hasCorrelationPair = compiledHtml.includes("Leak ↔ AHI");
+const hasCorrelationText = compiledHtml.includes("Strong positive. Leak is a major driver of elevated AHI");
+const hasFormulaSection = compiledHtml.includes("How key metrics are calculated");
 
 console.log(`Stability Binding OK: ${hasStability}`);
 console.log(`MaskFit Binding OK: ${hasMaskFit}`);
-console.log(`Correlation Table Binding OK: ${hasCorr}`);
-console.log(`Correlation Label Binding OK: ${hasCorrLabel}`);
+console.log(`Correlation Pair Binding OK: ${hasCorrelationPair}`);
+console.log(`Correlation Label Binding OK: ${hasCorrelationText}`);
+console.log(`Formula Section Rendered: ${hasFormulaSection}`);
