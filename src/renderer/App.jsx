@@ -4,6 +4,8 @@ import { LastNightSidebar } from "./components/LastNightSidebar";
 import { Insights } from "./pages/Insights";
 import { ProfileSelector } from "./components/ProfileSelector";
 import { ClinicalSummaryCard } from "./components/ClinicalSummaryCard";
+import { SleepCalendar } from "./components/SleepCalendar";
+import { computeScores, getCorrelationInsight, buildClinicalContext } from "./utils/reportBuilder";
 
 const RANGE_OPTIONS = ["7", "14", "30", "60", "90", "180", "365", "all", "custom"];
 
@@ -62,7 +64,24 @@ export function App() {
   const [selectedDay, setSelectedDay] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
   const [sessionDetail, setSessionDetail] = useState(null);
-  const [selectedDot, setSelectedDot] = useState(null);
+
+  const [theme, setTheme] = useState(() => localStorage.getItem('paplens-theme') || 'dark');
+
+  useEffect(() => {
+    if (theme === 'light') {
+      document.body.classList.add('light-mode');
+    } else {
+      document.body.classList.remove('light-mode');
+    }
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => {
+      const next = prev === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('paplens-theme', next);
+      return next;
+    });
+  };
 
   const loadCurrentProfile = async () => {
     const profile = await window.cpapAPI.getActiveProfile();
@@ -199,6 +218,7 @@ export function App() {
       charts.tidalCaption = "Median and 95th percentile tidal volume.";
     }
 
+    // Build base payload
     const reportData = {
       report: {
         generatedAt: new Date().toLocaleString(),
@@ -222,6 +242,65 @@ export function App() {
       },
       charts
     };
+
+    // Calculate Summary Scores deterministically
+    const summaryScores = computeScores(filteredStats);
+    if (summaryScores) {
+      reportData.summaryScores = summaryScores;
+    }
+
+    // Build Medical Context Details
+    const clinicalContext = buildClinicalContext(filteredStats, deviceInfo);
+    if (clinicalContext) {
+      reportData.clinicalContext = clinicalContext;
+
+      // Deterministic Summary block
+      const count = filteredStats.length || 1;
+      const avgAhi = filteredStats.reduce((sum, n) => sum + (n.ahi || 0), 0) / count;
+      const avgUsage = filteredStats.reduce((sum, n) => sum + (n.usageHours || 0), 0) / count;
+
+      reportData.summary = {
+        avgAhi: avgAhi.toFixed(1),
+        ahiStatusClass: avgAhi > 15 ? "bad" : avgAhi > 5 ? "warn" : "good",
+        ahiStatusLabel: avgAhi > 15 ? "Severe" : avgAhi > 5 ? "Elevated" : "Adequate",
+        avgUsage: avgUsage.toFixed(1),
+        usageStatusClass: avgUsage < 4 ? "bad" : "good",
+        usageStatusLabel: avgUsage < 4 ? "Low Usage" : "Good",
+        leakTypical: clinicalContext.leak95th || "0.0",
+        leakStatusClass: parseFloat(clinicalContext.leak95th || 0) > 24 ? "warn" : "good",
+        leakStatusLabel: parseFloat(clinicalContext.leak95th || 0) > 24 ? "Elevated" : "Normal",
+      };
+    }
+
+    // Fetch Insights/Correlations inline for the PDF payload builder
+    try {
+      let insightPayload;
+      if (range === "custom") {
+        insightPayload = { from: customFrom, to: customTo };
+      } else if (range === "all") {
+        insightPayload = { days: 0 };
+      } else {
+        insightPayload = { days: parseInt(range, 10) };
+      }
+
+      const insightsData = await window.cpapAPI.getInsights(insightPayload);
+      if (insightsData && insightsData.correlations) {
+        reportData.correlations = {
+          windowDays: insightPayload.days || 90,
+          pairs: insightsData.correlations.map(c => ({
+            pair: c.pair,
+            r: Number(c.r).toFixed(2),
+            n: clinicalContext?.nightsAnalyzed || 30, // Map against the actual analyzed density
+            label: c.r > 0.4 ? "Positive" : c.r < -0.4 ? "Negative" : "Weak/None",
+            plain: getCorrelationInsight(c.pair, c.r)
+          }))
+        };
+      }
+    } catch (e) {
+      console.warn("Could not fetch correlations for pdf report", e);
+    }
+
+
 
     const result = await window.cpapAPI.saveReport(reportData);
     if (result.success) {
@@ -255,18 +334,25 @@ export function App() {
     <main className="app-shell">
       <header className="top-nav">
         <div className="brand">
-          <img src={new URL("./assets/PAPLens-Logo.png", import.meta.url).href} alt="PAPLens" style={{ height: "36px", width: "auto" }} />
+          <img src={theme === 'light' ? new URL("./assets/PAPLensLogoLM.png", import.meta.url).href : new URL("./assets/PAPLens-Logo.png", import.meta.url).href} alt="PAPLens" style={{ height: "36px", width: "auto" }} />
         </div>
         <div className="nav-controls" style={{ marginLeft: "auto" }}>
           {deviceInfo.productName && (() => {
             const name = (deviceInfo.productName || "").toLowerCase();
             const model = name.includes("11") ? "AirSense 11" : name.includes("10") ? "AirSense 10" : deviceInfo.productName;
             return (
-              <span style={{ fontSize: '0.75rem', color: '#9ca3af', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 6, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ fontSize: '0.75rem', color: 'var(--muted)', background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 6, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <span style={{ fontSize: '0.9rem' }}>🖥️</span> {model}
               </span>
             );
           })()}
+          <button
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            style={{ fontSize: '1.1rem', padding: '6px 10px', background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 8, cursor: 'pointer', lineHeight: 1 }}
+          >
+            {theme === 'dark' ? '☀️' : '🌙'}
+          </button>
           <button className="btn-primary" onClick={saveReport}>
             Save Data Report
           </button>
@@ -363,7 +449,7 @@ export function App() {
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
                       {/* Left: Device Info Card */}
                       <div style={{ background: 'linear-gradient(135deg, rgba(79,70,229,0.12) 0%, rgba(34,211,238,0.06) 100%)', border: '1px solid rgba(79,70,229,0.25)', borderRadius: 12, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 2, fontWeight: 700 }}>Device Information</div>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 2, fontWeight: 700 }}>Device Information</div>
                         {[
                           { icon: '🖥️', label: 'Model', value: deviceInfo.productName || '—' },
                           { icon: '🔢', label: 'Serial', value: deviceInfo.serialNumber || '—' },
@@ -372,8 +458,8 @@ export function App() {
                           <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                             <span style={{ fontSize: '1.4rem', width: 32, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
                             <div>
-                              <div style={{ fontSize: '0.6rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
-                              <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'white' }}>{value}</div>
+                              <div style={{ fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
+                              <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)' }}>{value}</div>
                             </div>
                           </div>
                         ))}
@@ -407,40 +493,40 @@ export function App() {
                 })()}
 
                 <div className="clinical-charts-grid">
-                  <TrendChart
+                  <TrendChart theme={theme}
                     title="AHI (Events/hr)"
                     labels={trendsData.labels}
                     datasets={[
-                      { label: "Total AHI", data: trendsData.ahi, borderColor: "#ef4444", fill: true, backgroundColor: "rgba(239,68,68,0.08)" },
+                      { label: "Total AHI", data: trendsData.ahi, borderColor: "#ef4444", fill: true, backgroundColor: "rgba(239,68,68,0.18)" },
                       { label: "Central (CAI)", data: trendsData.cai, borderColor: "#f59e0b" },
                       { label: "Obstructive (OAI/AI)", data: trendsData.ai, borderColor: "#3b82f6" },
                       { label: "Hypopnea (HI)", data: trendsData.hi, borderColor: "#8b5cf6" },
                       { label: "7-Day Avg", data: trendsData.rolling7Ahi, borderColor: "#22d3ee", borderWidth: 2, borderDash: [4, 4], pointRadius: 0 },
-                      { label: "AHI = 5 Threshold", data: trendsData.ahiThreshold, borderColor: "rgba(239,68,68,0.6)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
+                      { label: "AHI = 5 Threshold", data: trendsData.ahiThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
                     ]}
                   />
 
-                  <TrendChart
+                  <TrendChart theme={theme}
                     title="Leak (L/min) & Percentiles"
                     labels={trendsData.labels}
                     datasets={[
                       { label: "Maximum Leak (95th)", data: trendsData.leak95, borderColor: "#ef4444", borderDash: [5, 5] },
-                      { label: "Median Leak", data: trendsData.leak50, borderColor: "#3b82f6", fill: true, backgroundColor: "rgba(59,130,246,0.15)" },
-                      { label: "24 L/min Critical Limit", data: trendsData.leakThreshold, borderColor: "rgba(239,68,68,0.7)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
+                      { label: "Median Leak", data: trendsData.leak50, borderColor: "#3b82f6", fill: true, backgroundColor: "rgba(59,130,246,0.25)" },
+                      { label: "24 L/min Critical Limit", data: trendsData.leakThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
                     ]}
                   />
 
-                  <TrendChart
+                  <TrendChart theme={theme}
                     title="Pressure Therapy Dynamics"
                     labels={trendsData.labels}
                     datasets={[
                       { label: "95th Percentile", data: trendsData.maxPressure, borderColor: "#f59e0b" },
-                      { label: "Median Delivery", data: trendsData.pressure, borderColor: "#10b981", fill: true, backgroundColor: "rgba(16,185,129,0.1)" },
+                      { label: "Median Delivery", data: trendsData.pressure, borderColor: "#10b981", fill: true, backgroundColor: "rgba(16,185,129,0.2)" },
                       { label: "Variability Index (P95−P50)", data: trendsData.pressureVarIndex, borderColor: "#8b5cf6", borderDash: [3, 3], pointRadius: 0 },
                     ]}
                   />
 
-                  <TrendChart
+                  <TrendChart theme={theme}
                     title="Respiratory Flow Limitations"
                     labels={trendsData.labels}
                     datasets={[
@@ -450,7 +536,7 @@ export function App() {
                     ]}
                   />
 
-                  <TrendChart
+                  <TrendChart theme={theme}
                     title="Tidal Volume Variances"
                     labels={trendsData.labels}
                     datasets={[
@@ -484,71 +570,10 @@ export function App() {
                     />
                   )}
                 </div>
-
-                {/* SECTION B: Treatment Efficacy Viewer — bottom of dashboard */}
-                {filteredStats.length > 0 && (() => {
-                  const tierColors = { 0: '#4b5563', 1: '#10b981', 2: '#f59e0b', 3: '#f97316', 4: '#ef4444' };
-                  const tierLabels = { 0: '—', 1: 'Excellent', 2: 'Watch', 3: 'Attention', 4: 'Critical' };
-                  return (
-                    <div style={{ position: 'relative', marginTop: 20, background: 'linear-gradient(135deg, rgba(79,70,229,0.08) 0%, rgba(34,211,238,0.05) 100%)', border: '1px solid rgba(79,70,229,0.2)', borderRadius: 12, padding: '16px 20px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                        <div>
-                          <h4 style={{ margin: '0 0 2px 0', fontSize: '0.85rem', fontWeight: 700, color: 'white', letterSpacing: 1 }}>Treatment Efficacy Viewer</h4>
-                          <div style={{ fontSize: '0.65rem', color: '#6b7280' }}>Click any dot to see night details</div>
-                        </div>
-                        <div style={{ display: 'flex', gap: 12, fontSize: '0.65rem', color: '#6b7280', alignItems: 'center' }}>
-                          {[['#10b981', 'Excellent'], ['#f59e0b', 'Watch'], ['#f97316', 'Attention'], ['#ef4444', 'Critical']].map(([c, l]) => (
-                            <span key={l}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: c, marginRight: 4 }} />{l}</span>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="timeline-strip">
-                        {filteredStats.map((night) => (
-                          <div
-                            key={night.date}
-                            className={`timeline-dot dot-t${getScoreTier(night.therapy_stability_score)}`}
-                            style={{ outline: selectedDot?.date === night.date ? '2px solid white' : 'none', outlineOffset: 2 }}
-                            onClick={(e) => { e.stopPropagation(); setSelectedDot(selectedDot?.date === night.date ? null : night); }}
-                            title={night.date}
-                          />
-                        ))}
-                      </div>
-                      {selectedDot && (
-                        <div onClick={() => setSelectedDot(null)} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 10, cursor: 'default' }}>
-                          <div
-                            onClick={(e) => e.stopPropagation()}
-                            style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', background: '#1F2937', border: `1px solid ${tierColors[getScoreTier(selectedDot.therapy_stability_score)]}`, borderRadius: 12, padding: '18px 22px', minWidth: 280, boxShadow: '0 20px 60px rgba(0,0,0,0.6)', cursor: 'default' }}
-                          >
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14 }}>
-                              <div>
-                                <div style={{ fontSize: '0.7rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1 }}>Night of</div>
-                                <div style={{ fontSize: '1rem', fontWeight: 700, color: 'white' }}>{selectedDot.date}</div>
-                              </div>
-                              <div style={{ textAlign: 'right' }}>
-                                <div style={{ fontSize: '2rem', fontWeight: 900, color: tierColors[getScoreTier(selectedDot.therapy_stability_score)], lineHeight: 1 }}>{Math.round(selectedDot.therapy_stability_score || 0)}</div>
-                                <div style={{ fontSize: '0.65rem', color: '#6b7280' }}>Treatment Score — {tierLabels[getScoreTier(selectedDot.therapy_stability_score)]}</div>
-                              </div>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 20px' }}>
-                              {[
-                                ['AHI', `${Number(selectedDot.ahi || 0).toFixed(1)} ev/hr`],
-                                ['Usage', `${Number(selectedDot.usageHours || 0).toFixed(1)} hrs`],
-                                ['Leak (P50)', `${Number(selectedDot.leak50 || 0).toFixed(1)} L/min`],
-                                ['Pressure', `${Number(selectedDot.pressure || 0).toFixed(1)} cmH₂O`],
-                              ].map(([k, v]) => (
-                                <div key={k}>
-                                  <div style={{ fontSize: '0.65rem', color: '#6b7280', textTransform: 'uppercase' }}>{k}</div>
-                                  <div style={{ fontSize: '1rem', fontWeight: 700, color: 'white' }}>{v}</div>
-                                </div>
-                              ))}
-                            </div>
-                            <div style={{ marginTop: 12, fontSize: '0.7rem', color: '#4b5563', textAlign: 'center' }}>Click outside to close</div>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
+                {/* SECTION B: Sleep Calendar — bottom of dashboard */}
+                {filteredStats.length > 0 && (
+                  <SleepCalendar data={filteredStats} />
+                )}
 
               </section>
             </>
@@ -708,7 +733,7 @@ export function App() {
                   )}
                 </div>
               </div>
-              <Insights range={range} customFrom={customFrom} customTo={customTo} />
+              <Insights range={range} customFrom={customFrom} customTo={customTo} theme={theme} />
             </section>
           )}
         </section>

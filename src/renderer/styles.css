@@ -3,16 +3,48 @@
 :root {
   color-scheme: dark;
   font-family: "Inter", "Segoe UI", sans-serif;
-  --bg: #111827;
-  --card: #1f2937;
-  --text: #e5e7eb;
-  --muted: #9ca3af;
-  --brand: #4f46e5;
+  --bg: #09090b;
+  --card: #18181b;
+  --surface: #27272a;
+  --text: #ffffff;
+  --muted: #a1a1aa;
+  --brand: #6366f1;
   --cyan: #22d3ee;
   --success: #10b981;
   --warning: #f59e0b;
   --critical: #ef4444;
-  --border: rgba(79, 70, 229, 0.28);
+  --border: rgba(255, 255, 255, 0.2);
+  --input-bg: #09090b;
+  --hover-bg: rgba(255, 255, 255, 0.1);
+  --table-hover: rgba(255, 255, 255, 0.08);
+  --shadow-lg: rgba(0, 0, 0, 0.8);
+  --row-alt: rgba(255, 255, 255, 0.04);
+  --card-inner: rgba(255, 255, 255, 0.06);
+  --separator: rgba(255, 255, 255, 0.15);
+  --theme-transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease;
+}
+
+/* ── Light Mode Overrides ──────────────────────────────────────────────────── */
+.light-mode {
+  color-scheme: light;
+  --bg: #f5f4f0;
+  --card: #ffffff;
+  --surface: #edecea;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --brand: #4338ca;
+  --cyan: #0891b2;
+  --success: #059669;
+  --warning: #d97706;
+  --critical: #dc2626;
+  --border: rgba(79, 70, 229, 0.18);
+  --input-bg: #f9f8f6;
+  --hover-bg: rgba(79, 70, 229, 0.05);
+  --table-hover: rgba(79, 70, 229, 0.07);
+  --shadow-lg: rgba(0, 0, 0, 0.15);
+  --row-alt: rgba(79, 70, 229, 0.03);
+  --card-inner: rgba(0, 0, 0, 0.04);
+  --separator: rgba(0, 0, 0, 0.07);
 }
 
 * {
@@ -23,6 +55,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
+  transition: var(--theme-transition);
 }
 
 .app-shell {
@@ -80,8 +113,9 @@ select {
   border: 1px solid var(--border);
   border-radius: 8px;
   font: inherit;
-  background: #111827;
+  background: var(--input-bg);
   color: var(--text);
+  transition: var(--theme-transition);
 }
 
 button {
@@ -96,8 +130,7 @@ button {
 }
 
 .btn-secondary:hover,
-.btn-range:hover,
-tr:hover {
+.btn-range:hover {
   border-color: rgba(79, 70, 229, 0.6);
 }
 
@@ -234,8 +267,8 @@ tr:hover {
   width: 90vw;
   height: 85vh;
   z-index: 9999;
-  background: var(--bg);
-  box-shadow: 0 0 50px rgba(0, 0, 0, 0.8), 0 0 0 100vw rgba(0, 0, 0, 0.75);
+  background: var(--card);
+  box-shadow: 0 0 50px var(--shadow-lg), 0 0 0 100vw rgba(0, 0, 0, 0.6);
   display: flex;
   flex-direction: column;
 }
@@ -259,14 +292,14 @@ tr:hover {
 }
 
 .control-row h2 {
-  color: #f1f5f9;
+  color: var(--text);
   font-size: 1.1rem;
   font-weight: 700;
   letter-spacing: 0.3px;
 }
 
 .panel h3 {
-  color: #e2e8f0 !important;
+  color: var(--text) !important;
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 1.5px;
@@ -336,8 +369,9 @@ tr {
 }
 
 tr:hover {
-  background: rgba(79, 70, 229, 0.12);
+  background: var(--table-hover);
   cursor: pointer;
+  border-color: rgba(79, 70, 229, 0.5);
 }
 
 th {
@@ -362,9 +396,10 @@ th {
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: 10px;
-  background: #0f172a;
+  background: var(--surface);
   padding: 12px;
   z-index: 20;
+  box-shadow: 0 8px 32px var(--shadow-lg);
 }
 
 .detail-panel header {
@@ -401,10 +436,8 @@ th {
 
 .clinical-layout {
   display: flex;
-  height: calc(100vh - 100px);
-  /* Fill remaining below header */
+  min-height: calc(100vh - 100px);
   gap: 20px;
-  overflow: hidden;
   margin-top: 20px;
 }
 
@@ -440,7 +473,7 @@ th {
 }
 
 .sidebar-nav button:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--hover-bg);
   color: var(--text);
 }
 
@@ -454,7 +487,6 @@ th {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  overflow-y: auto;
 }
 
 /* Top Panel - Stability Overview */
@@ -525,7 +557,7 @@ th {
 .overview-metric .value {
   font-size: 1.5rem;
   font-weight: 700;
-  color: white;
+  color: var(--text);
 }
 
 .overview-metric .label {
@@ -557,7 +589,7 @@ th {
   cursor: pointer;
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   position: relative;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  box-shadow: 0 2px 4px var(--shadow-lg), inset 0 1px 0 rgba(255, 255, 255, 0.15);
 }
 
 .timeline-dot:hover {
@@ -567,7 +599,8 @@ th {
 
 .dot-t0,
 .dot-empty {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--hover-bg);
+  border: 1px solid var(--border);
 }
 
 .dot-t1 {
@@ -588,12 +621,12 @@ th {
 
 /* Clinical Summary Component Card */
 .clinical-card {
-  background: var(--bg);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 20px;
   margin-bottom: 14px;
-  transition: border-color 0.2s;
+  transition: border-color 0.2s, background 0.25s ease;
 }
 
 .clinical-card:hover {
@@ -604,7 +637,7 @@ th {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 1px solid var(--separator);
   padding-bottom: 12px;
   margin-bottom: 14px;
 }
@@ -667,7 +700,7 @@ th {
 
 .cc-stat strong {
   font-size: 1.2rem;
-  color: white;
+  color: var(--text);
 }
 
 .cc-stat span {
@@ -678,10 +711,10 @@ th {
 .cc-footer {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-top: 1px solid var(--separator);
   font-size: 0.8rem;
   color: var(--muted);
-  background: rgba(0, 0, 0, 0.2);
+  background: var(--card-inner);
   padding: 10px;
   border-radius: 4px;
 }
@@ -691,6 +724,135 @@ th {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: 20px;
+}
+
+/* ========================================================= */
+/* Sleep Calendar Layout CSS                                 */
+/* ========================================================= */
+
+.calendar-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: flex-start;
+}
+
+.calendar-month {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+}
+
+.calendar-month h4 {
+  margin: 0 0 12px 0;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.calendar-dow {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.calendar-dow span {
+  font-size: 0.65rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+}
+
+.calendar-day {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: transform 100ms ease, opacity 100ms ease;
+  position: relative;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  /* very subtle border */
+}
+
+.calendar-day:hover {
+  transform: scale(1.15);
+  opacity: 0.9;
+  z-index: 2;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.calendar-day.empty {
+  cursor: default;
+  border: none;
+}
+
+.calendar-day.empty:hover {
+  transform: none;
+  box-shadow: none;
+}
+
+/* Legend colors */
+.cal-legend {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.cal-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--card);
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.cal-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* Theme Severity Colors matching user screenshot */
+.cal-normal {
+  background: #65a30d;
+  /* Green */
+}
+
+.cal-mild {
+  background: #eab308;
+  /* Yellow */
+}
+
+.cal-moderate {
+  background: #f97316;
+  /* Orange */
+}
+
+.cal-severe {
+  background: #ef4444;
+  /* Red */
+}
+
+.cal-nodata {
+  background: var(--hover-bg);
+  /* subtle gray */
+  border: 1px solid var(--border);
 }
 
 @media (max-width: 900px) {

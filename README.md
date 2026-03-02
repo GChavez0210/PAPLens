@@ -265,7 +265,7 @@ PAPLens requires a direct copy of a compatible ResMed SD card:
 ## Local Development
 
 ```bash
-git clone https://github.com/your-repo/PAPLens.git
+git clone https://github.com/GChavez0210/PAPLens.git
 cd PAPLens
 npm install
 npm run dev

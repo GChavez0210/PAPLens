@@ -19,9 +19,9 @@ function AhiSparkline({ data = [] }) {
 
     return (
         <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: '0.65rem', color: '#6b7280', marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
+            <div style={{ fontSize: '0.65rem', color: 'var(--muted)', marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
                 <span>7-Night AHI Trend</span>
-                <span style={{ color: '#f59e0b' }}>— AHI 5 threshold</span>
+                <span style={{ color: 'var(--warning)' }}>— AHI 5 threshold</span>
             </div>
             <svg width={W} height={H + PAD} style={{ display: 'block', borderRadius: 6, overflow: 'hidden' }}>
                 <defs>
@@ -47,12 +47,12 @@ function ScoreBar({ label, penalty, maxPenalty, color }) {
     return (
         <div style={{ marginBottom: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', marginBottom: 2 }}>
-                <span style={{ color: '#9ca3af' }}>{label}</span>
+                <span style={{ color: 'var(--muted)' }}>{label}</span>
                 <span style={{ color: penalty > 0 ? '#ef4444' : '#10b981', fontWeight: 600 }}>
                     {penalty > 0 ? `-${penalty} pts` : 'Optimal'}
                 </span>
             </div>
-            <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 3, height: 3 }}>
+            <div style={{ background: 'var(--separator)', borderRadius: 3, height: 3 }}>
                 <div style={{ width: `${pct}%`, background: color, height: '100%', borderRadius: 4, transition: 'width 0.8s ease' }} />
             </div>
         </div>
@@ -105,7 +105,7 @@ export function LastNightSidebar() {
             <p style={{ margin: "0 0 8px 0", color: "var(--muted)", fontSize: "0.78em" }}>{data.night_date}</p>
 
             {/* Score hero */}
-            <div style={{ textAlign: 'center', marginBottom: 10, padding: '8px 14px', background: 'rgba(0,0,0,0.2)', borderRadius: 10, border: `1px solid ${scoreColor}30` }}>
+            <div style={{ textAlign: 'center', marginBottom: 10, padding: '8px 14px', background: 'var(--card-inner)', borderRadius: 10, border: `1px solid ${scoreColor}30` }}>
                 <div
                     style={{ fontSize: '1.8rem', fontWeight: 900, color: scoreColor, lineHeight: 1, transition: 'color 0.5s' }}
                     className={scoreAnimated ? 'score-animated' : ''}
@@ -113,7 +113,7 @@ export function LastNightSidebar() {
                     {score}
                 </div>
                 <div style={{ fontSize: '0.65rem', color: scoreColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginTop: 2 }}>{scoreTierLabel}</div>
-                <div style={{ fontSize: '0.65rem', color: '#6b7280', marginTop: 1 }}>Treatment Score</div>
+                <div style={{ fontSize: '0.65rem', color: 'var(--muted)', marginTop: 1 }}>Treatment Score</div>
             </div>
 
             {/* Score decomposition — estimated from available metrics */}
@@ -131,7 +131,7 @@ export function LastNightSidebar() {
 
                 return (
                     <div style={{ marginBottom: 10 }}>
-                        <div style={{ fontSize: '0.62rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5, fontWeight: 700 }}>Score Breakdown</div>
+                        <div style={{ fontSize: '0.62rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5, fontWeight: 700 }}>Score Breakdown</div>
                         <ScoreBar label="Residual AHI Impact" penalty={Math.round(pAhi)} maxPenalty={50} color="#ef4444" />
                         <ScoreBar label="Leak Stability" penalty={Math.round(pLeak)} maxPenalty={25} color="#f59e0b" />
                         <ScoreBar label="Usage Adherence" penalty={Math.round(pUsage)} maxPenalty={15} color="#22d3ee" />

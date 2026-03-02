@@ -364,11 +364,6 @@
                             <div class="note" style="margin-top:6px;">Manufacturer: {{device.manufacturer}}</div>
                             <div class="note">Serial: <span class="mono">{{device.serialNumber}}</span></div>
                             <div class="note">Firmware: <span class="mono">{{device.firmware}}</span></div>
-                            {{#if clinicalContext.therapyMode}}
-                            <div class="note" style="margin-top:6px; color:var(--ink); font-weight:600;">Mode: <span
-                                    style="font-weight:normal; color:var(--muted);">{{clinicalContext.therapyMode}}</span>
-                            </div>
-                            {{/if}}
                         </div>
                     </div>
 
@@ -388,12 +383,6 @@
                     <span class="tag">Key therapy indicators</span>
                 </div>
 
-                {{#if clinicalContext}}
-                <div class="note" style="margin-bottom:10px; font-weight:700; color:var(--ink);">
-                    Nights analyzed: {{clinicalContext.nightsAnalyzed}}
-                </div>
-                {{/if}}
-
                 <div class="grid grid-2" style="gap:10px;">
                     <div class="card soft" style="padding:10px;">
                         <div class="kpi">
@@ -402,12 +391,6 @@
                             <div class="status"><span
                                     class="dot {{summary.ahiStatusClass}}"></span>{{summary.ahiStatusLabel}}</div>
                             <div class="note">Common target: under 5 events/hr.</div>
-                            {{#if clinicalContext}}
-                            <div class="note" style="margin-top:4px;">
-                                Avg CAI: {{clinicalContext.avgCAI}} &nbsp;|&nbsp; OAI: {{clinicalContext.avgOAI}}
-                                &nbsp;|&nbsp; HI: {{clinicalContext.avgHI}}
-                            </div>
-                            {{/if}}
                         </div>
                     </div>
 
@@ -418,21 +401,16 @@
                             <div class="status"><span
                                     class="dot {{summary.usageStatusClass}}"></span>{{summary.usageStatusLabel}}</div>
                             <div class="note">Common compliance threshold: ≥4 hrs/night.</div>
-                            {{#if clinicalContext}}
-                            <div class="note" style="margin-top:4px;">
-                                Adherence (≥4h): {{clinicalContext.adherenceRate}}%
-                            </div>
-                            {{/if}}
                         </div>
                     </div>
 
                     <div class="card soft" style="padding:10px;">
                         <div class="kpi">
                             <div class="value">{{summary.leakTypical}}</div>
-                            <div class="label">Leak (95th percentile, L/min)</div>
+                            <div class="label">Leak (typical, L/min)</div>
                             <div class="status"><span
                                     class="dot {{summary.leakStatusClass}}"></span>{{summary.leakStatusLabel}}</div>
-                            <div class="note">Large leak is often referenced near 24 L/min.</div>
+                            <div class="note">Large leak is often referenced near 24 L/min (95th percentile).</div>
                         </div>
                     </div>
 
