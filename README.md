@@ -85,21 +85,6 @@ Unpacked folders are also produced for direct binary testing:
 - `release/win-unpacked`
 - `release/win-arm64-unpacked`
 
-## Report template
-
-The official PDF report template is:
-
-- `report.html`
-
-`ReportNewTemplate.html` was removed to avoid duplication and drift.
-
-## Branding assets in use
-
-- App dark logo: `src/renderer/assets/PLLogoD.png`
-- App light logo: `src/renderer/assets/PLLogoL.png`
-- Report logo: `src/renderer/assets/PLReportLogo.png`
-- App icon: `src/renderer/assets/PLIcon.ico`
-
 ## PDF report generation
 
 PDF reports are generated in Electron main process using Handlebars + `report.html`, then rendered to PDF via `printToPDF`.
