@@ -1,5 +1,9 @@
 # PAPLens (v1.0.0)
 
+<p align="center">
+  <img src="PAPLens-logo.png" alt="PAPLens Logo" width="250">
+</p>
+
 Desktop PAP/CPAP analytics for ResMed AirSense data, running fully offline.
 
 Repository: https://github.com/GChavez0210/PAPLens
