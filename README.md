@@ -99,7 +99,11 @@ PAPLens uses and builds upon the parsing approach from:
 
 - **CPAP Data Viewer** by Paul Solares: https://github.com/xpaulso/cpap-viewer
 
-Attribution is specifically for the data parsing engine lineage.
+## Built with AI
+
+This application was built using an AI-assisted development workflow powered by Antigravity and Codex. AI accelerated the creation of the codebase, enabling faster iteration and a consistent architecture across the project.
+
+All system design, validation, and testing remain under developer control. The application runs locally and deterministically, with no external AI services involved during normal operation, ensuring reliability and data privacy.
 
 ## Compliance notice
 
