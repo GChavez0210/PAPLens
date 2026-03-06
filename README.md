@@ -21,6 +21,16 @@ See [CHANGELOG.md](CHANGELOG.md) for the latest updates and release history.
 - Generates print-ready PDF reports intended for patient-to-clinician review.
 - Exports a Windows installer for both `x64` and `arm64`.
 
+## Screenshots
+
+![Screenshot 1](SCREENSHOTS/PL1.png)
+![Screenshot 2](SCREENSHOTS/PL2.png)
+![Screenshot 3](SCREENSHOTS/PL3.png)
+![Screenshot 4](SCREENSHOTS/PL4.png)
+![Screenshot 5](SCREENSHOTS/PL5.png)
+![Screenshot 6](SCREENSHOTS/PL6.png)
+![Screenshot 7](SCREENSHOTS/PL7.png)
+
 ## Core analytics included
 
 - AHI trends and event-type breakdown.
