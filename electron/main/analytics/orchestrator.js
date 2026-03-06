@@ -1,4 +1,4 @@
-const { computeTherapyStabilityScore, classifyLeakSeverity, computeComplianceRisk, processResidualBurden } = require("./scores");
+const { computeTherapyStabilityScore, classifyLeakSeverity, computeComplianceRisk, processResidualBurden, hasTherapyData } = require("./scores");
 const { detectOutliers } = require("./outliers");
 const { analyzeCorrelations } = require("./correlations");
 const { generateInsightNarratives } = require("./explanations");
@@ -12,7 +12,6 @@ class AnalyticsOrchestrator {
   async runForNights(deviceId, nightDates) {
     if (!nightDates || nightDates.length === 0) return;
 
-    // Sort oldest to newest to compute chronologically
     nightDates.sort();
 
     const stmtGetHistory = this.db.prepare(`
@@ -20,13 +19,13 @@ class AnalyticsOrchestrator {
              m.minute_vent_p50, m.minute_vent_p95, m.tidal_vol_p50, m.tidal_vol_p95
       FROM nights n
       JOIN night_metrics m ON m.night_id = n.id
-      WHERE n.device_id = ? AND n.night_date < ?
+      WHERE n.device_id = ? AND n.night_date < ? AND n.usage_hours > 0
       ORDER BY n.night_date DESC
       LIMIT 30
     `);
 
     const stmtGet14DaysUsage = this.db.prepare(`
-      SELECT usage_hours FROM nights 
+      SELECT usage_hours FROM nights
       WHERE device_id = ? AND night_date <= ?
       ORDER BY night_date DESC
       LIMIT 14
@@ -35,13 +34,13 @@ class AnalyticsOrchestrator {
     const stmtGet30DaysAHI = this.db.prepare(`
       SELECT m.ahi_total FROM nights n
       JOIN night_metrics m ON m.night_id = n.id
-      WHERE n.device_id = ? AND n.night_date <= ?
+      WHERE n.device_id = ? AND n.night_date <= ? AND n.usage_hours > 0
       ORDER BY n.night_date DESC
       LIMIT 30
     `);
 
     const stmtGetNight = this.db.prepare(`
-      SELECT n.id as night_id, n.usage_hours, m.* 
+      SELECT n.id as night_id, n.usage_hours, m.*
       FROM nights n
       JOIN night_metrics m ON m.night_id = n.id
       WHERE n.device_id = ? AND n.night_date = ?
@@ -89,30 +88,47 @@ class AnalyticsOrchestrator {
         const current = stmtGetNight.get(deviceId, date);
         if (!current) continue;
 
-        // Fetch historical windows
-        // NOTE: history implies strictly *before* current date
         const history30 = stmtGetHistory.all(deviceId, date);
-        // Includes current date
         const usage14 = stmtGet14DaysUsage.all(deviceId, date).map(r => r.usage_hours);
         const ahi30 = stmtGet30DaysAHI.all(deviceId, date).map(r => r.ahi_total);
 
-        // Phase 9 Clinical Models
+        this.db.prepare(`DELETE FROM insights_explanations WHERE night_id = ?`).run(current.night_id);
+
+        if (!hasTherapyData(current)) {
+          upsertDerived.run({
+            night_id: current.night_id,
+            stability: null,
+            mask_fit: null,
+            ventilation: null,
+            compliance: null,
+            pri: null,
+            residual: null,
+            outliers: JSON.stringify([]),
+            z_scores: JSON.stringify({}),
+            therapy_stability_score: null,
+            leak_severity_tier: null,
+            leak_consistency_index: null,
+            pressure_variance: null,
+            flow_limitation_score: null,
+            event_cluster_index: null
+          });
+          continue;
+        }
+
         const clinicalStability = computeTherapyStabilityScore(current, history30);
         const leakClass = classifyLeakSeverity(current.leak_p95 || current.leak_max || current.leak_p50, 0, current.usage_hours * 60);
-
-        // Scores (Legacy kept to prevent breaking other UI temporarily)
         const compliance = computeComplianceRisk(usage14);
         const residual = processResidualBurden(ahi30);
         const { flags, z_scores } = detectOutliers(current, history30);
 
         upsertDerived.run({
           night_id: current.night_id,
-          stability: Math.round(clinicalStability.stabilityScore), // Migrating old UI values proxy
-          mask_fit: 0,
-          ventilation: 0,
-          compliance: compliance,
-          pri: 0,
-          residual: JSON.stringify(residual),
+          stability: clinicalStability.stabilityScore == null ? null : Math.round(clinicalStability.stabilityScore),
+          mask_fit: null,
+          ventilation: null,
+          compliance,
+          pri: null,
+          residual: residual ? JSON.stringify(residual) : null,
           outliers: JSON.stringify(flags),
           z_scores: JSON.stringify(z_scores),
           therapy_stability_score: clinicalStability.stabilityScore,
@@ -123,16 +139,11 @@ class AnalyticsOrchestrator {
           event_cluster_index: clinicalStability.clusterIndex
         });
 
-        // Insights / Explanations
-        // Updating to pass the new stability formats
         const insights = generateInsightNarratives(current.night_id, {
           stability_score: clinicalStability.stabilityScore,
-          mask_fit_score: 100, // Deprecated
+          mask_fit_score: null,
           compliance_risk: compliance
         }, flags);
-
-        // Clear old insights for this night to prevent dupes natively (or rely on unique constraints if we add them, but let's delete first)
-        this.db.prepare(`DELETE FROM insights_explanations WHERE night_id = ?`).run(current.night_id);
 
         for (const ins of insights) {
           upsertInsight.run({
@@ -146,12 +157,11 @@ class AnalyticsOrchestrator {
         }
       }
 
-      // Re-run correlations for the device over the last 30 days overall
       const latestNights = this.db.prepare(`
         SELECT n.usage_hours, m.ahi_total, m.leak_p50, m.pressure_median
         FROM nights n
         JOIN night_metrics m ON m.night_id = n.id
-        WHERE n.device_id = ?
+        WHERE n.device_id = ? AND n.usage_hours > 0
         ORDER BY n.night_date DESC
         LIMIT 30
       `).all(deviceId);

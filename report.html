@@ -390,7 +390,7 @@
                 <div class="kpi-value">{{summary.avgUsage}}</div>
                 <div class="kpi-label">Average usage (hrs/night)</div>
                 <div class="status"><span class="dot {{summary.usageStatusClass}}"></span>{{summary.usageStatusLabel}}</div>
-                <div class="mini">Calculated from all analyzed nights. Clinical adherence often uses >= 4 hrs/night.</div>
+                <div class="mini">Calculated from nights with recorded usage, including zero-usage nights. Clinical adherence often uses >= 4 hrs/night.</div>
             </div>
 
             <div class="card soft avoid-break">
@@ -417,7 +417,7 @@
                 <h3 class="section-title">Adherence Snapshot</h3>
                 <div class="kpi-value">{{clinicalContext.adherenceRate}}%</div>
                 <div class="kpi-label">Nights with usage >= 4 hours</div>
-                <div class="mini">Formula: compliant nights / analyzed nights x 100</div>
+                <div class="mini">Formula: compliant nights / nights with recorded usage x 100</div>
                 <div class="mini" style="margin-top:6px;">Clinical value: helps separate therapy efficacy issues from insufficient exposure time.</div>
             </div>
             {{/if}}
@@ -456,7 +456,7 @@
                 </div>
                 <div class="formula">
                     <div class="name">Adherence Rate</div>
-                    <div class="expr">nights with usage >= 4h / analyzed nights x 100</div>
+                    <div class="expr">nights with usage >= 4h / nights with recorded usage x 100</div>
                     <div class="why">Clinical value: low adherence can explain persistent symptoms despite otherwise adequate settings.</div>
                 </div>
                 <div class="formula">
@@ -487,7 +487,7 @@
 
         <div class="footer">
             <div>PAPLens - Printable therapy summary</div>
-            <div>{{report.footerRight}}</div>
+            <div>{{report.footerPage1}}</div>
         </div>
     </section>
 
@@ -518,27 +518,27 @@
 
         <div class="grid grid-2">
             <div class="chart avoid-break">
-                <img src="{{charts.ahiDataUri}}" alt="AHI trend" />
+                {{#if charts.ahiDataUri}}<img src="{{charts.ahiDataUri}}" alt="AHI trend" />{{else}}<div class="mini">AHI chart unavailable for this export window.</div>{{/if}}
                 <div class="caption"><strong>AHI trend:</strong> {{charts.ahiCaption}} Clinical value: confirms whether control is sustained or variable across nights.</div>
             </div>
 
             <div class="chart avoid-break">
-                <img src="{{charts.usageDataUri}}" alt="usage trend" />
+                {{#if charts.usageDataUri}}<img src="{{charts.usageDataUri}}" alt="usage trend" />{{else}}<div class="mini">Usage chart unavailable for this export window.</div>{{/if}}
                 <div class="caption"><strong>Usage trend:</strong> {{charts.usageCaption}} Clinical value: supports adherence interpretation and payer-compliance checks.</div>
             </div>
 
             <div class="chart avoid-break">
-                <img src="{{charts.pressureLeakDataUri}}" alt="pressure and leak" />
+                {{#if charts.pressureLeakDataUri}}<img src="{{charts.pressureLeakDataUri}}" alt="pressure and leak" />{{else}}<div class="mini">Pressure chart unavailable for this export window.</div>{{/if}}
                 <div class="caption"><strong>Pressure and leak:</strong> {{charts.pressureLeakCaption}} Clinical value: highlights possible pressure-leak tradeoffs.</div>
             </div>
 
             <div class="chart avoid-break">
-                <img src="{{charts.flowDataUri}}" alt="flow and ventilation" />
+                {{#if charts.flowDataUri}}<img src="{{charts.flowDataUri}}" alt="flow and ventilation" />{{else}}<div class="mini">Flow chart unavailable for this export window.</div>{{/if}}
                 <div class="caption"><strong>Ventilation and flow:</strong> {{charts.flowCaption}} Clinical value: gives context for breathing stability and work of breathing.</div>
             </div>
 
             <div class="chart avoid-break">
-                <img src="{{charts.tidalDataUri}}" alt="tidal volume" />
+                {{#if charts.tidalDataUri}}<img src="{{charts.tidalDataUri}}" alt="tidal volume" />{{else}}<div class="mini">Tidal volume chart unavailable for this export window.</div>{{/if}}
                 <div class="caption"><strong>Tidal volume:</strong> {{charts.tidalCaption}} Clinical value: helps detect unusual variability or trends that merit further review.</div>
             </div>
 
@@ -574,10 +574,13 @@
 
         <div class="footer">
             <div>PAPLens - Chart evidence for visit discussion</div>
-            <div>{{report.footerRight}}</div>
+            <div>{{report.footerPage2}}</div>
         </div>
     </section>
 
 </body>
 
 </html>
+
+
+

@@ -3,9 +3,7 @@ import { Chart, registerables } from "chart.js";
 
 Chart.register(...registerables);
 
-
-
-export function TrendChart({ title, labels, datasets, type = "line", options = {}, theme = "dark" }) {
+export function TrendChart({ title, labels, datasets, type = "line", options = {}, theme = "dark", reportKey }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -31,12 +29,13 @@ export function TrendChart({ title, labels, datasets, type = "line", options = {
       chartRef.current.destroy();
     }
 
-    const textColor = theme === 'light' ? '#6b7280' : '#a1a1aa';
-    const gridColor = theme === 'light' ? 'rgba(0,0,0,0.07)' : 'rgba(255,255,255,0.15)';
+    const textColor = theme === "light" ? "#4b5563" : "#a1a1aa";
+    const gridColor = theme === "light" ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.15)";
 
     const dynamicBaseOptions = {
       responsive: true,
       maintainAspectRatio: false,
+      animation: false,
       interaction: { mode: "index", intersect: false },
       scales: {
         x: {
@@ -57,7 +56,6 @@ export function TrendChart({ title, labels, datasets, type = "line", options = {
       }
     };
 
-    // Adjust options if expanded
     const mergedOptions = {
       ...dynamicBaseOptions,
       ...options,
@@ -92,13 +90,14 @@ export function TrendChart({ title, labels, datasets, type = "line", options = {
         chartRef.current.destroy();
       }
     };
-  }, [title, labels, datasets, isExpanded, theme]);
+  }, [title, labels, datasets, isExpanded, theme, type, options]);
 
   return (
     <>
       {isExpanded && <div className="chart-backdrop" onClick={() => setIsExpanded(false)} />}
       <div
         className={`chart-card ${isExpanded ? "expanded" : ""}`}
+        data-report-key={reportKey || undefined}
         onClick={() => {
           if (!isExpanded) setIsExpanded(true);
         }}

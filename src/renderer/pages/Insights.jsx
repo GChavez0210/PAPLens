@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { getCorrelationInsight } from "../utils/reportBuilder";
+import { filterAnalyzedDays, getCorrelationInsight } from "../utils/reportBuilder";
 
 // ── Icon map ────────────────────────────────────────────────────────────────
 const ICONS = {
@@ -267,6 +267,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
 
     // Reverse trends so they go oldest → newest
     const sorted = [...(trends || [])].reverse();
+    const analyzed = filterAnalyzedDays(sorted);
     const labels = sorted.map(d => d.night_date?.slice(5)); // MM-DD
     const ahiData = sorted.map(d => d.ahi_total || 0);
     const usageData = sorted.map(d => d.usage_hours || 0);
@@ -279,17 +280,17 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
         try { burden = JSON.parse(lastWithBurden.residual_burden); } catch (_) { }
     }
 
-    const totalNights = sorted.length;
+    const totalNights = analyzed.length;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
 
             {/* ── AVERAGES STAT BAR ─────────────────────────────── */}
-            {sorted.length > 0 && (() => {
+            {analyzed.length > 0 && (() => {
                 const rangeLabel = range === 'all' ? 'All Time' : range === 'custom' ? 'Custom Range' : `Last ${range} Days`;
                 // Include ALL nights (v >= 0), same as Dashboard filteredStats calculation
                 const avg = (fn) => {
-                    const vals = sorted.map(fn).filter(v => v != null && !isNaN(v) && v >= 0);
+                    const vals = analyzed.map(fn).filter(v => v != null && !isNaN(v) && v >= 0);
                     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
                 };
                 const avgAhi = avg(d => d.ahi_total);
@@ -320,7 +321,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                             <StatCard label="Average Leak" value={avgLeak.toFixed(1)} unit="L/min" sub="50th percentile" color="#f59e0b" />
                             <StatCard label="Average Flow Rate" value={avgFlow.toFixed(1)} unit="L/min" sub="50th percentile" color="#8b5cf6" />
                             <StatCard label="Average Tidal Vol." value={avgTv.toFixed(0)} unit="mL" sub="50th percentile" color="#22D3EE" />
-                            <StatCard label="Nights in Range" value={sorted.length} unit="" sub={rangeLabel} color="#8b5cf6" />
+                            <StatCard label="Nights in Range" value={analyzed.length} unit="" sub={`${rangeLabel} (excluding no-data)`} color="#8b5cf6" />
                         </div>
                     </section>
                 );
@@ -381,3 +382,4 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
         </div>
     );
 }
+

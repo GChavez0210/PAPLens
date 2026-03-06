@@ -1,13 +1,14 @@
 const { pearsonR } = require("./regression");
+const { hasTherapyData } = require("./scores");
 
 function analyzeCorrelations(metricsList) {
-    // Requires at least 2 valid nights for testing/demo purposes 
-    if (!metricsList || metricsList.length < 2) return [];
+    const usableMetrics = (metricsList || []).filter(hasTherapyData);
+    if (usableMetrics.length < 2) return [];
 
     const results = [];
 
     const checkCorrelation = (keyX, keyY, labelX, labelY) => {
-        const pairs = metricsList
+        const pairs = usableMetrics
             .filter(m => m[keyX] !== undefined && m[keyX] !== null && m[keyY] !== undefined && m[keyY] !== null)
             .map(m => [m[keyX], m[keyY]]);
 
@@ -26,7 +27,7 @@ function analyzeCorrelations(metricsList) {
         results.push({
             x: labelX,
             y: labelY,
-            r: r,
+            r,
             n: pairs.length,
             label
         });

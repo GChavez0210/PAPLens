@@ -1,12 +1,18 @@
 const { zScore, mean, std } = require("./rolling");
+const { hasTherapyData } = require("./scores");
 
 function detectOutliers(currentMetrics, last30MetricsList) {
+    if (!hasTherapyData(currentMetrics)) {
+        return { flags: [], z_scores: {} };
+    }
+
     const flags = [];
     const z_scores = {};
+    const validHistory = (last30MetricsList || []).filter(hasTherapyData);
 
     const processMetric = (key, val, limit = 2.5) => {
         if (val === undefined || val === null) return;
-        const history = last30MetricsList.map(m => m[key]).filter(v => v !== undefined && v !== null);
+        const history = validHistory.map(m => m[key]).filter(v => v !== undefined && v !== null);
         if (history.length === 0) return;
 
         const mu = mean(history);
@@ -19,7 +25,7 @@ function detectOutliers(currentMetrics, last30MetricsList) {
         if (absZ >= limit) {
             flags.push({
                 metric: key,
-                z: z,
+                z,
                 severity: absZ > 3.0 ? "strong" : "mild"
             });
         }

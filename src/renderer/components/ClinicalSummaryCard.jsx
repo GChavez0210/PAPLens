@@ -1,6 +1,6 @@
 import React from "react";
+import { isNoDataDay } from "../utils/reportBuilder";
 
-// ── 5-Tier classification based on Treatment Score ───────────────────────────
 function getScoreTier(score) {
     if (score >= 95) return { tier: 1, badge: "badge-t1", label: "Optimal" };
     if (score >= 85) return { tier: 2, badge: "badge-t2", label: "Stable" };
@@ -10,55 +10,60 @@ function getScoreTier(score) {
 }
 
 function getScoreMeaning(score) {
-    if (score >= 95) return "Optimal Therapy — All metrics are within ideal clinical parameters.";
-    if (score >= 85) return "Very Good Therapy — Minor deviations present but therapy is effective.";
-    if (score >= 70) return "Good Therapy — Minor adjustments may further improve outcomes.";
-    if (score >= 50) return "Improvement Recommended — Therapy efficacy is below expected targets.";
-    return "Therapy May Not Be Effective — Significant clinical intervention may be needed.";
+    if (score >= 95) return "Optimal Therapy - All metrics are within ideal clinical parameters.";
+    if (score >= 85) return "Very Good Therapy - Minor deviations present but therapy is effective.";
+    if (score >= 70) return "Good Therapy - Minor adjustments may further improve outcomes.";
+    if (score >= 50) return "Improvement Recommended - Therapy efficacy is below expected targets.";
+    return "Therapy May Not Be Effective - Significant clinical intervention may be needed.";
+}
+
+function formatFixed(value, digits = 1) {
+    return Number(value || 0).toFixed(digits);
 }
 
 export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
     if (!night) return null;
 
-    const score = Math.round(night.therapy_stability_score || 0);
-    const { badge, label } = getScoreTier(score);
+    const noData = isNoDataDay(night);
+    const score = noData ? null : Math.round(night.therapy_stability_score || 0);
+    const badgeMeta = noData ? { badge: "badge-nodata", label: "No Data" } : getScoreTier(score);
     const metrics = night.raw || night;
 
     return (
         <div
-            className={`clinical-card ${isSelected ? "selected-card" : ""}`}
+            className={`clinical-card ${noData ? "clinical-card-nodata" : ""} ${isSelected ? "selected-card" : ""}`}
             onClick={() => onSelect && onSelect(night)}
             style={{ cursor: onSelect ? "pointer" : "default", borderColor: isSelected ? "var(--brand)" : undefined }}
         >
             <div className="cc-header">
                 <div>
                     <strong style={{ fontSize: "1.1rem" }}>{night.date}</strong>
-                    <span style={{ marginLeft: "10px", color: "var(--brand)", fontWeight: "bold" }}>
-                        Score: {score}
+                    <span style={{ marginLeft: "10px", color: noData ? "var(--muted)" : "var(--brand)", fontWeight: "bold" }}>
+                        {noData ? "No data" : `Score: ${score}`}
                     </span>
                 </div>
-                <div className={`cc-badge ${badge}`}>{label}</div>
+                <div className={`cc-badge ${badgeMeta.badge}`}>{badgeMeta.label}</div>
             </div>
 
             <div className="cc-row">
                 <div className="cc-stat">
                     <label>AHI</label>
-                    <strong>{Number(night.ahi || 0).toFixed(1)}</strong>
+                    <strong>{noData ? "-" : formatFixed(night.ahi, 1)}</strong>
                     <span>events/hr</span>
                 </div>
                 <div className="cc-stat">
                     <label>Leak.95</label>
-                    <strong>{Math.round(night.leak95 || night.leak50 || 0)}</strong>
+                    <strong>{noData ? "-" : Math.round(night.leak95 || night.leak50 || 0)}</strong>
                     <span>L/min</span>
                 </div>
                 <div className="cc-stat">
                     <label>Pressure</label>
-                    <strong>{Number(metrics.pressure_median || night.pressure || 0).toFixed(1)}</strong>
-                    <span>cmH₂O</span>
+                    <strong>{noData ? "-" : formatFixed(metrics.pressure_median || night.pressure, 1)}</strong>
+                    <span>cmH2O</span>
                 </div>
                 <div className="cc-stat">
                     <label>Usage</label>
-                    <strong>{Number(night.usageHours || 0).toFixed(1)}</strong>
+                    <strong>{noData ? "No data" : formatFixed(night.usageHours, 1)}</strong>
                     <span>Hours</span>
                 </div>
             </div>
@@ -66,27 +71,31 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
             <div className="cc-row" style={{ marginTop: "15px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "12px" }}>
                 <div className="cc-stat">
                     <label>Consistency</label>
-                    <strong>{Math.round(night.leak_consistency_index || 0)}%</strong>
+                    <strong>{noData ? "-" : `${Math.round(night.leak_consistency_index || 0)}%`}</strong>
                     <span>stable</span>
                 </div>
                 <div className="cc-stat">
                     <label>Pres. Var</label>
-                    <strong>{Number(night.pressure_variance || 0).toFixed(2)}</strong>
+                    <strong>{noData ? "-" : formatFixed(night.pressure_variance, 2)}</strong>
                     <span>SD</span>
                 </div>
                 <div className="cc-stat">
                     <label>Cluster</label>
-                    <strong>{Math.round(night.event_cluster_index || 0)}</strong>
+                    <strong>{noData ? "-" : Math.round(night.event_cluster_index || 0)}</strong>
                     <span>max/10m</span>
                 </div>
                 <div className="cc-stat">
                     <label>Flow Lim</label>
-                    <strong>{Math.round(night.flow_limitation_score || 0)}</strong>
+                    <strong>{noData ? "-" : Math.round(night.flow_limitation_score || 0)}</strong>
                     <span>Score</span>
                 </div>
             </div>
 
-            <div className="cc-footer">{getScoreMeaning(score)}</div>
+            <div className={`cc-footer ${noData ? "cc-footer-nodata" : ""}`}>
+                {noData
+                    ? "No therapy data was recorded for this date. It is shown in gray, excluded from therapy-quality scoring, and still counted in usage-based metrics such as adherence."
+                    : getScoreMeaning(score)}
+            </div>
         </div>
     );
 }

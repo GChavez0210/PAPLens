@@ -69,7 +69,7 @@ async function loadDataFromPath(dataPath) {
       SELECT n.night_date 
       FROM nights n
       LEFT JOIN derived_metrics d ON d.night_id = n.id
-      WHERE n.device_id = ? AND (d.night_id IS NULL OR d.therapy_stability_score IS NULL)
+      WHERE n.device_id = ? AND n.usage_hours > 0 AND (d.night_id IS NULL OR d.therapy_stability_score IS NULL)
       ORDER BY n.night_date DESC LIMIT 90
     `).all(result.deviceId).map(r => r.night_date);
 
@@ -179,6 +179,13 @@ function registerIpc() {
       const templateStr = fs.readFileSync(templatePath, "utf8");
       const template = Handlebars.compile(templateStr);
 
+      reportData.report = {
+        ...(reportData.report || {}),
+        pageCount: reportData?.report?.pageCount || 2,
+        footerPage1: reportData?.report?.footerPage1 || "Page 1 of 2",
+        footerPage2: reportData?.report?.footerPage2 || "Page 2 of 2"
+      };
+
       if (currentProfileDatabase && reportData && reportData.device) {
         const db = currentProfileDatabase.db;
         const deviceId = db.prepare('SELECT id FROM devices WHERE serial_number = ?').get(reportData.device.serialNumber)?.id;
@@ -203,7 +210,7 @@ function registerIpc() {
               SELECT n.night_date AS date, m.ahi_total AS ahi, n.usage_hours AS usage, m.pressure_median AS pressure, m.leak_p50 AS leak, m.minute_vent_p50 AS mv, m.resp_rate_p50 AS rr, m.tidal_vol_p50 AS tv
               FROM nights n
               JOIN night_metrics m ON m.night_id = n.id
-              WHERE n.device_id = ? AND n.night_date >= ? AND n.night_date <= ?
+              WHERE n.device_id = ? AND n.usage_hours > 0 AND n.night_date >= ? AND n.night_date <= ?
               ORDER BY n.night_date DESC
             `).all(deviceId, reportData.report.startDate, reportData.report.endDate);
           } else {
@@ -212,7 +219,7 @@ function registerIpc() {
               SELECT n.night_date AS date, m.ahi_total AS ahi, n.usage_hours AS usage, m.pressure_median AS pressure, m.leak_p50 AS leak, m.minute_vent_p50 AS mv, m.resp_rate_p50 AS rr, m.tidal_vol_p50 AS tv
               FROM nights n
               JOIN night_metrics m ON m.night_id = n.id
-              WHERE n.device_id = ?
+              WHERE n.device_id = ? AND n.usage_hours > 0
               ORDER BY n.night_date DESC
               LIMIT ?
             `).all(deviceId, limit);
@@ -247,22 +254,32 @@ function registerIpc() {
       }
 
       const compiledHtml = template(reportData || {});
+      const tempHtmlPath = path.join(app.getPath("temp"), `paplens-report-${Date.now()}-${Math.random().toString(16).slice(2)}.html`);
+      fs.writeFileSync(tempHtmlPath, compiledHtml, "utf8");
 
       const printWin = new BrowserWindow({
         show: false,
         webPreferences: { nodeIntegration: false, contextIsolation: true }
       });
 
-      await printWin.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(compiledHtml)}`);
+      try {
+        await printWin.loadFile(tempHtmlPath);
 
-      const pdfData = await printWin.webContents.printToPDF({
-        printBackground: true,
-        margins: { top: 0, bottom: 0, left: 0, right: 0 },
-        pageSize: "A4",
-      });
+        const pdfData = await printWin.webContents.printToPDF({
+          printBackground: true,
+          margins: { top: 0, bottom: 0, left: 0, right: 0 },
+          pageSize: "A4",
+        });
 
-      printWin.close();
-      fs.writeFileSync(filePath, pdfData);
+        fs.writeFileSync(filePath, pdfData);
+      } finally {
+        if (!printWin.isDestroyed()) {
+          printWin.close();
+        }
+        if (fs.existsSync(tempHtmlPath)) {
+          fs.unlinkSync(tempHtmlPath);
+        }
+      }
       return { success: true, filePath };
     } catch (err) {
       console.error("PDF Export failed:", err);
@@ -301,7 +318,7 @@ function registerIpc() {
       FROM nights n
       JOIN night_metrics m ON m.night_id = n.id
       LEFT JOIN derived_metrics d ON d.night_id = n.id
-      WHERE n.device_id = ?
+      WHERE n.device_id = ? AND n.usage_hours > 0
       ORDER BY n.night_date DESC
       LIMIT 1
     `).get(device.id);
@@ -313,7 +330,7 @@ function registerIpc() {
       SELECT n.night_date AS date, m.ahi_total AS ahi
       FROM nights n
       JOIN night_metrics m ON m.night_id = n.id
-      WHERE n.device_id = ?
+      WHERE n.device_id = ? AND n.usage_hours > 0
       ORDER BY n.night_date DESC
       LIMIT 7
     `).all(device.id).reverse();
@@ -340,7 +357,7 @@ function registerIpc() {
         FROM nights n
         JOIN night_metrics m ON m.night_id = n.id
         LEFT JOIN derived_metrics d ON d.night_id = n.id
-        WHERE n.device_id = ? AND n.night_date BETWEEN ? AND ?
+        WHERE n.device_id = ? AND n.usage_hours > 0 AND n.night_date BETWEEN ? AND ?
         ORDER BY n.night_date DESC
       `).all(device.id, from, to);
     } else {
@@ -353,7 +370,7 @@ function registerIpc() {
         FROM nights n
         JOIN night_metrics m ON m.night_id = n.id
         LEFT JOIN derived_metrics d ON d.night_id = n.id
-        WHERE n.device_id = ?
+        WHERE n.device_id = ? AND n.usage_hours > 0
         ORDER BY n.night_date DESC
         LIMIT ?
       `).all(device.id, limit);
@@ -372,7 +389,7 @@ function registerIpc() {
       SELECT title, summary, details, key, night_id 
       FROM insights_explanations 
       WHERE night_id IN (
-        SELECT id FROM nights WHERE device_id = ? ORDER BY night_date DESC LIMIT 7
+        SELECT id FROM nights WHERE device_id = ? AND usage_hours > 0 ORDER BY night_date DESC LIMIT 7
       )
       ORDER BY created_at DESC
       LIMIT 10
@@ -460,3 +477,7 @@ app.on("activate", () => {
     createMainWindow();
   }
 });
+
+
+
+

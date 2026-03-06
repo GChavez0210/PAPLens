@@ -5,7 +5,7 @@ import { Insights } from "./pages/Insights";
 import { ProfileSelector } from "./components/ProfileSelector";
 import { ClinicalSummaryCard } from "./components/ClinicalSummaryCard";
 import { SleepCalendar } from "./components/SleepCalendar";
-import { computeScores, getCorrelationInsight, buildClinicalContext } from "./utils/reportBuilder";
+import { buildClinicalContext, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
 
 const RANGE_OPTIONS = ["7", "14", "30", "60", "90", "180", "365", "all", "custom"];
 
@@ -50,6 +50,25 @@ function dayKeyFromSession(session) {
     return "";
   }
   return date.toISOString().split("T")[0];
+}
+
+function getChartCanvasByKey(reportKey) {
+  return document.querySelector(`.clinical-charts-grid [data-report-key="${reportKey}"] canvas`);
+}
+
+function captureChartDataUri(canvas) {
+  if (!canvas) return null;
+  const exportCanvas = document.createElement("canvas");
+  exportCanvas.width = canvas.width;
+  exportCanvas.height = canvas.height;
+  const ctx = exportCanvas.getContext("2d");
+  if (!ctx) {
+    return canvas.toDataURL("image/png");
+  }
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+  ctx.drawImage(canvas, 0, 0);
+  return exportCanvas.toDataURL("image/png");
 }
 
 export function App() {
@@ -144,34 +163,37 @@ export function App() {
       .slice(-days);
   }, [stats, range, customFrom, customTo]);
 
+  const analyzedStats = useMemo(() => filterAnalyzedDays(filteredStats), [filteredStats]);
+  const usageTrackedStats = useMemo(() => filterUsageTrackedDays(filteredStats), [filteredStats]);
+
   const trendsData = useMemo(() => {
-    const ahiArr = filteredStats.map((d) => d.ahi);
-    // 7-day rolling average of AHI
+    const toTrendValue = (day, selector) => (hasTherapyData(day) ? selector(day) : null);
+    const ahiArr = filteredStats.map((d) => toTrendValue(d, (day) => day.ahi));
     const rolling7 = ahiArr.map((_, i) => {
-      const slice = ahiArr.slice(Math.max(0, i - 6), i + 1);
+      const slice = ahiArr.slice(0, i + 1).filter((value) => value != null).slice(-7);
+      if (!slice.length) return null;
       return parseFloat((slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(2));
     });
     const n = filteredStats.length;
     return {
       labels: filteredStats.map((d) => d.date),
       ahi: ahiArr,
-      ai: filteredStats.map((d) => d.ai),
-      hi: filteredStats.map((d) => d.hi),
-      cai: filteredStats.map((d) => d.cai),
-      usage: filteredStats.map((d) => d.usageHours),
-      leak50: filteredStats.map((d) => d.leak50),
-      leak95: filteredStats.map((d) => d.leak95),
-      pressure: filteredStats.map((d) => d.pressure),
-      maxPressure: filteredStats.map((d) => d.maxPressure),
-      pressureVarIndex: filteredStats.map((d) => parseFloat(((d.maxPressure || 0) - (d.pressure || 0)).toFixed(2))),
-      minVent50: filteredStats.map((d) => d.minVent50),
-      minVent95: filteredStats.map((d) => d.minVent95),
-      tidVol50: filteredStats.map((d) => d.tidVol50),
-      tidVol95: filteredStats.map((d) => d.tidVol95),
-      respRate: filteredStats.map((d) => d.respRate50),
-      spo2: filteredStats.map((d) => d.spo2Avg),
-      pulse: filteredStats.map((d) => d.pulseAvg),
-      // Derived
+      ai: filteredStats.map((d) => toTrendValue(d, (day) => day.ai)),
+      hi: filteredStats.map((d) => toTrendValue(d, (day) => day.hi)),
+      cai: filteredStats.map((d) => toTrendValue(d, (day) => day.cai)),
+      usage: filteredStats.map((d) => toTrendValue(d, (day) => day.usageHours)),
+      leak50: filteredStats.map((d) => toTrendValue(d, (day) => day.leak50)),
+      leak95: filteredStats.map((d) => toTrendValue(d, (day) => day.leak95)),
+      pressure: filteredStats.map((d) => toTrendValue(d, (day) => day.pressure)),
+      maxPressure: filteredStats.map((d) => toTrendValue(d, (day) => day.maxPressure)),
+      pressureVarIndex: filteredStats.map((d) => toTrendValue(d, (day) => parseFloat(((day.maxPressure || 0) - (day.pressure || 0)).toFixed(2)))),
+      minVent50: filteredStats.map((d) => toTrendValue(d, (day) => day.minVent50)),
+      minVent95: filteredStats.map((d) => toTrendValue(d, (day) => day.minVent95)),
+      tidVol50: filteredStats.map((d) => toTrendValue(d, (day) => day.tidVol50)),
+      tidVol95: filteredStats.map((d) => toTrendValue(d, (day) => day.tidVol95)),
+      respRate: filteredStats.map((d) => toTrendValue(d, (day) => day.respRate50)),
+      spo2: filteredStats.map((d) => toTrendValue(d, (day) => day.spo2Avg)),
+      pulse: filteredStats.map((d) => toTrendValue(d, (day) => day.pulseAvg)),
       rolling7Ahi: rolling7,
       ahiThreshold: Array(n).fill(5),
       leakThreshold: Array(n).fill(24),
@@ -202,23 +224,21 @@ export function App() {
 
   const saveReport = async () => {
     setStatus("Generating PDF report...");
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-    const canvases = document.querySelectorAll('.clinical-charts-grid canvas');
-    const charts = {};
-    if (canvases.length >= 6) {
-      charts.ahiDataUri = canvases[0]?.toDataURL('image/png');
-      charts.usageDataUri = canvases[5]?.toDataURL('image/png'); // Moved to end
-      charts.pressureLeakDataUri = canvases[2]?.toDataURL('image/png'); // Pressure
-      charts.flowDataUri = canvases[3]?.toDataURL('image/png'); // Flow limitation
-      charts.tidalDataUri = canvases[4]?.toDataURL('image/png'); // Tidal Vol
-      charts.ahiCaption = "Total AHI combined with event type breakdown.";
-      charts.usageCaption = "Nightly therapy application time.";
-      charts.pressureLeakCaption = "95th percentile and median delivered pressure.";
-      charts.flowCaption = "Minute ventilation and respiration rate.";
-      charts.tidalCaption = "Median and 95th percentile tidal volume.";
-    }
+    const charts = {
+      ahiDataUri: captureChartDataUri(getChartCanvasByKey("ahi")),
+      usageDataUri: captureChartDataUri(getChartCanvasByKey("usage")),
+      pressureLeakDataUri: captureChartDataUri(getChartCanvasByKey("pressure")),
+      flowDataUri: captureChartDataUri(getChartCanvasByKey("flow")),
+      tidalDataUri: captureChartDataUri(getChartCanvasByKey("tidal")),
+      ahiCaption: "Total AHI combined with event type breakdown.",
+      usageCaption: "Nightly therapy application time.",
+      pressureLeakCaption: "95th percentile and median delivered pressure.",
+      flowCaption: "Minute ventilation and respiration rate.",
+      tidalCaption: "Median and 95th percentile tidal volume."
+    };
 
-    // Build base payload
     const reportData = {
       report: {
         generatedAt: new Date().toLocaleString(),
@@ -227,7 +247,9 @@ export function App() {
         startDate: range === "custom" ? customFrom : null,
         endDate: range === "custom" ? customTo : null,
         sleepBoundaryLabel: `Noon-to-Noon (Start: ${dayStartHour}:00)`,
-        footerRight: "Page 1 of 1"
+        pageCount: 2,
+        footerPage1: "Page 1 of 2",
+        footerPage2: "Page 2 of 2"
       },
       profile: {
         name: activeProfile.name || "Unknown",
@@ -236,28 +258,26 @@ export function App() {
       },
       device: {
         model: deviceInfo.productName || "Unknown",
-        manufacturer: "ResMed", // default assumption for now
+        manufacturer: "ResMed",
         serialNumber: deviceInfo.serialNumber || "Unknown",
         firmware: deviceInfo.firmwareVersion || "Unknown"
       },
       charts
     };
 
-    // Calculate Summary Scores deterministically
-    const summaryScores = computeScores(filteredStats);
+    const summaryScores = computeScores(analyzedStats);
     if (summaryScores) {
       reportData.summaryScores = summaryScores;
     }
 
-    // Build Medical Context Details
     const clinicalContext = buildClinicalContext(filteredStats, deviceInfo);
     if (clinicalContext) {
       reportData.clinicalContext = clinicalContext;
 
-      // Deterministic Summary block
-      const count = filteredStats.length || 1;
-      const avgAhi = filteredStats.reduce((sum, n) => sum + (n.ahi || 0), 0) / count;
-      const avgUsage = filteredStats.reduce((sum, n) => sum + (n.usageHours || 0), 0) / count;
+      const ahiCount = analyzedStats.length || 1;
+      const usageCount = usageTrackedStats.length || 1;
+      const avgAhi = analyzedStats.reduce((sum, n) => sum + (n.ahi || 0), 0) / ahiCount;
+      const avgUsage = usageTrackedStats.reduce((sum, n) => sum + (n.usageHours || 0), 0) / usageCount;
 
       reportData.summary = {
         avgAhi: avgAhi.toFixed(1),
@@ -436,14 +456,15 @@ export function App() {
 
                 {/* SECTION A: Device Info + Therapy Efficacy Overview */}
                 {filteredStats.length > 0 && (() => {
-                  const last = filteredStats[filteredStats.length - 1];
+                  const last = analyzedStats[analyzedStats.length - 1];
                   const rangeAvg = (fn) => {
-                    const vals = filteredStats.map(fn).filter(v => v != null && !isNaN(v) && v >= 0);
-                    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                    const vals = analyzedStats.map(fn).filter(v => v != null && !isNaN(v) && v >= 0);
+                    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
                   };
                   const avgAhi = rangeAvg(d => d.ahi);
                   const avgLeak = rangeAvg(d => d.leak50);
-                  const avgUsage = rangeAvg(d => d.usageHours);
+                  const usageValues = usageTrackedStats.map(d => d.usageHours).filter(v => v != null && !isNaN(v) && v >= 0);
+                  const avgUsage = usageValues.length ? usageValues.reduce((a, b) => a + b, 0) / usageValues.length : null;
                   const rangeLabel = range === 'all' ? 'All Time' : range === 'custom' ? 'Custom' : `Last ${range} Days`;
                   return (
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
@@ -465,21 +486,21 @@ export function App() {
                         ))}
                       </div>
                       <div className="stability-overview" style={{ margin: 0 }}>
-                        <div className={`score-circle tier-${last?.leak_severity_tier || 1}`}>
-                          <div className="score-value">{Math.round(last?.therapy_stability_score || 0)}</div>
-                          <div className="score-label">Score</div>
+                        <div className={last?.leak_severity_tier ? `score-circle tier-${last.leak_severity_tier}` : "score-circle"}>
+                          <div className="score-value">{last ? Math.round(last.therapy_stability_score || 0) : "-"}</div>
+                          <div className="score-label">{last ? "Score" : "No Data"}</div>
                         </div>
                         <div className="overview-metrics">
                           <div className="overview-metric">
-                            <div className="value">{avgAhi.toFixed(1)}</div>
+                            <div className="value">{avgAhi == null ? "-" : avgAhi.toFixed(1)}</div>
                             <div className="label">Avg AHI</div>
                           </div>
                           <div className="overview-metric">
-                            <div className="value">{avgLeak.toFixed(1)} L/m</div>
+                            <div className="value">{avgLeak == null ? "-" : `${avgLeak.toFixed(1)} L/m`}</div>
                             <div className="label">Avg Leak P50</div>
                           </div>
                           <div className="overview-metric">
-                            <div className="value">{avgUsage.toFixed(1)} hrs</div>
+                            <div className="value">{avgUsage == null ? "-" : `${avgUsage.toFixed(1)} hrs`}</div>
                             <div className="label">Avg Usage</div>
                           </div>
                           <div className="overview-metric">
@@ -494,6 +515,7 @@ export function App() {
 
                 <div className="clinical-charts-grid">
                   <TrendChart theme={theme}
+                    reportKey="ahi"
                     title="AHI (Events/hr)"
                     labels={trendsData.labels}
                     datasets={[
@@ -507,6 +529,7 @@ export function App() {
                   />
 
                   <TrendChart theme={theme}
+                    reportKey="leak"
                     title="Leak (L/min) & Percentiles"
                     labels={trendsData.labels}
                     datasets={[
@@ -517,6 +540,7 @@ export function App() {
                   />
 
                   <TrendChart theme={theme}
+                    reportKey="pressure"
                     title="Pressure Therapy Dynamics"
                     labels={trendsData.labels}
                     datasets={[
@@ -527,6 +551,7 @@ export function App() {
                   />
 
                   <TrendChart theme={theme}
+                    reportKey="flow"
                     title="Respiratory Flow Limitations"
                     labels={trendsData.labels}
                     datasets={[
@@ -537,6 +562,7 @@ export function App() {
                   />
 
                   <TrendChart theme={theme}
+                    reportKey="tidal"
                     title="Tidal Volume Variances"
                     labels={trendsData.labels}
                     datasets={[
@@ -546,6 +572,8 @@ export function App() {
                   />
 
                   <TrendChart
+                    theme={theme}
+                    reportKey="usage"
                     title="Compliance Usage Hours"
                     labels={trendsData.labels}
                     datasets={[
@@ -561,6 +589,8 @@ export function App() {
 
                   {trendsData.spo2.some((v) => v > 0) && (
                     <TrendChart
+                      theme={theme}
+                      reportKey="oximetry"
                       title="Oximetry Validation"
                       labels={trendsData.labels}
                       datasets={[
@@ -613,38 +643,57 @@ export function App() {
               </div>
 
               <div className="split-right">
-                {selectedDay ? (
-                  <div>
-                    <h3>{selectedDay.date} Breakdown</h3>
-                    <div className="info-grid">
-                      <div className="info-item">
-                        <label>Total Usage</label>
-                        <strong>{Number(selectedDay.usageHours).toFixed(2)} hrs</strong>
-                      </div>
-                      <div className="info-item">
-                        <label>AHI</label>
-                        <strong className={`badge badge-${severity("ahi", selectedDay.ahi)}`}>
-                          {Number(selectedDay.ahi).toFixed(1)}
-                        </strong>
-                      </div>
-                      <div className="info-item">
-                        <label>Median Pressure</label>
-                        <strong>{Number(selectedDay.pressure).toFixed(1)} cmH2O</strong>
-                      </div>
-                      <div className="info-item">
-                        <label>Median Leak</label>
-                        <strong className={`badge badge-${severity("leak50", selectedDay.leak50)}`}>
-                          {Math.round(selectedDay.leak50)} L/min
-                        </strong>
-                      </div>
-                    </div>
+                {selectedDay ? (() => {
+                  const selectedDayNoData = isNoDataDay(selectedDay);
+                  const daySessions = summary?.sessions?.filter((s) => dayKeyFromSession(s) === selectedDay.date) || [];
 
-                    <h4 style={{ marginTop: "20px" }}>Recorded Sessions</h4>
-                    <div className="list-container" style={{ maxHeight: "300px" }}>
-                      {summary?.sessions &&
-                        summary.sessions
-                          .filter((s) => dayKeyFromSession(s) === selectedDay.date)
-                          .map((session) => (
+                  return (
+                    <div>
+                      <h3>{selectedDay.date} Breakdown</h3>
+                      {selectedDayNoData ? (
+                        <div
+                          style={{
+                            padding: "15px",
+                            background: "rgba(107,114,128,0.12)",
+                            border: "1px solid rgba(107,114,128,0.35)",
+                            borderRadius: "8px",
+                            color: "var(--text)"
+                          }}
+                        >
+                          <strong style={{ display: "block", marginBottom: "8px" }}>No therapy data for this day</strong>
+                          <div style={{ color: "var(--muted)", lineHeight: 1.6 }}>
+                            Usage was recorded as 0.0 hours, so this day is marked as no data for therapy metrics while still counting toward usage-based measures such as adherence.
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="info-grid">
+                          <div className="info-item">
+                            <label>Total Usage</label>
+                            <strong>{Number(selectedDay.usageHours).toFixed(2)} hrs</strong>
+                          </div>
+                          <div className="info-item">
+                            <label>AHI</label>
+                            <strong className={`badge badge-${severity("ahi", selectedDay.ahi)}`}>
+                              {Number(selectedDay.ahi).toFixed(1)}
+                            </strong>
+                          </div>
+                          <div className="info-item">
+                            <label>Median Pressure</label>
+                            <strong>{Number(selectedDay.pressure).toFixed(1)} cmH2O</strong>
+                          </div>
+                          <div className="info-item">
+                            <label>Median Leak</label>
+                            <strong className={`badge badge-${severity("leak50", selectedDay.leak50)}`}>
+                              {Math.round(selectedDay.leak50)} L/min
+                            </strong>
+                          </div>
+                        </div>
+                      )}
+
+                      <h4 style={{ marginTop: "20px" }}>Recorded Sessions</h4>
+                      <div className="list-container" style={{ maxHeight: "300px" }}>
+                        {daySessions.length > 0 ? (
+                          daySessions.map((session) => (
                             <div
                               key={session.id}
                               className={`list-item ${selectedSession?.id === session.id ? "active" : ""}`}
@@ -663,38 +712,44 @@ export function App() {
                                 </div>
                               </div>
                             </div>
-                          ))}
-                    </div>
-
-                    {sessionDetail && sessionDetail.id === selectedSession?.id && (
-                      <div
-                        style={{
-                          marginTop: "20px",
-                          padding: "15px",
-                          background: "rgba(0,0,0,0.2)",
-                          borderRadius: "8px"
-                        }}
-                      >
-                        <h4 style={{ marginBottom: "10px" }}>Session Raw EDF Maps</h4>
-                        {sessionDetail.files.map((data) => {
-                          const [fileType] = data.file.split(".");
-                          return (
-                            <div key={data.file} style={{ marginBottom: "8px" }}>
-                              <strong>{fileType}:</strong>{" "}
-                              {data.error ? (
-                                <span style={{ color: "var(--danger)" }}>{data.error}</span>
-                              ) : (
-                                <span style={{ fontSize: "0.85em", color: "var(--muted)" }}>
-                                  {data.signals?.join(", ")}
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })}
+                          ))
+                        ) : (
+                          <div style={{ color: "var(--muted)", fontSize: "0.9rem", padding: "8px 0" }}>
+                            {selectedDayNoData ? "No therapy sessions were recorded for this date." : "No sessions found for this date."}
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ) : (
+
+                      {!selectedDayNoData && sessionDetail && sessionDetail.id === selectedSession?.id && (
+                        <div
+                          style={{
+                            marginTop: "20px",
+                            padding: "15px",
+                            background: "rgba(0,0,0,0.2)",
+                            borderRadius: "8px"
+                          }}
+                        >
+                          <h4 style={{ marginBottom: "10px" }}>Session Raw EDF Maps</h4>
+                          {sessionDetail.files.map((data) => {
+                            const [fileType] = data.file.split(".");
+                            return (
+                              <div key={data.file} style={{ marginBottom: "8px" }}>
+                                <strong>{fileType}:</strong>{" "}
+                                {data.error ? (
+                                  <span style={{ color: "var(--danger)" }}>{data.error}</span>
+                                ) : (
+                                  <span style={{ fontSize: "0.85em", color: "var(--muted)" }}>
+                                    {data.signals?.join(", ")}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })() : (
                   <div
                     style={{
                       height: "100%",
@@ -741,3 +796,13 @@ export function App() {
     </main>
   );
 }
+
+
+
+
+
+
+
+
+
+
