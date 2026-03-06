@@ -8,6 +8,10 @@ Desktop PAP/CPAP analytics for ResMed AirSense data, running fully offline.
 
 Repository: https://github.com/GChavez0210/PAPLens
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the latest updates and release history.
+
 ## What PAPLens does
 
 - Imports ResMed SD-card data incrementally into a local SQLite profile database.
