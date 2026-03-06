@@ -1,5 +1,9 @@
 # PAPLens (v1.0.0)
 
+<p align="center">
+  <img src="PAPLens-logo.png" alt="PAPLens Logo" width="250">
+</p>
+
 Desktop PAP/CPAP analytics for ResMed AirSense data, running fully offline.
 
 Repository: https://github.com/GChavez0210/PAPLens
@@ -85,21 +89,6 @@ Unpacked folders are also produced for direct binary testing:
 - `release/win-unpacked`
 - `release/win-arm64-unpacked`
 
-## Report template
-
-The official PDF report template is:
-
-- `report.html`
-
-`ReportNewTemplate.html` was removed to avoid duplication and drift.
-
-## Branding assets in use
-
-- App dark logo: `src/renderer/assets/PLLogoD.png`
-- App light logo: `src/renderer/assets/PLLogoL.png`
-- Report logo: `src/renderer/assets/PLReportLogo.png`
-- App icon: `src/renderer/assets/PLIcon.ico`
-
 ## PDF report generation
 
 PDF reports are generated in Electron main process using Handlebars + `report.html`, then rendered to PDF via `printToPDF`.
@@ -110,9 +99,11 @@ PAPLens uses and builds upon the parsing approach from:
 
 - **CPAP Data Viewer** by Paul Solares: https://github.com/xpaulso/cpap-viewer
 
-Attribution is specifically for the data parsing engine lineage.
+## Built with AI
 
-## Compliance notice
+This application was built using an AI-assisted development workflow powered by **[Antigravity](https://antigravity.google/)** and **[Codex](https://chatgpt.com/codex)**. AI accelerated the creation of the codebase, enabling faster iteration cycles and a consistent architecture across the project.
+
+All system design, validation, and testing remain under developer control. The application runs locally and deterministically, with no external AI services involved during normal operation, ensuring reliability and data privacy.
 
 PAPLens is an analytics/support tool and does not replace clinical diagnosis or medical decision-making.
 
