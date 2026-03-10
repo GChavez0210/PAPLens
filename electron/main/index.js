@@ -48,6 +48,15 @@ function createMainWindow() {
 const { IncrementalImporter } = require("./services/incremental-import");
 const { AnalyticsOrchestrator } = require("./analytics/orchestrator");
 
+function parseJsonSafely(value) {
+  if (!value) return null;
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return null;
+  }
+}
+
 async function loadDataFromPath(dataPath) {
   if (!currentProfileDatabase) {
     console.warn("Attempted to load data without active profile database.");
@@ -103,11 +112,189 @@ async function loadDataFromPath(dataPath) {
 
   console.log(`Incremental Import finished. Inserted: ${result.insertedCount}, Updated: ${result.updatedCount}`);
 
-  secureSettings.setEncrypted("lastDataPath", dataPath);
   if (mainWindow) {
     mainWindow.webContents.send("cpap:data-loaded", summary);
   }
   return summary;
+}
+
+function getLatestImportedPath(profileDatabase = currentProfileDatabase) {
+  if (!profileDatabase) return null;
+  const row = profileDatabase.db.prepare(`
+    SELECT folder_path
+    FROM import_log
+    WHERE folder_path IS NOT NULL AND folder_path != ''
+    ORDER BY import_timestamp DESC
+    LIMIT 1
+  `).get();
+  return row?.folder_path || null;
+}
+
+function getLatestDevice(profileDatabase = currentProfileDatabase) {
+  if (!profileDatabase) return null;
+
+  const latestImportedDevice = profileDatabase.db.prepare(`
+    SELECT d.*
+    FROM import_log i
+    JOIN devices d ON d.id = i.device_id
+    WHERE i.device_id IS NOT NULL
+    ORDER BY i.import_timestamp DESC
+    LIMIT 1
+  `).get();
+
+  if (latestImportedDevice) {
+    return latestImportedDevice;
+  }
+
+  return profileDatabase.db.prepare(`
+    SELECT d.*
+    FROM nights n
+    JOIN devices d ON d.id = n.device_id
+    ORDER BY n.night_date DESC, n.created_at DESC
+    LIMIT 1
+  `).get();
+}
+
+async function ensureSessionLoader() {
+  if (dataLoader) {
+    return dataLoader;
+  }
+
+  if (!currentDataPath || !fs.existsSync(currentDataPath)) {
+    return null;
+  }
+
+  const loader = new CPAPDataLoader(currentDataPath);
+  await loader.loadSessionList();
+  dataLoader = loader;
+  return dataLoader;
+}
+
+async function hydrateSummaryFromDatabase(profileDatabase = currentProfileDatabase) {
+  if (!profileDatabase) {
+    return null;
+  }
+
+  currentDataPath = getLatestImportedPath(profileDatabase);
+  const device = getLatestDevice(profileDatabase);
+  if (!device) {
+    currentSummary = null;
+    dataLoader = null;
+    return null;
+  }
+
+  const sessionLoader = await ensureSessionLoader();
+  const rows = profileDatabase.db.prepare(`
+    SELECT
+      n.night_date AS date,
+      COALESCE(m.ahi_total, 0) AS ahi,
+      COALESCE(m.apneas_per_hr, 0) AS ai,
+      COALESCE(m.hypopneas_per_hr, 0) AS hi,
+      COALESCE(m.obstructive_apneas_per_hr, 0) AS oai,
+      COALESCE(m.central_apneas_per_hr, 0) AS cai,
+      COALESCE(m.unclassified_apneas_per_hr, 0) AS uai,
+      COALESCE(m.duration_minutes, n.usage_hours * 60, 0) AS duration,
+      COALESCE(m.on_duration_minutes, n.usage_hours * 60, 0) AS onDuration,
+      COALESCE(n.usage_hours, 0) AS usageHours,
+      COALESCE(m.patient_hours_cumulative, 0) AS patientHoursCumulative,
+      COALESCE(m.leak_p50, 0) AS leak50,
+      COALESCE(m.leak_p95, 0) AS leak95,
+      COALESCE(m.pressure_median, 0) AS pressure,
+      COALESCE(m.pressure_p95, m.pressure_median, 0) AS maxPressure,
+      COALESCE(m.minute_vent_p50, 0) AS minVent50,
+      COALESCE(m.minute_vent_p95, 0) AS minVent95,
+      COALESCE(m.tidal_vol_p50, 0) AS tidVol50,
+      COALESCE(m.tidal_vol_p95, 0) AS tidVol95,
+      COALESCE(m.resp_rate_p50, 0) AS respRate50,
+      COALESCE(m.spo2_avg, 0) AS spo2Avg,
+      COALESCE(m.pulse_avg, 0) AS pulseAvg,
+      d.stability_score,
+      d.therapy_stability_score,
+      d.mask_fit_score,
+      d.leak_severity_tier,
+      d.leak_consistency_index,
+      d.pressure_variance,
+      d.flow_limitation_score,
+      d.event_cluster_index,
+      m.data_quality
+    FROM nights n
+    LEFT JOIN night_metrics m ON m.night_id = n.id
+    LEFT JOIN derived_metrics d ON d.night_id = n.id
+    WHERE n.device_id = ?
+    ORDER BY n.night_date ASC
+  `).all(device.id);
+
+  const dailyStats = rows.map((row) => ({
+    date: row.date,
+    ahi: row.ahi,
+    ai: row.ai,
+    hi: row.hi,
+    oai: row.oai,
+    cai: row.cai,
+    uai: row.uai,
+    duration: row.duration,
+    onDuration: row.onDuration,
+    usageHours: row.usageHours,
+    patientHoursCumulative: row.patientHoursCumulative,
+    leak50: row.leak50,
+    leak95: row.leak95,
+    pressure: row.pressure,
+    maxPressure: row.maxPressure,
+    minVent50: row.minVent50,
+    minVent95: row.minVent95,
+    tidVol50: row.tidVol50,
+    tidVol95: row.tidVol95,
+    respRate50: row.respRate50,
+    spo2Avg: row.spo2Avg,
+    pulseAvg: row.pulseAvg,
+    stability_score: row.stability_score,
+    therapy_stability_score: row.therapy_stability_score,
+    mask_fit_score: row.mask_fit_score,
+    leak_severity_tier: row.leak_severity_tier,
+    leak_consistency_index: row.leak_consistency_index,
+    pressure_variance: row.pressure_variance,
+    flow_limitation_score: row.flow_limitation_score,
+    event_cluster_index: row.event_cluster_index,
+    raw: {
+      dataQuality: parseJsonSafely(row.data_quality),
+      pressure_median: row.pressure
+    }
+  }));
+
+  const recentDays = dailyStats.slice(-30);
+  const calcAvg = (field) => {
+    if (recentDays.length === 0) return 0;
+    return recentDays.reduce((sum, day) => sum + (day[field] || 0), 0) / recentDays.length;
+  };
+
+  currentSummary = {
+    deviceInfo: {
+      serialNumber: device.serial_number || "Unknown",
+      productName: device.model || "Unknown",
+      model: device.model || "Unknown",
+      manufacturer: device.manufacturer || "Unknown",
+      machineId: device.id,
+      firmwareVersion: device.firmware || "Unknown"
+    },
+    totalDays: dailyStats.length,
+    recentDays: recentDays.length,
+    averages: {
+      ahi: calcAvg("ahi"),
+      usage: calcAvg("usageHours"),
+      pressure: calcAvg("maxPressure"),
+      leak: calcAvg("leak95"),
+      flowRate: calcAvg("minVent95"),
+      tidalVolume: calcAvg("tidVol95")
+    },
+    dailyStats,
+    sessions: sessionLoader ? sessionLoader.sessions.slice(0, 50) : []
+  };
+
+  if (!sessionLoader) {
+    dataLoader = null;
+  }
+
+  return currentSummary;
 }
 
 function registerIpc() {
@@ -124,6 +311,9 @@ function registerIpc() {
       return { success: false, error: "STR.edf not found in selected directory" };
     }
     const summary = await loadDataFromPath(selectedPath);
+    if (!summary || summary.error) {
+      return { success: false, error: summary?.error || "No active profile selected." };
+    }
     return { success: true, path: selectedPath, summary };
   });
 
@@ -132,32 +322,47 @@ function registerIpc() {
       return { success: false, error: "Invalid CPAP folder path" };
     }
     const summary = await loadDataFromPath(folderPath);
+    if (!summary || summary.error) {
+      return { success: false, error: summary?.error || "No active profile selected." };
+    }
     return { success: true, summary };
   });
 
   ipcMain.handle("cpap:get-summary", async () => {
+    if (!currentSummary && currentProfileDatabase) {
+      return hydrateSummaryFromDatabase();
+    }
     return currentSummary;
   });
 
   ipcMain.handle("cpap:get-daily-stats", async () => {
     if (!dataLoader) {
-      return [];
+      return currentSummary?.dailyStats || [];
     }
     return dataLoader.getDailyStats();
   });
 
   ipcMain.handle("cpap:get-session-detail", async (_event, sessionId) => {
     if (!dataLoader) {
-      return { error: "No data loaded" };
+      await ensureSessionLoader();
+    }
+    if (!dataLoader) {
+      return { error: "Session detail requires access to the original import folder." };
     }
     return dataLoader.loadSessionDetail(sessionId);
   });
 
   ipcMain.handle("cpap:refresh", async () => {
+    if (!currentDataPath && currentProfileDatabase) {
+      currentDataPath = getLatestImportedPath(currentProfileDatabase);
+    }
     if (!currentDataPath) {
       return { success: false, error: "No data path configured" };
     }
     const summary = await loadDataFromPath(currentDataPath);
+    if (!summary || summary.error) {
+      return { success: false, error: summary?.error || "Refresh failed" };
+    }
     return { success: true, summary };
   });
 
@@ -300,7 +505,7 @@ function registerIpc() {
   });
 
   ipcMain.handle("app:get-last-data-path", async () => {
-    return secureSettings.getDecrypted("lastDataPath");
+    return currentDataPath || getLatestImportedPath(currentProfileDatabase) || secureSettings.getDecrypted("lastDataPath");
   });
 
   // Analytics Endpoints
@@ -411,7 +616,34 @@ function registerIpc() {
     return { success: true };
   });
 
-  ipcMain.handle("app:set-active-profile", (_event, profileId) => {
+  ipcMain.handle("app:delete-profile", async (_event, profileId) => {
+    try {
+      if (profileId === activeProfileId) {
+        if (currentProfileDatabase) {
+          currentProfileDatabase.close();
+          currentProfileDatabase = null;
+        }
+        activeProfileId = null;
+        currentSummary = null;
+        currentDataPath = null;
+        dataLoader = null;
+        secureSettings.setEncrypted("activeProfileId", "");
+      }
+
+      const profilePath = path.join(app.getPath("userData"), "data", "profiles", profileId);
+      if (fs.existsSync(profilePath)) {
+        fs.rmSync(profilePath, { recursive: true, force: true });
+      }
+
+      appDatabase.deleteProfile(profileId);
+      return { success: true };
+    } catch (error) {
+      console.error("Failed to delete profile", error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle("app:set-active-profile", async (_event, profileId) => {
     if (currentProfileDatabase) {
       currentProfileDatabase.close();
       currentProfileDatabase = null;
@@ -423,6 +655,10 @@ function registerIpc() {
       currentProfileDatabase = new ProfileDatabase(app.getPath("userData"), profileId);
       activeProfileId = profileId;
       secureSettings.setEncrypted("activeProfileId", profileId);
+      await hydrateSummaryFromDatabase(currentProfileDatabase);
+    } else {
+      activeProfileId = null;
+      secureSettings.setEncrypted("activeProfileId", "");
     }
     return { success: true };
   });
@@ -455,12 +691,7 @@ app.whenReady().then(async () => {
   if (savedProfileId) {
     activeProfileId = savedProfileId;
     currentProfileDatabase = new ProfileDatabase(app.getPath("userData"), savedProfileId);
-  }
-
-  const lastPath = secureSettings.getDecrypted("lastDataPath");
-  if (lastPath && fs.existsSync(path.join(lastPath, "STR.edf"))) {
-    await loadDataFromPath(lastPath);
-    return;
+    await hydrateSummaryFromDatabase(currentProfileDatabase);
   }
 });
 

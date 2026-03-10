@@ -33,19 +33,26 @@ class IncrementalImporter {
             const upsertMetricsStmt = this.db.prepare(`
         INSERT INTO night_metrics (
           night_id, ahi_total, apneas_per_hr, hypopneas_per_hr,
+          obstructive_apneas_per_hr, central_apneas_per_hr, unclassified_apneas_per_hr,
           pressure_median, pressure_p95, leak_p50, leak_p95,
           minute_vent_p50, minute_vent_p95, resp_rate_p50, resp_rate_p95,
-          tidal_vol_p50, tidal_vol_p95, data_quality
+          tidal_vol_p50, tidal_vol_p95, duration_minutes, on_duration_minutes,
+          patient_hours_cumulative, spo2_avg, pulse_avg, data_quality
         ) VALUES (
           @night_id, @ahi_total, @apneas_per_hr, @hypopneas_per_hr,
+          @obstructive_apneas_per_hr, @central_apneas_per_hr, @unclassified_apneas_per_hr,
           @pressure_median, @pressure_p95, @leak_p50, @leak_p95,
           @minute_vent_p50, @minute_vent_p95, @resp_rate_p50, @resp_rate_p95,
-          @tidal_vol_p50, @tidal_vol_p95, @data_quality
+          @tidal_vol_p50, @tidal_vol_p95, @duration_minutes, @on_duration_minutes,
+          @patient_hours_cumulative, @spo2_avg, @pulse_avg, @data_quality
         )
         ON CONFLICT(night_id) DO UPDATE SET
           ahi_total = excluded.ahi_total,
           apneas_per_hr = excluded.apneas_per_hr,
           hypopneas_per_hr = excluded.hypopneas_per_hr,
+          obstructive_apneas_per_hr = excluded.obstructive_apneas_per_hr,
+          central_apneas_per_hr = excluded.central_apneas_per_hr,
+          unclassified_apneas_per_hr = excluded.unclassified_apneas_per_hr,
           pressure_median = excluded.pressure_median,
           pressure_p95 = excluded.pressure_p95,
           leak_p50 = excluded.leak_p50,
@@ -56,6 +63,11 @@ class IncrementalImporter {
           resp_rate_p95 = excluded.resp_rate_p95,
           tidal_vol_p50 = excluded.tidal_vol_p50,
           tidal_vol_p95 = excluded.tidal_vol_p95,
+          duration_minutes = excluded.duration_minutes,
+          on_duration_minutes = excluded.on_duration_minutes,
+          patient_hours_cumulative = excluded.patient_hours_cumulative,
+          spo2_avg = excluded.spo2_avg,
+          pulse_avg = excluded.pulse_avg,
           data_quality = excluded.data_quality
       `);
 
@@ -97,6 +109,9 @@ class IncrementalImporter {
                         ahi_total: day.ahi || 0,
                         apneas_per_hr: day.ai || 0,
                         hypopneas_per_hr: day.hi || 0,
+                        obstructive_apneas_per_hr: day.oai || 0,
+                        central_apneas_per_hr: day.cai || 0,
+                        unclassified_apneas_per_hr: day.uai || 0,
                         pressure_median: day.pressure || 0,
                         pressure_p95: day.maxPressure || 0, // Fallback
                         leak_p50: day.leak50 || 0,
@@ -107,6 +122,11 @@ class IncrementalImporter {
                         resp_rate_p95: day.respRate50 || 0,
                         tidal_vol_p50: day.tidVol50 || 0,
                         tidal_vol_p95: day.tidVol95 || 0,
+                        duration_minutes: day.duration || 0,
+                        on_duration_minutes: day.onDuration || 0,
+                        patient_hours_cumulative: day.patientHoursCumulative || 0,
+                        spo2_avg: day.spo2Avg || 0,
+                        pulse_avg: day.pulseAvg || 0,
                         data_quality: JSON.stringify(dq)
                     });
                 }

@@ -105,27 +105,24 @@ export function App() {
   const loadCurrentProfile = async () => {
     const profile = await window.cpapAPI.getActiveProfile();
     setActiveProfile(profile);
-    if (!profile) return;
-    loadCurrent();
+    if (!profile) {
+      setSummary(null);
+      setStatus("Select a profile");
+      return;
+    }
+    await loadCurrent();
   };
 
   const loadCurrent = async () => {
     const current = await window.cpapAPI.getSummary();
     if (current) {
       setSummary(current);
-      setStatus("Loaded");
-      return;
+      setStatus(current.totalDays > 0 ? `Loaded ${current.totalDays} nights from database` : "Loaded from database");
+      return true;
     }
-    const lastPath = await window.cpapAPI.getLastDataPath();
-    if (lastPath) {
-      const result = await window.cpapAPI.loadDataFolder(lastPath);
-      if (result.success) {
-        setSummary(result.summary);
-        setStatus(`Loaded from ${lastPath}`);
-        return;
-      }
-    }
-    setStatus("Select a CPAP folder to begin");
+    setSummary(null);
+    setStatus("Import a CPAP folder or SD card to add data");
+    return false;
   };
 
   useEffect(() => {
@@ -201,11 +198,11 @@ export function App() {
   }, [filteredStats]);
 
   const chooseFolder = async () => {
-    setStatus("Selecting folder...");
+    setStatus("Importing data folder...");
     const result = await window.cpapAPI.selectDataFolder();
     if (result.success) {
       setSummary(result.summary);
-      setStatus(`Loaded from ${result.path}`);
+      setStatus(`Imported data from ${result.path}`);
     } else {
       setStatus(result.error);
     }
@@ -377,7 +374,7 @@ export function App() {
             Save Data Report
           </button>
           <button className="btn-secondary" onClick={chooseFolder}>
-            Open Data Folder
+            Import Data Folder
           </button>
           <button className="btn-secondary" onClick={refresh}>
             Refresh
@@ -413,6 +410,7 @@ export function App() {
               style={{ padding: "4px 8px", fontSize: "0.8em", marginTop: "5px" }}
               onClick={async () => {
                 await window.cpapAPI.setActiveProfile(null);
+                setSummary(null);
                 setActiveProfile(null);
               }}
             >

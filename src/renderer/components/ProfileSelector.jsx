@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 export function ProfileSelector({ onSelect }) {
     const [profiles, setProfiles] = useState([]);
     const [isCreating, setIsCreating] = useState(false);
+    const [deletingId, setDeletingId] = useState(null);
     const [newName, setNewName] = useState("");
     const [newAge, setNewAge] = useState("");
     const [newNotes, setNewNotes] = useState("");
@@ -36,6 +37,25 @@ export function ProfileSelector({ onSelect }) {
     const handleSelect = async (id) => {
         await window.cpapAPI.setActiveProfile(id);
         onSelect(id);
+    };
+
+    const handleDelete = async (profile) => {
+        const confirmed = window.confirm(
+            `Permanently delete "${profile.name}" and all data stored for this profile? This cannot be undone.`
+        );
+        if (!confirmed) return;
+
+        setDeletingId(profile.id);
+        try {
+            const result = await window.cpapAPI.deleteProfile(profile.id);
+            if (!result?.success) {
+                window.alert(result?.error || "Profile deletion failed.");
+                return;
+            }
+            await loadProfiles();
+        } finally {
+            setDeletingId(null);
+        }
     };
 
     if (isCreating || profiles.length === 0) {
@@ -77,15 +97,41 @@ export function ProfileSelector({ onSelect }) {
                         <div
                             key={p.id}
                             className="info-item"
-                            style={{ cursor: "pointer", padding: "15px", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                            onClick={() => handleSelect(p.id)}
+                            style={{ padding: "15px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "16px" }}
                         >
                             <div>
                                 <strong>{p.name}</strong>
-                                {p.age && <span style={{ marginLeft: "10px", fontSize: "0.8em", color: "var(--muted)" }}>Age: {p.age}</span>}
-                                {p.notes && <div style={{ fontSize: "0.8em", color: "var(--muted)", marginTop: "4px" }}>{p.notes}</div>}
+                                {p.age && <span className="profile-meta">Age: {p.age}</span>}
+                                {p.notes && <div className="profile-meta" style={{ marginTop: "4px" }}>{p.notes}</div>}
                             </div>
-                            <span style={{ fontSize: "1.2em", color: "var(--brand)" }}>→</span>
+                            <div className="profile-action-row">
+                                <button
+                                    type="button"
+                                    className="btn-primary profile-load-button"
+                                    onClick={() => handleSelect(p.id)}
+                                >
+                                    Load Profile
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn-secondary profile-delete-button"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDelete(p);
+                                    }}
+                                    disabled={deletingId === p.id}
+                                    aria-label={deletingId === p.id ? `Deleting ${p.name}` : `Delete ${p.name}`}
+                                    title={deletingId === p.id ? "Deleting profile" : `Delete ${p.name}`}
+                                >
+                                    {deletingId === p.id ? (
+                                        <span aria-hidden="true">...</span>
+                                    ) : (
+                                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                                            <path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm1 7h2v8h-2v-8Zm4 0h2v8h-2v-8ZM7 10h2v8H7v-8Zm-1 10h12l1-12H5l1 12Z" />
+                                        </svg>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     ))}
                 </div>

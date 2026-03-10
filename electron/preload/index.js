@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("cpapAPI", {
   getLastDataPath: () => ipcRenderer.invoke("app:get-last-data-path"),
   getProfiles: () => ipcRenderer.invoke("app:get-profiles"),
   createProfile: (profileData) => ipcRenderer.invoke("app:create-profile", profileData),
+  deleteProfile: (profileId) => ipcRenderer.invoke("app:delete-profile", profileId),
   setActiveProfile: (profileId) => ipcRenderer.invoke("app:set-active-profile", profileId),
   getActiveProfile: () => ipcRenderer.invoke("app:get-active-profile"),
   getLastNightOverview: () => ipcRenderer.invoke("cpap:get-last-night-overview"),

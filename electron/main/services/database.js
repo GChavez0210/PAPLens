@@ -73,6 +73,10 @@ class AppDatabase {
     stmt.run({ id, name, age: age || null, notes: notes || null });
   }
 
+  deleteProfile(id) {
+    this.db.prepare("DELETE FROM profiles WHERE id = ?").run(id);
+  }
+
   close() {
     if (this.db) {
       this.db.close();
@@ -87,6 +91,8 @@ class ProfileDatabase {
       fs.mkdirSync(profilesPath, { recursive: true });
     }
 
+    this.profileId = profileId;
+    this.profilePath = profilesPath;
     this.dbPath = path.join(profilesPath, "paplens.db");
     this.db = new Database(this.dbPath);
     this.db.pragma('foreign_keys = ON');
@@ -123,6 +129,9 @@ class ProfileDatabase {
           ahi_total REAL,
           apneas_per_hr REAL,
           hypopneas_per_hr REAL,
+          obstructive_apneas_per_hr REAL,
+          central_apneas_per_hr REAL,
+          unclassified_apneas_per_hr REAL,
           pressure_median REAL,
           pressure_p95 REAL,
           leak_p50 REAL,
@@ -133,6 +142,11 @@ class ProfileDatabase {
           resp_rate_p95 REAL,
           tidal_vol_p50 REAL,
           tidal_vol_p95 REAL,
+          duration_minutes REAL,
+          on_duration_minutes REAL,
+          patient_hours_cumulative REAL,
+          spo2_avg REAL,
+          pulse_avg REAL,
           data_quality TEXT,
           FOREIGN KEY(night_id) REFERENCES nights(id) ON DELETE CASCADE
       );
@@ -204,6 +218,14 @@ class ProfileDatabase {
     addColumnIfNotExists('derived_metrics', 'pressure_variance', 'REAL');
     addColumnIfNotExists('derived_metrics', 'flow_limitation_score', 'REAL');
     addColumnIfNotExists('derived_metrics', 'event_cluster_index', 'REAL');
+    addColumnIfNotExists('night_metrics', 'obstructive_apneas_per_hr', 'REAL');
+    addColumnIfNotExists('night_metrics', 'central_apneas_per_hr', 'REAL');
+    addColumnIfNotExists('night_metrics', 'unclassified_apneas_per_hr', 'REAL');
+    addColumnIfNotExists('night_metrics', 'duration_minutes', 'REAL');
+    addColumnIfNotExists('night_metrics', 'on_duration_minutes', 'REAL');
+    addColumnIfNotExists('night_metrics', 'patient_hours_cumulative', 'REAL');
+    addColumnIfNotExists('night_metrics', 'spo2_avg', 'REAL');
+    addColumnIfNotExists('night_metrics', 'pulse_avg', 'REAL');
   }
 
   close() {
