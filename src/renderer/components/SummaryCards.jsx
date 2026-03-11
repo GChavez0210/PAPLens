@@ -1,14 +1,16 @@
+import { formatMetricValue } from "../utils/therapyMetrics";
+
 export function SummaryCards({ summary }) {
   const averages = summary?.averages || {};
   const device = summary?.deviceInfo || {};
 
   const cards = [
-    { label: "AVERAGE AHI", value: Number(averages.ahi || 0).toFixed(1), unit: "events/hr", subtext: "Last 30 days" },
-    { label: "AVERAGE USAGE", value: Number(averages.usage || 0).toFixed(1), unit: "hours", subtext: "Per night" },
-    { label: "AVERAGE PRESSURE", value: Number(averages.pressure || 0).toFixed(1), unit: "cmH2O", subtext: "95th percentile" },
-    { label: "AVERAGE LEAK", value: Number(averages.leak || 0).toFixed(1), unit: "L/min", subtext: "95th percentile" },
-    { label: "AVERAGE FLOW RATE", value: Number(averages.flowRate || 0).toFixed(1), unit: "L/min", subtext: "95th percentile" },
-    { label: "AVERAGE TIDAL VOLUME", value: Math.round(averages.tidalVolume || 0), unit: "mL", subtext: "95th percentile" }
+    { label: "AVERAGE AHI", value: formatMetricValue(averages.ahi, 1), unit: "events/hr", subtext: "Last 30 days" },
+    { label: "AVERAGE USAGE", value: formatMetricValue(averages.usage, 1), unit: "hours", subtext: "Per night" },
+    { label: "AVERAGE PRESSURE", value: formatMetricValue(averages.pressure, 1), unit: "cmH2O", subtext: "95th percentile" },
+    { label: "AVERAGE LEAK", value: formatMetricValue(averages.leak, 1), unit: "L/min", subtext: "95th percentile" },
+    { label: "AVERAGE FLOW RATE", value: formatMetricValue(averages.flowRate, 1), unit: "L/min", subtext: "95th percentile" },
+    { label: "AVERAGE TIDAL VOLUME", value: formatMetricValue(averages.tidalVolume, 0), unit: "mL", subtext: "50th percentile" }
   ];
 
   return (

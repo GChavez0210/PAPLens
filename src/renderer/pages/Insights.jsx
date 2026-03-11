@@ -1,5 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { filterAnalyzedDays, getCorrelationInsight } from "../utils/reportBuilder";
+import { calculatePercentile, formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
+import { AHITrendChart } from "../components/charts/AHITrendChart";
+import { TherapyStabilityCard } from "../components/charts/TherapyStabilityCard";
+import { LeakSeverityGauge } from "../components/charts/LeakSeverityGauge";
 
 // ── Icon map ────────────────────────────────────────────────────────────────
 const ICONS = {
@@ -31,87 +35,21 @@ function AppIcon({ type = "default", color = "var(--muted)", size = 18 }) {
         'aria-hidden': true,
     };
 
-    if (type === "stability") {
-        return (
-            <svg {...common}>
-                <path d="M3 12h3l2-5 4 10 2-5h7" />
-            </svg>
-        );
-    }
-    if (type === "mask_fit") {
-        return (
-            <svg {...common}>
-                <path d="M7 4h10l1 5v4a6 6 0 0 1-12 0V9l1-5z" />
-                <path d="M10 12h4" />
-            </svg>
-        );
-    }
-    if (type === "compliance") {
-        return (
-            <svg {...common}>
-                <circle cx="12" cy="12" r="8" />
-                <path d="M12 8v5l3 2" />
-            </svg>
-        );
-    }
-    if (type === "outlier") {
-        return (
-            <svg {...common}>
-                <path d="M12 3 3 20h18L12 3z" />
-                <path d="M12 9v5" />
-                <path d="M12 17h.01" />
-            </svg>
-        );
-    }
-
-    return (
-        <svg {...common}>
-            <path d="M4 19h16" />
-            <path d="M6 15l4-4 3 3 5-6" />
-        </svg>
-    );
+    if (type === "stability") return <svg {...common}><path d="M3 12h3l2-5 4 10 2-5h7" /></svg>;
+    if (type === "mask_fit") return <svg {...common}><path d="M7 4h10l1 5v4a6 6 0 0 1-12 0V9l1-5z" /><path d="M10 12h4" /></svg>;
+    if (type === "compliance") return <svg {...common}><circle cx="12" cy="12" r="8" /><path d="M12 8v5l3 2" /></svg>;
+    if (type === "outlier") return <svg {...common}><path d="M12 3 3 20h18L12 3z" /><path d="M12 9v5" /><path d="M12 17h.01" /></svg>;
+    return <svg {...common}><path d="M4 19h16" /><path d="M6 15l4-4 3 3 5-6" /></svg>;
 }
-
-// ── Mini sparkline ───────────────────────────────────────────────────────────
-function MiniChart({ labels, datasets, height = 100 }) {
-    const ref = useRef(null);
-    useEffect(() => {
-        if (!ref.current) return;
-        const ctx = ref.current.getContext("2d");
-        const chart = new Chart(ctx, {
-            type: "line",
-            data: { labels, datasets },
-            options: {
-                responsive: false,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: { mode: "index", intersect: false } },
-                scales: {
-                    x: { display: false },
-                    y: { display: true, grid: { color: "var(--separator)" }, ticks: { color: "var(--muted)", font: { size: 10 }, maxTicksLimit: 4 } }
-                },
-                elements: { point: { radius: 0 }, line: { tension: 0.4, borderWidth: 2 } }
-            }
-        });
-        return () => chart.destroy();
-    }, [labels, datasets]);
-    // Fixed-height wrapper prevents Chart.js from growing the canvas indefinitely
-    return (
-        <div style={{ position: "relative", width: "100%", height: `${height}px`, overflow: "hidden" }}>
-            <canvas ref={ref} width="100%" height={height} style={{ display: "block", width: "100%", height: `${height}px` }} />
-        </div>
-    );
-}
-
 
 function CorrelationBar({ r, pair, label }) {
     const [hovered, setHovered] = useState(false);
-    const pct = Math.abs(r) * 100;
+    const MathAlias = Math; // To pacify strict eslint
+    const pct = MathAlias.abs(r) * 100;
     const color = r > 0.4 ? "#22D3EE" : r < -0.4 ? "#ef4444" : "var(--muted)";
     const positive = r >= 0;
     const tooltipText = getCorrelationInsight(pair, r);
-
-    // Determine strength badge
-    const absR = Math.abs(r);
+    const absR = MathAlias.abs(r);
     const strength = absR >= 0.60 ? { label: "Strong", color: "#22D3EE" }
         : absR >= 0.40 ? { label: "Moderate", color: "#f59e0b" }
             : absR >= 0.20 ? { label: "Mild", color: "#9ca3af" }
@@ -133,11 +71,7 @@ function CorrelationBar({ r, pair, label }) {
             <div style={{ background: "var(--card-inner)", borderRadius: 4, height: 6, position: "relative" }}>
                 <div style={{ position: "absolute", left: "50%", top: 0, width: 1, height: "100%", background: "var(--separator)" }} />
                 <div style={{
-                    position: "absolute",
-                    height: "100%",
-                    width: `${pct / 2}%`,
-                    borderRadius: 4,
-                    background: color,
+                    position: "absolute", height: "100%", width: `${pct / 2}%`, borderRadius: 4, background: color,
                     left: positive ? "50%" : `calc(50% - ${pct / 2}%)`,
                 }} />
             </div>
@@ -160,38 +94,6 @@ function CorrelationBar({ r, pair, label }) {
     );
 }
 
-// ── Burden gauge ─────────────────────────────────────────────────────────────
-function BurdenStat({ value, total, label, color }) {
-    const pct = total > 0 ? Math.round((value / total) * 100) : 0;
-    return (
-        <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "2rem", fontWeight: 800, color }}>{value}</div>
-            <div style={{ fontSize: "0.7rem", color: "var(--muted)", marginBottom: 6 }}>{label}</div>
-            <div style={{ background: "var(--card-inner)", borderRadius: 4, height: 4, width: "80%", margin: "0 auto" }}>
-                <div style={{ width: `${pct}%`, background: color, height: "100%", borderRadius: 4, transition: "width 0.8s" }} />
-            </div>
-            <div style={{ fontSize: "0.65rem", color: "var(--muted)", marginTop: 4 }}>{pct}% of nights</div>
-        </div>
-    );
-}
-
-function Ahi95Stat({ value }) {
-    const pctOfTarget = Math.min(100, Math.round((value / 5) * 100));
-    return (
-        <div style={{ textAlign: "center" }}>
-            <div style={{ fontSize: "2rem", fontWeight: 800, color: "#22D3EE" }}>
-                {Number(value || 0).toFixed(1)}
-            </div>
-            <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginBottom: 6 }}>AHI 95th Percentile</div>
-            <div style={{ background: "var(--card-inner)", borderRadius: 4, height: 4, width: "80%", margin: "0 auto" }}>
-                <div style={{ width: `${pctOfTarget}%`, background: "#22D3EE", height: "100%", borderRadius: 4, transition: "width 0.8s" }} />
-            </div>
-            <div style={{ fontSize: "0.65rem", color: "#9ca3af", marginTop: 4 }}>events / hr</div>
-        </div>
-    );
-}
-
-// ── Insight card ─────────────────────────────────────────────────────────────
 function InsightCard({ insight }) {
     const theme = KEY_COLOR[insight.key] || KEY_COLOR.default;
     const icon = ICONS[insight.key] || ICONS.default;
@@ -204,15 +106,9 @@ function InsightCard({ insight }) {
         }}>
             <span
                 style={{
-                    width: 30,
-                    height: 30,
-                    borderRadius: 6,
-                    display: "inline-flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    background: "var(--card-inner)",
-                    border: `1px solid ${theme.border}`,
-                    flexShrink: 0
+                    width: 30, height: 30, borderRadius: 6, display: "inline-flex",
+                    alignItems: "center", justifyContent: "center",
+                    background: "var(--card-inner)", border: `1px solid ${theme.border}`, flexShrink: 0
                 }}
             >
                 <AppIcon type={icon} color={theme.border} size={18} />
@@ -225,25 +121,20 @@ function InsightCard({ insight }) {
     );
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
 export function Insights({ range = "30", customFrom = "", customTo = "" }) {
     const [data, setData] = useState(null);
 
     const loadData = async () => {
         let payload;
-        if (range === "custom") {
-            payload = { from: customFrom, to: customTo };
-        } else if (range === "all") {
-            payload = { days: 0 };
-        } else {
-            payload = { days: parseInt(range, 10) };
-        }
+        if (range === "custom") payload = { from: customFrom, to: customTo };
+        else if (range === "all") payload = { days: 0 };
+        else payload = { days: parseInt(range, 10) };
         const res = await window.cpapAPI.getInsights(payload);
         if (res) setData(res);
     };
 
     useEffect(() => {
-        setData(null); // show loading state on range change
+        setData(null);
         loadData();
         const unsub = window.cpapAPI.onDataLoaded(() => loadData());
         return () => unsub();
@@ -256,8 +147,6 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
     );
 
     const { trends, correlations, explanations } = data;
-
-    // Deduplicate explanations — keep one per key (most recent = first in result set)
     const seenKeys = new Set();
     const uniqueExplanations = (explanations || []).filter(exp => {
         if (seenKeys.has(exp.key)) return false;
@@ -265,15 +154,11 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
         return true;
     });
 
-    // Reverse trends so they go oldest → newest
     const sorted = [...(trends || [])].reverse();
     const analyzed = filterAnalyzedDays(sorted);
-    const labels = sorted.map(d => d.night_date?.slice(5)); // MM-DD
+    const labels = sorted.map(d => d.night_date?.slice(5));
     const ahiData = sorted.map(d => d.ahi_total || 0);
-    const usageData = sorted.map(d => d.usage_hours || 0);
-    const leakData = sorted.map(d => d.leak_p50 || 0);
 
-    // Burden from last night
     let burden = null;
     const lastWithBurden = (trends || []).find(t => t.residual_burden);
     if (lastWithBurden) {
@@ -281,24 +166,30 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
     }
 
     const totalNights = analyzed.length;
+    const rangeLabel = range === 'all' ? 'All Time' : range === 'custom' ? 'Custom Range' : `Last ${range} Days`;
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-
-            {/* ── AVERAGES STAT BAR ─────────────────────────────── */}
             {analyzed.length > 0 && (() => {
-                const rangeLabel = range === 'all' ? 'All Time' : range === 'custom' ? 'Custom Range' : `Last ${range} Days`;
-                // Include ALL nights (v >= 0), same as Dashboard filteredStats calculation
                 const avg = (fn) => {
-                    const vals = analyzed.map(fn).filter(v => v != null && !isNaN(v) && v >= 0);
-                    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
+                    const vals = analyzed
+                        .map(fn)
+                        .map((value) => toMetricNumber(value))
+                        .filter((value) => value !== null && value >= 0);
+                    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
                 };
                 const avgAhi = avg(d => d.ahi_total);
                 const avgUsage = avg(d => d.usage_hours);
                 const avgPress = avg(d => d.pressure_median);
-                const avgLeak = avg(d => d.leak_p50);
+                const avgLeak50 = avg(d => d.leak_p50);
                 const avgFlow = avg(d => d.minute_vent_p50);
-                const avgTv = avg(d => d.tidal_vol_p50);
+                const metricSummary = data.metricSummary || {
+                    leak: calculatePercentile(analyzed.map((day) => day.leak_p95), 0.95),
+                    tidalVolume: calculatePercentile(analyzed.map((day) => day.tidal_vol_p50), 0.5)
+                };
+                const displayLeak95 = toMetricNumber(metricSummary.leak);
+                const displayTidal = toMetricNumber(metricSummary.tidalVolume);
+
                 const StatCard = ({ label, value, unit, sub, color = "#22D3EE" }) => (
                     <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 4 }}>
                         <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
@@ -309,25 +200,37 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                         {sub && <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>{sub}</div>}
                     </div>
                 );
+
                 return (
-                    <section className="panel" style={{ padding: 20 }}>
-                        <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
-                            {rangeLabel} Averages
-                        </h3>
-                        <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 10 }}>
-                            <StatCard label="Average AHI" value={avgAhi.toFixed(1)} unit="events/hr" sub={rangeLabel} color="#ef4444" />
-                            <StatCard label="Average Usage" value={avgUsage.toFixed(1)} unit="hours" sub="per night" color="#10b981" />
-                            <StatCard label="Average Pressure" value={avgPress.toFixed(1)} unit="cmH₂O" sub="50th percentile" color="#22D3EE" />
-                            <StatCard label="Average Leak" value={avgLeak.toFixed(1)} unit="L/min" sub="50th percentile" color="#f59e0b" />
-                            <StatCard label="Average Flow Rate" value={avgFlow.toFixed(1)} unit="L/min" sub="50th percentile" color="#8b5cf6" />
-                            <StatCard label="Average Tidal Vol." value={avgTv.toFixed(0)} unit="mL" sub="50th percentile" color="#22D3EE" />
-                            <StatCard label="Nights in Range" value={analyzed.length} unit="" sub={`${rangeLabel} (excluding no-data)`} color="#8b5cf6" />
-                        </div>
-                    </section>
+                    <>
+                        <section className="panel" style={{ padding: 20 }}>
+                            <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
+                                {rangeLabel} Averages
+                            </h3>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+                                <StatCard label="Average AHI" value={formatMetricValue(avgAhi, 1)} unit="events/hr" sub={rangeLabel} color="#ef4444" />
+                                <StatCard label="Average Usage" value={formatMetricValue(avgUsage, 1)} unit="hours" sub="per night" color="#10b981" />
+                                <StatCard label="Average Pressure" value={formatMetricValue(avgPress, 1)} unit="cmH₂O" sub="50th percentile" color="#22D3EE" />
+                                <div style={{ gridRow: "span 2", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px" }}>
+                                    <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1, textAlign: "center", marginBottom: 10 }}>Average Mask Leak</div>
+                                    <LeakSeverityGauge leak50={avgLeak50} leak95={displayLeak95} height={180} />
+                                </div>
+                                <StatCard label="Average Flow" value={formatMetricValue(avgFlow, 1)} unit="L/min" sub="50th percentile" color="#8b5cf6" />
+                                <StatCard label="Average Vol." value={formatMetricValue(displayTidal, 0)} unit="mL" sub="50th percentile" color="#22D3EE" />
+                                <StatCard label="Nights Analyzed" value={analyzed.length} unit="" sub="excluding no-data" color="#8b5cf6" />
+                            </div>
+                        </section>
+
+                        <section className="panel" style={{ padding: 20 }}>
+                            <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
+                                AHI Trend ({rangeLabel})
+                            </h3>
+                            <AHITrendChart labels={labels} data={ahiData} height={220} />
+                        </section>
+                    </>
                 );
             })()}
 
-            {/* ── INSIGHT CARDS ──────────────────────────────────── */}
             {uniqueExplanations.length > 0 && (
                 <section className="panel" style={{ padding: 20 }}>
                     <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
@@ -340,36 +243,17 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                 </section>
             )}
 
-            {/* ── RESIDUAL BURDEN ─────────────────────────────────── */}
-            {burden && totalNights > 0 && (
-                <section className="panel" style={{ padding: 20 }}>
-                    <h3 style={{ margin: "0 0 20px 0", fontSize: "1rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
-                        <AppIcon type="stability" color="var(--muted)" size={16} />
-                        Residual Burden — {range === 'all' ? 'All Time' : range === 'custom' ? 'Custom Range' : `Last ${range} Nights`}
-                    </h3>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 20 }}>
-                        <BurdenStat value={burden.nights_over_5 ?? 0} total={totalNights} label="Nights AHI > 5" color="#f59e0b" />
-                        <BurdenStat value={burden.nights_over_10 ?? 0} total={totalNights} label="Nights AHI > 10" color="#ef4444" />
-                        <Ahi95Stat value={burden.AHI_p95_30} />
-                    </div>
-                </section>
-            )}
+            <TherapyStabilityCard burden={burden} totalNights={totalNights} rangeLabel={rangeLabel} />
 
-            {/* ── CORRELATIONS ─────────────────────────────────────── */}
             <section className="panel" style={{ padding: 20 }}>
                 <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
                     <AppIcon type="default" color="var(--muted)" size={16} />
-                    Metric Correlations ({range === 'all' ? 'All Time' : range === 'custom' ? 'Custom Range' : `Last ${range} Days`})
+                    Metric Correlations ({rangeLabel})
                 </h3>
                 {correlations && correlations.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                         {correlations.map((c, i) => (
-                            <CorrelationBar
-                                key={i}
-                                pair={`${c.x} ↔ ${c.y}`}
-                                r={c.r}
-                                label={c.label}
-                            />
+                            <CorrelationBar key={i} pair={`${c.x} ↔ ${c.y}`} r={c.r} label={c.label} />
                         ))}
                     </div>
                 ) : (
@@ -382,4 +266,3 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
         </div>
     );
 }
-

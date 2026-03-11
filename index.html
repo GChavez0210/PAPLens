@@ -4,8 +4,171 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PAPLens</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Inter", "Segoe UI", sans-serif;
+        background: #09090b;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top, rgba(99, 102, 241, 0.2), transparent 32%),
+          radial-gradient(circle at bottom right, rgba(34, 211, 238, 0.14), transparent 28%),
+          #09090b;
+        color: #ffffff;
+      }
+
+      #app-boot-splash {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        z-index: 9999;
+        transition: opacity 220ms ease, visibility 220ms ease;
+      }
+
+      #app-boot-splash[hidden] {
+        display: none;
+      }
+
+      #app-boot-splash .boot-card {
+        width: min(520px, 100%);
+        padding: 36px 32px;
+        border-radius: 28px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        background: linear-gradient(180deg, rgba(24, 24, 27, 0.94), rgba(9, 9, 11, 0.88));
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+        text-align: center;
+      }
+
+      #app-boot-splash .boot-orbit {
+        position: relative;
+        width: 112px;
+        height: 112px;
+      }
+
+      #app-boot-splash .boot-orbit::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+      }
+
+      #app-boot-splash .boot-orbit span {
+        position: absolute;
+        inset: 50%;
+        width: 12px;
+        height: 12px;
+        margin: -6px 0 0 -6px;
+        border-radius: 999px;
+        background: linear-gradient(135deg, #6366f1, #22d3ee);
+        box-shadow: 0 0 18px rgba(99, 102, 241, 0.45);
+        animation: boot-orbit 2.1s linear infinite;
+      }
+
+      #app-boot-splash .boot-orbit span:nth-child(2) {
+        animation-delay: -0.7s;
+      }
+
+      #app-boot-splash .boot-orbit span:nth-child(3) {
+        animation-delay: -1.4s;
+      }
+
+      #app-boot-splash img {
+        width: min(240px, 72%);
+        height: auto;
+      }
+
+      #app-boot-splash .boot-eyebrow {
+        margin: 0 0 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.28em;
+        font-size: 0.72rem;
+        color: #22d3ee;
+      }
+
+      #app-boot-splash h1 {
+        margin: 0 0 10px;
+        font-size: clamp(1.7rem, 4vw, 2.2rem);
+        letter-spacing: -0.03em;
+      }
+
+      #app-boot-splash p {
+        margin: 0;
+        color: #a1a1aa;
+        line-height: 1.6;
+      }
+
+      #app-boot-splash .boot-progress {
+        width: 100%;
+        height: 4px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.08);
+      }
+
+      #app-boot-splash .boot-progress span {
+        display: block;
+        width: 40%;
+        height: 100%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, #6366f1, #22d3ee);
+        animation: boot-progress 1.4s ease-in-out infinite;
+      }
+
+      @keyframes boot-orbit {
+        0% {
+          transform: rotate(0deg) translateY(-46px) scale(0.85);
+          opacity: 0.5;
+        }
+
+        50% {
+          transform: rotate(180deg) translateY(-46px) scale(1);
+          opacity: 1;
+        }
+
+        100% {
+          transform: rotate(360deg) translateY(-46px) scale(0.85);
+          opacity: 0.5;
+        }
+      }
+
+      @keyframes boot-progress {
+        0% {
+          transform: translateX(-120%);
+        }
+
+        100% {
+          transform: translateX(320%);
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="app-boot-splash" aria-hidden="true">
+      <div class="boot-card">
+        <div class="boot-orbit">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <img src="./src/renderer/assets/PLLogoD.png" alt="PAPLens" />
+        <div>
+          <p class="boot-eyebrow">Offline clinical workspace</p>
+          <h1>Preparing your therapy data</h1>
+          <p>Loading therapy history from the local database.</p>
+        </div>
+        <div class="boot-progress"><span></span></div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="./src/renderer/main.jsx"></script>
   </body>

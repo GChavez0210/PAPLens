@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TrendChart } from "./charts/TrendChart";
 import { LastNightSidebar } from "./components/LastNightSidebar";
 import { Insights } from "./pages/Insights";
@@ -8,6 +8,7 @@ import { SleepCalendar } from "./components/SleepCalendar";
 import { buildClinicalContext, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
 
 const RANGE_OPTIONS = ["7", "14", "30", "60", "90", "180", "365", "all", "custom"];
+const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN = /(airsense|aircurve|lumis|airmini)/i;
 
 function getScoreTier(score) {
   if (score === null || score === undefined) return 0;
@@ -71,11 +72,42 @@ function captureChartDataUri(canvas) {
   return exportCanvas.toDataURL("image/png");
 }
 
+function dismissBootSplash() {
+  document.body.classList.add("app-mounted");
+  window.setTimeout(() => {
+    document.getElementById("app-boot-splash")?.setAttribute("hidden", "hidden");
+  }, 280);
+}
+
+function LoadingScreen({ logoSrc, status }) {
+  return (
+    <main className="boot-shell" aria-busy="true" aria-live="polite">
+      <section className="boot-card">
+        <div className="boot-orbit" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <img className="boot-logo" src={logoSrc} alt="PAPLens" />
+        <div className="boot-copy">
+          <p className="boot-eyebrow">Offline clinical workspace</p>
+          <h1>Preparing your therapy data</h1>
+          <p>{status}</p>
+        </div>
+        <div className="boot-progress" aria-hidden="true">
+          <span />
+        </div>
+      </section>
+    </main>
+  );
+}
+
 export function App() {
   const [activeProfile, setActiveProfile] = useState(null);
   const [activeTab, setActiveTab] = useState("overview"); // overview or insights
   const [summary, setSummary] = useState(null);
   const [status, setStatus] = useState("Loading...");
+  const [isBooting, setIsBooting] = useState(true);
   const [range, setRange] = useState("30");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -83,8 +115,12 @@ export function App() {
   const [selectedDay, setSelectedDay] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
   const [sessionDetail, setSessionDetail] = useState(null);
+  const hasBootstrappedRef = useRef(false);
 
   const [theme, setTheme] = useState(() => localStorage.getItem('paplens-theme') || 'dark');
+  const bootLogoSrc = theme === "light"
+    ? new URL("./assets/PLLogoL.png", import.meta.url).href
+    : new URL("./assets/PLLogoD.png", import.meta.url).href;
 
   useEffect(() => {
     if (theme === 'light') {
@@ -103,38 +139,80 @@ export function App() {
   };
 
   const loadCurrentProfile = async () => {
-    const profile = await window.cpapAPI.getActiveProfile();
-    setActiveProfile(profile);
-    if (!profile) {
+    try {
+      const profile = await window.cpapAPI.getActiveProfile();
+      setActiveProfile(profile);
+      if (!profile) {
+        setSummary(null);
+        setStatus("Select a profile");
+        return;
+      }
+      await loadCurrent();
+    } catch (error) {
+      console.error("Failed to load active profile", error);
       setSummary(null);
-      setStatus("Select a profile");
-      return;
+      setStatus("Unable to load your saved data");
     }
-    await loadCurrent();
   };
 
   const loadCurrent = async () => {
-    const current = await window.cpapAPI.getSummary();
-    if (current) {
-      setSummary(current);
-      setStatus(current.totalDays > 0 ? `Loaded ${current.totalDays} nights from database` : "Loaded from database");
-      return true;
+    try {
+      const current = await window.cpapAPI.getSummary();
+      if (current) {
+        setSummary(current);
+        setStatus(current.totalDays > 0 ? `Loaded ${current.totalDays} nights from database` : "Loaded from database");
+        return true;
+      }
+      setSummary(null);
+      setStatus("Import a CPAP folder or SD card to add data");
+      return false;
+    } catch (error) {
+      console.error("Failed to load summary", error);
+      setSummary(null);
+      setStatus("Unable to load your saved data");
+      return false;
     }
-    setSummary(null);
-    setStatus("Import a CPAP folder or SD card to add data");
-    return false;
   };
 
   useEffect(() => {
-    loadCurrentProfile();
+    document.body.classList.add("app-mounted");
+  }, []);
+
+  useEffect(() => {
+    if (hasBootstrappedRef.current) {
+      return undefined;
+    }
+    hasBootstrappedRef.current = true;
+
+    let cancelled = false;
+    const bootstrap = async () => {
+      await loadCurrentProfile();
+      if (!cancelled) {
+        setIsBooting(false);
+        dismissBootSplash();
+      }
+    };
+
+    bootstrap();
     const unsubscribe = window.cpapAPI.onDataLoaded((data) => {
       setSummary(data);
       setStatus("Loaded");
     });
-    return () => unsubscribe();
+
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   const deviceInfo = summary?.deviceInfo || {};
+  const supportsOximetry = useMemo(() => {
+    if (summary?.deviceCapabilities?.supportsOximetry !== undefined) {
+      return summary.deviceCapabilities.supportsOximetry;
+    }
+
+    return !OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN.test(deviceInfo.productName || "");
+  }, [deviceInfo.productName, summary?.deviceCapabilities?.supportsOximetry]);
   const stats = summary?.dailyStats || [];
 
   const filteredStats = useMemo(() => {
@@ -283,9 +361,9 @@ export function App() {
         avgUsage: avgUsage.toFixed(1),
         usageStatusClass: avgUsage < 4 ? "bad" : "good",
         usageStatusLabel: avgUsage < 4 ? "Low Usage" : "Good",
-        leakTypical: clinicalContext.leak95th || "0.0",
-        leakStatusClass: parseFloat(clinicalContext.leak95th || 0) > 24 ? "warn" : "good",
-        leakStatusLabel: parseFloat(clinicalContext.leak95th || 0) > 24 ? "Elevated" : "Normal",
+        leakTypical: clinicalContext.leak95th ?? "N/A",
+        leakStatusClass: clinicalContext.leak95th !== null && parseFloat(clinicalContext.leak95th) > 24 ? "warn" : "good",
+        leakStatusLabel: clinicalContext.leak95th !== null && parseFloat(clinicalContext.leak95th) > 24 ? "Elevated" : "Normal",
       };
     }
 
@@ -342,6 +420,10 @@ export function App() {
     const detail = await window.cpapAPI.getSessionDetail(session.id);
     setSessionDetail(detail);
   };
+
+  if (isBooting) {
+    return <LoadingScreen logoSrc={bootLogoSrc} status={status} />;
+  }
 
   if (!activeProfile) {
     return <ProfileSelector onSelect={() => loadCurrentProfile()} />;
@@ -485,7 +567,7 @@ export function App() {
                       </div>
                       <div className="stability-overview" style={{ margin: 0 }}>
                         <div className={last?.leak_severity_tier ? `score-circle tier-${last.leak_severity_tier}` : "score-circle"}>
-                          <div className="score-value">{last ? Math.round(last.therapy_stability_score || 0) : "-"}</div>
+                          <div className="score-value">{last?.therapy_stability_score == null ? "-" : Math.round(last.therapy_stability_score)}</div>
                           <div className="score-label">{last ? "Score" : "No Data"}</div>
                         </div>
                         <div className="overview-metrics">
@@ -585,7 +667,7 @@ export function App() {
                     ]}
                   />
 
-                  {trendsData.spo2.some((v) => v > 0) && (
+                  {supportsOximetry && trendsData.spo2.some((v) => v > 0) && (
                     <TrendChart
                       theme={theme}
                       reportKey="oximetry"

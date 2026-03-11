@@ -140,6 +140,8 @@ class ProfileDatabase {
           minute_vent_p95 REAL,
           resp_rate_p50 REAL,
           resp_rate_p95 REAL,
+          flow_limitation_p95 REAL,
+          event_cluster_index_source REAL,
           tidal_vol_p50 REAL,
           tidal_vol_p95 REAL,
           duration_minutes REAL,
@@ -226,6 +228,8 @@ class ProfileDatabase {
     addColumnIfNotExists('night_metrics', 'patient_hours_cumulative', 'REAL');
     addColumnIfNotExists('night_metrics', 'spo2_avg', 'REAL');
     addColumnIfNotExists('night_metrics', 'pulse_avg', 'REAL');
+    addColumnIfNotExists('night_metrics', 'flow_limitation_p95', 'REAL');
+    addColumnIfNotExists('night_metrics', 'event_cluster_index_source', 'REAL');
   }
 
   close() {

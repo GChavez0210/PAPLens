@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
 
 // ── Inline SVG sparkline (lightweight, no Chart.js) ─────────────────────────
 function AhiSparkline({ data = [] }) {
@@ -43,17 +44,18 @@ function AhiSparkline({ data = [] }) {
 
 // ── Score decomposition component ────────────────────────────────────────────
 function ScoreBar({ label, penalty, maxPenalty, color }) {
+    const unavailable = penalty === null || penalty === undefined;
     const pct = maxPenalty > 0 ? Math.min((penalty / maxPenalty) * 100, 100) : 0;
     return (
         <div style={{ marginBottom: 4 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', marginBottom: 2 }}>
                 <span style={{ color: 'var(--muted)' }}>{label}</span>
-                <span style={{ color: penalty > 0 ? '#ef4444' : '#10b981', fontWeight: 600 }}>
-                    {penalty > 0 ? `-${penalty} pts` : 'Optimal'}
+                <span style={{ color: unavailable ? 'var(--muted)' : penalty > 0 ? '#ef4444' : '#10b981', fontWeight: 600 }}>
+                    {unavailable ? 'N/A' : penalty > 0 ? `-${penalty} pts` : 'Optimal'}
                 </span>
             </div>
             <div style={{ background: 'var(--separator)', borderRadius: 3, height: 3 }}>
-                <div style={{ width: `${pct}%`, background: color, height: '100%', borderRadius: 4, transition: 'width 0.8s ease' }} />
+                <div style={{ width: unavailable ? '0%' : `${pct}%`, background: color, height: '100%', borderRadius: 4, transition: 'width 0.8s ease' }} />
             </div>
         </div>
     );
@@ -67,7 +69,7 @@ export function LastNightSidebar() {
     const loadData = async () => {
         const res = await window.cpapAPI.getLastNightOverview();
         if (res) {
-            const newScore = Math.round(res.therapy_stability_score || 0);
+            const newScore = res.therapy_stability_score == null ? null : Math.round(res.therapy_stability_score);
             if (prevScore.current !== null && prevScore.current !== newScore) {
                 setScoreAnimated(true);
                 setTimeout(() => setScoreAnimated(false), 1300);
@@ -92,12 +94,13 @@ export function LastNightSidebar() {
         );
     }
 
-    const score = Math.round(data.therapy_stability_score || 0);
+    const score = data.therapy_stability_score == null ? null : Math.round(data.therapy_stability_score);
     const outliers = data.outliers ? JSON.parse(data.outliers) : [];
+    const scoreDetails = data.scoreDetails || {};
 
     // Score tier for color
-    const scoreColor = score >= 95 ? '#10b981' : score >= 85 ? '#22d3ee' : score >= 70 ? '#f59e0b' : score >= 50 ? '#f97316' : '#ef4444';
-    const scoreTierLabel = score >= 95 ? 'Optimal' : score >= 85 ? 'Stable' : score >= 70 ? 'Acceptable' : score >= 50 ? 'Suboptimal' : 'High Risk';
+    const scoreColor = score === null ? 'var(--muted)' : score >= 95 ? '#10b981' : score >= 85 ? '#22d3ee' : score >= 70 ? '#f59e0b' : score >= 50 ? '#f97316' : '#ef4444';
+    const scoreTierLabel = score === null ? 'N/A' : score >= 95 ? 'Optimal' : score >= 85 ? 'Stable' : score >= 70 ? 'Acceptable' : score >= 50 ? 'Suboptimal' : 'High Risk';
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
@@ -110,7 +113,7 @@ export function LastNightSidebar() {
                     style={{ fontSize: '1.8rem', fontWeight: 900, color: scoreColor, lineHeight: 1, transition: 'color 0.5s' }}
                     className={scoreAnimated ? 'score-animated' : ''}
                 >
-                    {score}
+                    {score ?? "N/A"}
                 </div>
                 <div style={{ fontSize: '0.65rem', color: scoreColor, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, marginTop: 2 }}>{scoreTierLabel}</div>
                 <div style={{ fontSize: '0.65rem', color: 'var(--muted)', marginTop: 1 }}>Treatment Score</div>
@@ -118,25 +121,20 @@ export function LastNightSidebar() {
 
             {/* Score decomposition — estimated from available metrics */}
             {(() => {
-                const ahi = data.ahi_total || 0;
-                const leak = data.leak_p50 || 0;
-                const usage = data.usage_hours || 0;
-
-                // Mirror the scoring formula from scores.js
-                const pAhi = ahi <= 1 ? 0 : ahi <= 5 ? (ahi - 1) * 5 : ahi <= 15 ? 20 + (ahi - 5) * 3 : 50;
-                const pLeak = leak < 4 ? 0 : leak < 8 ? (leak - 4) * 2 : leak < 24 ? 8 + (leak - 8) * 1 : 25;
-                const pUsage = usage >= 7 ? 0 : usage >= 4 ? (7 - usage) * 3 : 9 + (4 - usage) * 3;
-                const pPressVar = 0; // pressure_variance not in last-night response
-                const pFlow = 0;    // flow limitation not in last-night response
+                const pAhi = scoreDetails.penaltyAhi ?? null;
+                const pLeak = scoreDetails.penaltyLeak ?? null;
+                const pUsage = scoreDetails.penaltyUsage ?? null;
+                const pPressVar = scoreDetails.penaltyPressureVar ?? null;
+                const pFlow = scoreDetails.penaltyFlowLim ?? null;
 
                 return (
                     <div style={{ marginBottom: 10 }}>
                         <div style={{ fontSize: '0.62rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 5, fontWeight: 700 }}>Score Breakdown</div>
-                        <ScoreBar label="Residual AHI Impact" penalty={Math.round(pAhi)} maxPenalty={50} color="#ef4444" />
-                        <ScoreBar label="Leak Stability" penalty={Math.round(pLeak)} maxPenalty={25} color="#f59e0b" />
-                        <ScoreBar label="Usage Adherence" penalty={Math.round(pUsage)} maxPenalty={15} color="#22d3ee" />
-                        <ScoreBar label="Pressure Variance" penalty={Math.round(pPressVar)} maxPenalty={5} color="#8b5cf6" />
-                        <ScoreBar label="Flow Limitation" penalty={Math.round(pFlow)} maxPenalty={5} color="#f97316" />
+                        <ScoreBar label="Residual AHI Impact" penalty={pAhi} maxPenalty={50} color="#ef4444" />
+                        <ScoreBar label="Leak Stability" penalty={pLeak} maxPenalty={25} color="#f59e0b" />
+                        <ScoreBar label="Usage Adherence" penalty={pUsage} maxPenalty={15} color="#22d3ee" />
+                        <ScoreBar label="Pressure Variance" penalty={pPressVar} maxPenalty={5} color="#8b5cf6" />
+                        <ScoreBar label="Flow Limitation" penalty={pFlow} maxPenalty={5} color="#f97316" />
                     </div>
                 );
             })()}
@@ -144,10 +142,10 @@ export function LastNightSidebar() {
             {/* Key metrics */}
             <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginBottom: "10px" }}>
                 {[
-                    ["AHI", `${Number(data.ahi_total || 0).toFixed(1)} ev/hr`],
-                    ["Usage", `${Number(data.usage_hours || 0).toFixed(1)} hrs`],
-                    ["Pressure", `${Number(data.pressure_median || 0).toFixed(1)} cmH₂O`],
-                    ["Leak P50", `${Number(data.leak_p50 || 0).toFixed(1)} L/min`],
+                    ["AHI", `${formatMetricValue(data.ahi_total, 1)} ev/hr`],
+                    ["Usage", `${formatMetricValue(data.usage_hours, 1)} hrs`],
+                    ["Pressure", `${formatMetricValue(data.pressure_median, 1)} cmH₂O`],
+                    ["Leak P95", `${formatMetricValue(data.leak_p95, 1)} L/min`],
                 ].map(([label, val]) => (
                     <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
                         <span style={{ color: "var(--muted)" }}>{label}</span>
@@ -163,17 +161,17 @@ export function LastNightSidebar() {
                         ⚠️ Unusual night detected ({outliers.map(o => o.metric).join(", ")})
                     </div>
                 )}
-                {data.leak_p50 >= 24 && (
+                {toMetricNumber(data.leak_p95) !== null && data.leak_p95 >= 24 && (
                     <div style={{ background: "rgba(245,158,11,0.1)", borderLeft: "3px solid #F59E0B", padding: "8px", fontSize: "0.82em" }}>
                         💨 Leak elevated/high
                     </div>
                 )}
-                {data.ahi_total > 5 && (
+                {toMetricNumber(data.ahi_total) !== null && data.ahi_total > 5 && (
                     <div style={{ background: "rgba(245,158,11,0.1)", borderLeft: "3px solid #F59E0B", padding: "8px", fontSize: "0.82em" }}>
                         📈 AHI above 5
                     </div>
                 )}
-                {data.usage_hours < 4 && (
+                {toMetricNumber(data.usage_hours) !== null && data.usage_hours < 4 && (
                     <div style={{ background: "rgba(239,68,68,0.1)", borderLeft: "3px solid #EF4444", padding: "8px", fontSize: "0.82em" }}>
                         ⏳ Usage below 4h
                     </div>

@@ -1,5 +1,6 @@
 const { EPSILON, mean, std } = require("./rolling");
 const { regressionSlope } = require("./regression");
+const { calculatePercentile } = require("../services/therapyMetrics");
 
 function hasTherapyData(metrics) {
     const usage = Number(metrics?.usage_hours ?? (metrics?.usage_minutes ? metrics.usage_minutes / 60 : NaN));
@@ -24,46 +25,58 @@ function computeTherapyStabilityScore(currentMetrics, historyMetrics) {
     const validHistory = (historyMetrics || []).filter(hasTherapyData);
 
     let penaltyAhi = 0;
-    const ahi = currentMetrics.ahi_total || 0;
+    const ahi = Number(currentMetrics.ahi_total ?? 0);
     if (ahi <= 1) penaltyAhi = 0;
     else if (ahi <= 5) penaltyAhi = (ahi - 1) * 5;
     else if (ahi <= 15) penaltyAhi = 20 + (ahi - 5) * 3;
     else penaltyAhi = 50;
 
     let penaltyLeak = 0;
-    const leak95 = currentMetrics.leak_p95 !== undefined ? currentMetrics.leak_p95 : (currentMetrics.leak_max || (currentMetrics.leak_p50 || 0));
-    if (leak95 <= 10) penaltyLeak = 0;
-    else if (leak95 <= 24) penaltyLeak = (leak95 - 10) * (15 / 14);
-    else penaltyLeak = 15 + Math.min(10, (leak95 - 24) * 0.5);
+    const leak95 = currentMetrics.leak_p95 ?? currentMetrics.leak_max ?? currentMetrics.leak_p50;
+    if (leak95 !== null && leak95 !== undefined) {
+        if (leak95 <= 10) penaltyLeak = 0;
+        else if (leak95 <= 24) penaltyLeak = (leak95 - 10) * (15 / 14);
+        else penaltyLeak = 15 + Math.min(10, (leak95 - 24) * 0.5);
+    }
 
     let penaltyUsage = 0;
-    const usageStr = currentMetrics.usage_hours || (currentMetrics.usage_minutes ? currentMetrics.usage_minutes / 60 : 7);
+    const usageStr = Number(currentMetrics.usage_hours ?? (currentMetrics.usage_minutes != null ? currentMetrics.usage_minutes / 60 : NaN));
     if (usageStr >= 7) penaltyUsage = 0;
     else if (usageStr >= 4) penaltyUsage = (7 - usageStr) * 3;
     else penaltyUsage = Math.min(15, 9 + (4 - usageStr) * 3);
 
     let penaltyPressureVar = 0;
-    let pressureSd = 0;
-    if (currentMetrics.pressure_p95 !== undefined && currentMetrics.pressure_median !== undefined) {
+    let pressureSd = null;
+    if (currentMetrics.pressure_p95 !== undefined && currentMetrics.pressure_p95 !== null && currentMetrics.pressure_median !== undefined && currentMetrics.pressure_median !== null) {
         pressureSd = currentMetrics.pressure_p95 - currentMetrics.pressure_median;
     } else if (validHistory.length > 0) {
         const pList = validHistory.map(h => h.pressure_median).filter(v => v !== undefined);
-        pList.push(currentMetrics.pressure_median || 0);
-        pressureSd = std(pList, mean(pList));
-    } else {
-        pressureSd = 1.0;
+        if (currentMetrics.pressure_median !== undefined && currentMetrics.pressure_median !== null) {
+            pList.push(currentMetrics.pressure_median);
+        }
+        if (pList.length > 1) {
+            pressureSd = std(pList, mean(pList));
+        }
     }
-    if (pressureSd <= 2) penaltyPressureVar = 0;
-    else if (pressureSd <= 6) penaltyPressureVar = (pressureSd - 2) * 1.25;
-    else penaltyPressureVar = 5;
+    if (pressureSd !== null) {
+        if (pressureSd <= 2) penaltyPressureVar = 0;
+        else if (pressureSd <= 6) penaltyPressureVar = (pressureSd - 2) * 1.25;
+        else penaltyPressureVar = 5;
+    } else {
+        penaltyPressureVar = null;
+    }
 
-    let penaltyFlowLim = 0;
-    const flp95 = currentMetrics.flow_limitation_p95 || 0.05;
-    if (flp95 <= 0.10) penaltyFlowLim = 0;
-    else if (flp95 <= 0.30) penaltyFlowLim = (flp95 - 0.10) * 25;
-    else penaltyFlowLim = 5;
+    let penaltyFlowLim = null;
+    const flp95 = currentMetrics.flow_limitation_p95;
+    if (flp95 !== undefined && flp95 !== null) {
+        if (flp95 <= 0.10) penaltyFlowLim = 0;
+        else if (flp95 <= 0.30) penaltyFlowLim = (flp95 - 0.10) * 25;
+        else penaltyFlowLim = 5;
+    }
 
-    const totalPenalty = penaltyAhi + penaltyLeak + penaltyUsage + penaltyPressureVar + penaltyFlowLim;
+    const totalPenalty = [penaltyAhi, penaltyLeak, penaltyUsage, penaltyPressureVar, penaltyFlowLim]
+        .filter((value) => value !== null)
+        .reduce((sum, value) => sum + value, 0);
     const finalScore = Math.max(0, Math.min(100, 100 - totalPenalty));
 
     return {
@@ -71,26 +84,31 @@ function computeTherapyStabilityScore(currentMetrics, historyMetrics) {
         penaltyAhi: Math.round(penaltyAhi),
         penaltyLeak: Math.round(penaltyLeak),
         penaltyUsage: Math.round(penaltyUsage),
-        penaltyPressureVar: Math.round(penaltyPressureVar),
-        penaltyFlowLim: Math.round(penaltyFlowLim),
+        penaltyPressureVar: penaltyPressureVar === null ? null : Math.round(penaltyPressureVar),
+        penaltyFlowLim: penaltyFlowLim === null ? null : Math.round(penaltyFlowLim),
         pressureVariance: pressureSd,
-        flScore: Math.round(penaltyFlowLim * 20),
-        clusterIndex: 0
+        flScore: penaltyFlowLim === null ? null : Math.round(penaltyFlowLim * 20),
+        clusterIndex: null
     };
 }
 
 function classifyLeakSeverity(leak95, leakDurationMinutes, totalUsageMinutes) {
-    const defaultLeak = leak95 || 0;
+    if (leak95 === null || leak95 === undefined) {
+        return {
+            tier: null,
+            consistencyIndex: null
+        };
+    }
     const usageStr = totalUsageMinutes || 480;
     const duration = leakDurationMinutes || 0;
     const durationPct = (duration / usageStr) * 100;
 
     let tier = 1;
-    if (defaultLeak > 35 || duration >= 30) {
+    if (leak95 > 35 || duration >= 30) {
         tier = 4;
-    } else if (defaultLeak > 24 || durationPct > 10) {
+    } else if (leak95 > 24 || durationPct > 10) {
         tier = 3;
-    } else if (defaultLeak > 10 || (durationPct > 0 && durationPct <= 10)) {
+    } else if (leak95 > 10 || (durationPct > 0 && durationPct <= 10)) {
         tier = 2;
     }
 
@@ -121,9 +139,7 @@ function processResidualBurden(ahiList30) {
     if (!ahiList30 || ahiList30.length === 0) return null;
     const over5 = ahiList30.filter(a => a > 5).length;
     const over10 = ahiList30.filter(a => a > 10).length;
-    const sorted = [...ahiList30].sort((a, b) => a - b);
-    const p95Index = Math.floor(sorted.length * 0.95);
-    const ahiP95 = sorted[p95Index] || 0;
+    const ahiP95 = calculatePercentile(ahiList30, 0.95);
     return { nights_over_5: over5, nights_over_10: over10, AHI_p95_30: ahiP95 };
 }
 

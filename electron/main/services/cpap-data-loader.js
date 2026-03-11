@@ -1,21 +1,68 @@
 const fs = require("fs");
 const path = require("path");
 const { parseSTRFile, parseSessionFile } = require("../parsers/edf-parser");
+const {
+  buildLeakAndTidalSummary,
+  describeSamples,
+  formatDebugValue,
+  leakMappings,
+  pickMappedValue,
+  safeInfo,
+  tidalMappings,
+  toOptionalNumber
+} = require("./therapyMetrics");
+const { summarizeNightlySessionMetrics } = require("./sessionMetrics");
+
+const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERNS = [
+  /^AirSense/i,
+  /^AirCurve/i,
+  /^Lumis/i,
+  /^AirMini/i
+];
+
+function inferDeviceCapabilities(deviceInfo = {}) {
+  const productName = String(deviceInfo.productName || "").replace(/\s+/g, "");
+  const supportsOximetry = !OXIMETRY_UNSUPPORTED_PRODUCT_PATTERNS.some((pattern) => pattern.test(productName));
+
+  return {
+    supportsOximetry
+  };
+}
 
 class CPAPDataLoader {
   constructor(dataPath) {
     this.dataPath = dataPath;
     this.deviceInfo = null;
+    this.deviceCapabilities = inferDeviceCapabilities();
     this.dailySummary = null;
     this.sessions = [];
     this.dayStartHour = 12;
     this.dayEndHour = 12;
+    this.nightlySessionMetrics = null;
+  }
+
+  pickPositiveMetric(...values) {
+    for (const value of values) {
+      const numeric = toOptionalNumber(value);
+      if (numeric !== null && numeric > 0) {
+        return numeric;
+      }
+    }
+    return null;
   }
 
   setDayBoundary(startHour, endHour) {
     this.dayStartHour = startHour;
     this.dayEndHour = endHour;
     this.sleepNightUsage = this.calculateSleepNightUsage();
+    this.nightlySessionMetrics = null;
+  }
+
+  getDeviceCapabilities() {
+    if (!this.deviceCapabilities) {
+      this.deviceCapabilities = inferDeviceCapabilities(this.deviceInfo);
+    }
+    return this.deviceCapabilities;
   }
 
   async loadAll() {
@@ -43,6 +90,7 @@ class CPAPDataLoader {
           firmwareVersion: software.ApplicationIdentifier || "Unknown",
           raw: data
         };
+        this.deviceCapabilities = inferDeviceCapabilities(this.deviceInfo);
         return;
       } catch (err) {
         console.error("Failed to parse Identification.json", err);
@@ -73,6 +121,7 @@ class CPAPDataLoader {
       firmwareVersion: info.FGT || "Unknown",
       raw: info
     };
+    this.deviceCapabilities = inferDeviceCapabilities(this.deviceInfo);
   }
 
   async loadDailySummary() {
@@ -140,6 +189,7 @@ class CPAPDataLoader {
     }
 
     this.sleepNightUsage = this.calculateSleepNightUsage();
+    this.nightlySessionMetrics = null;
   }
 
   getSessionDuration(brpFilePath) {
@@ -159,12 +209,7 @@ class CPAPDataLoader {
       if (!session.timestamp || session.durationMinutes <= 0) {
         continue;
       }
-      const sessionDate = new Date(session.timestamp);
-      const sleepNightDate = new Date(sessionDate);
-      if (sessionDate.getHours() < this.dayStartHour) {
-        sleepNightDate.setDate(sleepNightDate.getDate() - 1);
-      }
-      const dateKey = sleepNightDate.toISOString().split("T")[0];
+      const dateKey = this.getSleepNightKey(session.timestamp);
       if (!sleepNights.has(dateKey)) {
         sleepNights.set(dateKey, { date: dateKey, totalMinutes: 0, sessionCount: 0 });
       }
@@ -173,6 +218,19 @@ class CPAPDataLoader {
       night.sessionCount++;
     }
     return sleepNights;
+  }
+
+  getSleepNightKey(timestamp) {
+    const sessionDate = timestamp instanceof Date ? new Date(timestamp) : new Date(timestamp);
+    if (Number.isNaN(sessionDate.getTime())) {
+      return null;
+    }
+
+    if (sessionDate.getHours() < this.dayStartHour) {
+      sessionDate.setDate(sessionDate.getDate() - 1);
+    }
+
+    return sessionDate.toISOString().split("T")[0];
   }
 
   parseSessionTimestamp(sessionId) {
@@ -220,12 +278,94 @@ class CPAPDataLoader {
     return detail;
   }
 
+  buildNightlySessionMetrics() {
+    if (this.nightlySessionMetrics) {
+      return this.nightlySessionMetrics;
+    }
+
+    const { supportsOximetry } = this.getDeviceCapabilities();
+    const nightly = new Map();
+    let skippedUnsupportedSa2 = false;
+
+    for (const session of this.sessions) {
+      const nightKey = this.getSleepNightKey(session.timestamp);
+      if (!nightKey) {
+        continue;
+      }
+
+      if (!nightly.has(nightKey)) {
+        nightly.set(nightKey, {
+          leakSamples: [],
+          tidalSamples: [],
+          minVentSamples: [],
+          respRateSamples: [],
+          flowLimSamples: [],
+          spo2Samples: [],
+          pulseSamples: [],
+          annotations: []
+        });
+      }
+
+      const aggregate = nightly.get(nightKey);
+
+      if (session.files.PLD) {
+        try {
+          const pld = parseSessionFile(session.files.PLD);
+          aggregate.leakSamples.push(...(pld.data["Leak.2s"] || []));
+          aggregate.tidalSamples.push(...(pld.data["TidVol.2s"] || []));
+          aggregate.minVentSamples.push(...(pld.data["MinVent.2s"] || []));
+          aggregate.respRateSamples.push(...(pld.data["RespRate.2s"] || []));
+          aggregate.flowLimSamples.push(...(pld.data["FlowLim.2s"] || []));
+        } catch (error) {
+          safeInfo(console, `[session-parse] Failed PLD parse for ${session.id}: ${error.message}`);
+        }
+      }
+
+      if (session.files.SA2 && supportsOximetry) {
+        try {
+          const sa2 = parseSessionFile(session.files.SA2);
+          aggregate.pulseSamples.push(...(sa2.data["Pulse.1s"] || []));
+          aggregate.spo2Samples.push(...(sa2.data["SpO2.1s"] || []));
+        } catch (error) {
+          safeInfo(console, `[session-parse] Failed SA2 parse for ${session.id}: ${error.message}`);
+        }
+      } else if (session.files.SA2) {
+        skippedUnsupportedSa2 = true;
+      }
+
+      if (session.files.EVE) {
+        try {
+          const eve = parseSessionFile(session.files.EVE);
+          aggregate.annotations.push(...(eve.data["EDF Annotations"] || []));
+        } catch (error) {
+          safeInfo(console, `[session-parse] Failed EVE parse for ${session.id}: ${error.message}`);
+        }
+      }
+    }
+
+    this.nightlySessionMetrics = new Map(
+      Array.from(nightly.entries()).map(([nightKey, aggregate]) => [nightKey, summarizeNightlySessionMetrics(aggregate)])
+    );
+
+    if (skippedUnsupportedSa2) {
+      safeInfo(
+        console,
+        `[session-parse] Skipped SA2 parsing for ${this.deviceInfo?.productName || "device"} because onboard oximetry is unsupported for this device class`
+      );
+    }
+
+    return this.nightlySessionMetrics;
+  }
+
   getDailyStats() {
     if (!this.dailySummary || !this.dailySummary.days) {
       return [];
     }
 
-    return this.dailySummary.days
+    const { supportsOximetry } = this.getDeviceCapabilities();
+    const nightlySessionMetrics = this.buildNightlySessionMetrics();
+
+    const stats = this.dailySummary.days
       .map((day, index) => {
         const startDate = this.dailySummary.header.startDate;
         let dateStr = day._date;
@@ -256,64 +396,109 @@ class CPAPDataLoader {
         }
 
         const sleepNight = this.sleepNightUsage ? this.sleepNightUsage.get(dateStr) : null;
-        const usageMinutes = sleepNight ? sleepNight.totalMinutes : day.OnDuration || 0;
+        const sessionMetrics = nightlySessionMetrics.get(dateStr);
+        const usageMinutes = sleepNight ? sleepNight.totalMinutes : (toOptionalNumber(day.OnDuration) ?? 0);
+        const leak50 = pickMappedValue(day, leakMappings.p50);
+        const leak95 = pickMappedValue(day, leakMappings.p95);
+        const leakMax = pickMappedValue(day, leakMappings.max);
+        const tidVol50 = pickMappedValue(day, tidalMappings.p50);
+        const tidVol95 = pickMappedValue(day, tidalMappings.p95);
+        const mappedPressure = toOptionalNumber(day["S.C.Press"]) ?? toOptionalNumber(day["S.AS.MinPress"]);
+        const mappedMaxPressure = toOptionalNumber(day["S.AS.MaxPress"]) ?? toOptionalNumber(day["S.C.Press"]);
+        const respRate50 = toOptionalNumber(day["RespRate.50"]);
+        const respRate95 = toOptionalNumber(day["RespRate.95"]);
 
         return {
           date: dateStr || `Day ${index + 1}`,
-          ahi: day.AHI || 0,
-          ai: day.AI || 0,
-          hi: day.HI || 0,
-          oai: day.OAI || 0,
-          cai: day.CAI || 0,
-          uai: day.UAI || 0,
-          duration: day.Duration || 0,
-          onDuration: day.OnDuration || 0,
+          ahi: toOptionalNumber(day.AHI) ?? 0,
+          ai: toOptionalNumber(day.AI) ?? 0,
+          hi: toOptionalNumber(day.HI) ?? 0,
+          oai: toOptionalNumber(day.OAI) ?? 0,
+          cai: toOptionalNumber(day.CAI) ?? 0,
+          uai: toOptionalNumber(day.UAI) ?? 0,
+          duration: toOptionalNumber(day.Duration) ?? 0,
+          onDuration: toOptionalNumber(day.OnDuration) ?? 0,
           usageHours: usageMinutes / 60,
-          patientHoursCumulative: day.PatientHours || 0,
-          leak50: day["Leak.50"] || 0,
-          leak95: day["Leak.95"] || 0,
-          leakMax: day["Leak.Max"] || 0,
-          pressure: day["S.C.Press"] || day["S.AS.MinPress"] || 0,
-          maxPressure: day["S.AS.MaxPress"] || day["S.C.Press"] || 0,
-          minVent50: day["MinVent.50"] || 0,
-          minVent95: day["MinVent.95"] || 0,
-          tidVol50: day["TidVol.50"] || 0,
-          tidVol95: day["TidVol.95"] || 0,
-          spo2Avg: day["SpO2.Avg"] || day.SpO2Avg || day["SpO2.50"] || 0,
-          pulseAvg: day["Pulse.Avg"] || day.PulseAvg || day["Pulse.50"] || 0,
-          raw: day
+          patientHoursCumulative: toOptionalNumber(day.PatientHours) ?? 0,
+          leak50: sessionMetrics?.leak50 ?? leak50.value,
+          leak95: sessionMetrics?.leak95 ?? leak95.value,
+          leakMax: sessionMetrics?.leakMax ?? leakMax.value,
+          pressure: mappedPressure,
+          maxPressure: mappedMaxPressure,
+          minVent50: sessionMetrics?.minVent50 ?? toOptionalNumber(day["MinVent.50"]),
+          minVent95: sessionMetrics?.minVent95 ?? toOptionalNumber(day["MinVent.95"]),
+          tidVol50: sessionMetrics?.tidVol50 ?? tidVol50.value,
+          tidVol95: sessionMetrics?.tidVol95 ?? tidVol95.value,
+          respRate50: sessionMetrics?.respRate50 ?? respRate50,
+          respRate95: sessionMetrics?.respRate95 ?? respRate95,
+          flowLimP95: sessionMetrics?.flowLimP95 ?? null,
+          eventClusterIndexSource: sessionMetrics?.eventClusterIndexSource ?? null,
+          // Current ResMed flow generators do not provide valid onboard oximetry,
+          // so PAPLens preserves null instead of probing SA2/summary sentinels.
+          spo2Avg: supportsOximetry
+            ? (sessionMetrics?.spo2Avg ?? this.pickPositiveMetric(day["SpO2.Avg"], day.SpO2Avg, day["SpO2.50"]))
+            : null,
+          pulseAvg: supportsOximetry
+            ? (sessionMetrics?.pulseAvg ?? this.pickPositiveMetric(day["Pulse.Avg"], day.PulseAvg, day["Pulse.50"]))
+            : null,
+          raw: day,
+          sourceMetrics: {
+            leak50Field: sessionMetrics?.leak50 != null ? "Leak.2s" : leak50.field,
+            leak95Field: sessionMetrics?.leak95 != null ? "Leak.2s" : leak95.field,
+            leakMaxField: sessionMetrics?.leakMax != null ? "Leak.2s" : leakMax.field,
+            tidVol50Field: sessionMetrics?.tidVol50 != null ? "TidVol.2s" : tidVol50.field,
+            tidVol95Field: sessionMetrics?.tidVol95 != null ? "TidVol.2s" : tidVol95.field,
+            flowLimP95Field: sessionMetrics?.flowLimP95 != null ? "FlowLim.2s" : null,
+            eventClusterField: sessionMetrics?.eventClusterIndexSource != null ? "EDF Annotations" : null
+          }
         };
       })
       .filter((day) => day.duration > 0 || day.onDuration > 0);
+
+    const leakStats = describeSamples(stats.map((day) => day.leak95));
+    const tidalStats = describeSamples(stats.map((day) => day.tidVol50));
+    safeInfo(console,
+      `[import] Leak samples parsed=${leakStats.count} min=${formatDebugValue(leakStats.min)} max=${formatDebugValue(leakStats.max)}`
+    );
+    safeInfo(console,
+      `[import] Tidal samples parsed=${tidalStats.count} min=${formatDebugValue(tidalStats.min)} max=${formatDebugValue(tidalStats.max)}`
+    );
+
+    return stats;
   }
 
   getSummary() {
     const stats = this.getDailyStats();
-    // Assuming stats are chronologically ordered newest-first or oldest-first, let's reverse to ensure we get newest if needed, or just take slice(-30) if oldest first. 
-    // Wait, the previous code was slice(0, 30). Let's stick with that but make it robust.
     const recentDays = stats.slice(-30);
 
     const calcAvg = (field) => {
-      if (recentDays.length === 0) return 0;
-      return recentDays.reduce((sum, d) => sum + (d[field] || 0), 0) / recentDays.length;
+      const values = recentDays
+        .map((day) => toOptionalNumber(day[field]))
+        .filter((value) => value !== null);
+
+      if (values.length === 0) return null;
+      return values.reduce((sum, value) => sum + value, 0) / values.length;
     };
+    const metricSummary = buildLeakAndTidalSummary(recentDays, console, "analytics:summary");
 
     return {
       deviceInfo: this.deviceInfo,
+      deviceCapabilities: this.getDeviceCapabilities(),
       totalDays: stats.length,
       recentDays: recentDays.length,
       averages: {
         ahi: calcAvg('ahi'),
         usage: calcAvg('usageHours'),
         pressure: calcAvg('maxPressure'),
-        leak: calcAvg('leak95'),
+        leak: metricSummary.leak,
         flowRate: calcAvg('minVent95'),
-        tidalVolume: calcAvg('tidVol95')
+        tidalVolume: metricSummary.tidalVolume
       },
+      metricSummary,
       dailyStats: stats,
       sessions: this.sessions.slice(0, 50)
     };
   }
 }
 
-module.exports = { CPAPDataLoader };
+module.exports = { CPAPDataLoader, inferDeviceCapabilities };

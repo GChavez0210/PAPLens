@@ -102,6 +102,13 @@ class EDFParser {
       for (let sig = 0; sig < this.signals.length; sig++) {
         const signal = this.signals[sig];
         const numSamples = signal.samplesPerRecord;
+        if (signal.label === "EDF Annotations") {
+          const byteLength = numSamples * 2;
+          const annotationBytes = buffer.slice(offset, offset + byteLength);
+          offset += byteLength;
+          data[signal.label].push(...this.parseAnnotationRecord(annotationBytes));
+          continue;
+        }
         for (let samp = 0; samp < numSamples && offset + 1 < buffer.length; samp++) {
           const digitalValue = buffer.readInt16LE(offset);
           offset += 2;
@@ -112,6 +119,63 @@ class EDFParser {
     }
 
     return data;
+  }
+
+  parseAnnotationRecord(buffer) {
+    const content = buffer.toString("latin1").replace(/\x00+$/g, "");
+    if (!content) {
+      return [];
+    }
+
+    const annotations = [];
+    let cursor = 0;
+
+    while (cursor < content.length) {
+      if (content[cursor] === "\x00") {
+        cursor++;
+        continue;
+      }
+
+      let onset = "";
+      while (cursor < content.length && content[cursor] !== "\x15" && content[cursor] !== "\x14" && content[cursor] !== "\x00") {
+        onset += content[cursor];
+        cursor++;
+      }
+
+      let duration = null;
+      if (content[cursor] === "\x15") {
+        cursor++;
+        let durationStr = "";
+        while (cursor < content.length && content[cursor] !== "\x14" && content[cursor] !== "\x00") {
+          durationStr += content[cursor];
+          cursor++;
+        }
+        duration = durationStr ? parseFloat(durationStr) : null;
+      }
+
+      while (content[cursor] === "\x14") {
+        cursor++;
+        let text = "";
+        while (cursor < content.length && content[cursor] !== "\x14" && content[cursor] !== "\x00") {
+          text += content[cursor];
+          cursor++;
+        }
+
+        if (text) {
+          annotations.push({
+            onsetSeconds: onset ? parseFloat(onset) : null,
+            durationSeconds: Number.isFinite(duration) ? duration : null,
+            text
+          });
+        }
+      }
+
+      while (cursor < content.length && content[cursor] === "\x00") {
+        cursor++;
+      }
+    }
+
+    return annotations;
   }
 
   digitalToPhysical(digital, signal) {

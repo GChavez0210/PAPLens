@@ -1,7 +1,6 @@
-const fs = require("fs");
-const path = require("path");
 const crypto = require("crypto");
 const { CPAPDataLoader } = require("./cpap-data-loader");
+const { formatDebugValue, safeInfo, toOptionalNumber } = require("./therapyMetrics");
 
 class IncrementalImporter {
     constructor(db, dataPath) {
@@ -35,14 +34,14 @@ class IncrementalImporter {
           night_id, ahi_total, apneas_per_hr, hypopneas_per_hr,
           obstructive_apneas_per_hr, central_apneas_per_hr, unclassified_apneas_per_hr,
           pressure_median, pressure_p95, leak_p50, leak_p95,
-          minute_vent_p50, minute_vent_p95, resp_rate_p50, resp_rate_p95,
+          minute_vent_p50, minute_vent_p95, resp_rate_p50, resp_rate_p95, flow_limitation_p95, event_cluster_index_source,
           tidal_vol_p50, tidal_vol_p95, duration_minutes, on_duration_minutes,
           patient_hours_cumulative, spo2_avg, pulse_avg, data_quality
         ) VALUES (
           @night_id, @ahi_total, @apneas_per_hr, @hypopneas_per_hr,
           @obstructive_apneas_per_hr, @central_apneas_per_hr, @unclassified_apneas_per_hr,
           @pressure_median, @pressure_p95, @leak_p50, @leak_p95,
-          @minute_vent_p50, @minute_vent_p95, @resp_rate_p50, @resp_rate_p95,
+          @minute_vent_p50, @minute_vent_p95, @resp_rate_p50, @resp_rate_p95, @flow_limitation_p95, @event_cluster_index_source,
           @tidal_vol_p50, @tidal_vol_p95, @duration_minutes, @on_duration_minutes,
           @patient_hours_cumulative, @spo2_avg, @pulse_avg, @data_quality
         )
@@ -61,6 +60,8 @@ class IncrementalImporter {
           minute_vent_p95 = excluded.minute_vent_p95,
           resp_rate_p50 = excluded.resp_rate_p50,
           resp_rate_p95 = excluded.resp_rate_p95,
+          flow_limitation_p95 = excluded.flow_limitation_p95,
+          event_cluster_index_source = excluded.event_cluster_index_source,
           tidal_vol_p50 = excluded.tidal_vol_p50,
           tidal_vol_p95 = excluded.tidal_vol_p95,
           duration_minutes = excluded.duration_minutes,
@@ -76,17 +77,11 @@ class IncrementalImporter {
                 const existing = getNightStmt.get(deviceId, day.date);
 
                 let nightId = crypto.randomUUID();
-                let shouldUpdateMetrics = true;
 
                 if (existing) {
                     nightId = existing.id;
-                    if (Math.abs(existing.usage_hours - day.usageHours) < 0.01) {
-                        // Already completely imported and usage hasn't changed, skip to save compute
-                        shouldUpdateMetrics = false;
-                    } else {
-                        updatedCount++;
-                        runAnalyticsOn.add(day.date);
-                    }
+                    updatedCount++;
+                    runAnalyticsOn.add(day.date);
                 } else {
                     insertedCount++;
                     runAnalyticsOn.add(day.date);
@@ -96,40 +91,46 @@ class IncrementalImporter {
                     id: nightId,
                     device_id: deviceId,
                     night_date: day.date,
-                    usage_hours: day.usageHours || 0
+                    usage_hours: toOptionalNumber(day.usageHours) ?? 0
                 });
 
-                if (shouldUpdateMetrics) {
-                    const dq = { missing: [] };
-                    if (!day.raw["Leak.95"]) dq.missing.push("Leak.95");
-                    if (!day.raw["S.C.Press"] && !day.raw["S.AS.MinPress"]) dq.missing.push("pressure");
+                const dq = { missing: [] };
+                if (day.leak95 === null) dq.missing.push(day.sourceMetrics?.leak95Field || "leak_p95");
+                if (day.tidVol50 === null) dq.missing.push(day.sourceMetrics?.tidVol50Field || "tidal_vol_p50");
+                if (day.flowLimP95 === null) dq.missing.push(day.sourceMetrics?.flowLimP95Field || "flow_limitation_p95");
+                if (day.pressure === null) dq.missing.push("pressure");
 
-                    upsertMetricsStmt.run({
-                        night_id: nightId,
-                        ahi_total: day.ahi || 0,
-                        apneas_per_hr: day.ai || 0,
-                        hypopneas_per_hr: day.hi || 0,
-                        obstructive_apneas_per_hr: day.oai || 0,
-                        central_apneas_per_hr: day.cai || 0,
-                        unclassified_apneas_per_hr: day.uai || 0,
-                        pressure_median: day.pressure || 0,
-                        pressure_p95: day.maxPressure || 0, // Fallback
-                        leak_p50: day.leak50 || 0,
-                        leak_p95: day.leak95 || 0,
-                        minute_vent_p50: day.minVent50 || 0,
-                        minute_vent_p95: day.minVent95 || 0,
-                        resp_rate_p50: day.respRate50 || 0, // Approx
-                        resp_rate_p95: day.respRate50 || 0,
-                        tidal_vol_p50: day.tidVol50 || 0,
-                        tidal_vol_p95: day.tidVol95 || 0,
-                        duration_minutes: day.duration || 0,
-                        on_duration_minutes: day.onDuration || 0,
-                        patient_hours_cumulative: day.patientHoursCumulative || 0,
-                        spo2_avg: day.spo2Avg || 0,
-                        pulse_avg: day.pulseAvg || 0,
-                        data_quality: JSON.stringify(dq)
-                    });
-                }
+                safeInfo(console,
+                    `[import] ${day.date} leak95=${formatDebugValue(day.leak95)} tidal50=${formatDebugValue(day.tidVol50)}`
+                );
+
+                upsertMetricsStmt.run({
+                    night_id: nightId,
+                    ahi_total: toOptionalNumber(day.ahi) ?? 0,
+                    apneas_per_hr: toOptionalNumber(day.ai) ?? 0,
+                    hypopneas_per_hr: toOptionalNumber(day.hi) ?? 0,
+                    obstructive_apneas_per_hr: toOptionalNumber(day.oai) ?? 0,
+                    central_apneas_per_hr: toOptionalNumber(day.cai) ?? 0,
+                    unclassified_apneas_per_hr: toOptionalNumber(day.uai) ?? 0,
+                    pressure_median: toOptionalNumber(day.pressure),
+                    pressure_p95: toOptionalNumber(day.maxPressure),
+                    leak_p50: toOptionalNumber(day.leak50),
+                    leak_p95: toOptionalNumber(day.leak95),
+                    minute_vent_p50: toOptionalNumber(day.minVent50),
+                    minute_vent_p95: toOptionalNumber(day.minVent95),
+                    resp_rate_p50: toOptionalNumber(day.respRate50),
+                    resp_rate_p95: toOptionalNumber(day.respRate95 ?? day.respRate50),
+                    flow_limitation_p95: toOptionalNumber(day.flowLimP95),
+                    event_cluster_index_source: toOptionalNumber(day.eventClusterIndexSource),
+                    tidal_vol_p50: toOptionalNumber(day.tidVol50),
+                    tidal_vol_p95: toOptionalNumber(day.tidVol95),
+                    duration_minutes: toOptionalNumber(day.duration) ?? 0,
+                    on_duration_minutes: toOptionalNumber(day.onDuration) ?? 0,
+                    patient_hours_cumulative: toOptionalNumber(day.patientHoursCumulative) ?? 0,
+                    spo2_avg: toOptionalNumber(day.spo2Avg),
+                    pulse_avg: toOptionalNumber(day.pulseAvg),
+                    data_quality: JSON.stringify(dq)
+                });
             }
 
             const logId = crypto.randomUUID();

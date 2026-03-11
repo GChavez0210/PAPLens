@@ -1,3 +1,5 @@
+import { calculatePercentile, toMetricNumber } from "./therapyMetrics";
+
 // -- Correlation English Translation -----------------------------------------
 export function getCorrelationInsight(pair, r) {
     const p = (pair || "").toLowerCase();
@@ -160,8 +162,9 @@ export function buildClinicalContext(filteredStats, deviceInfo) {
         sumOAI += (d.oai || 0);
         sumHI += (d.hi || 0);
 
-        if (d.leak95 !== undefined && d.leak95 !== null) {
-            leaks.push(d.leak95);
+        const leakValue = toMetricNumber(d.leak95);
+        if (leakValue !== null) {
+            leaks.push(leakValue);
         }
 
         const pMedian = d.pressure || 0;
@@ -180,13 +183,8 @@ export function buildClinicalContext(filteredStats, deviceInfo) {
     const adherenceNights = usageTrackedDays.length;
     const adherenceRate = adherenceNights > 0 ? Math.round((compliantDays / adherenceNights) * 100) : 0;
 
-    leaks.sort((a, b) => a - b);
-    let leak95th = "0.0";
-    if (leaks.length > 0) {
-        const index95 = Math.floor(leaks.length * 0.95);
-        const safeIndex = Math.min(index95, leaks.length - 1);
-        leak95th = leaks[safeIndex].toFixed(1);
-    }
+    const leak95thValue = calculatePercentile(leaks, 0.95);
+    const leak95th = leak95thValue === null ? null : leak95thValue.toFixed(1);
 
     if (minP === 999) minP = 0;
 

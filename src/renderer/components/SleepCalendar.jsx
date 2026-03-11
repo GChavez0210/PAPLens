@@ -153,7 +153,7 @@ export function SleepCalendar({ data }) {
                                     ["Usage", noData ? "No data" : `${Number(selectedDay.usageHours || 0).toFixed(1)} hrs`],
                                     ["Leak (P50)", noData ? "-" : `${Number(selectedDay.leak50 || 0).toFixed(1)} L/min`],
                                     ["Pressure", noData ? "-" : `${Number(selectedDay.pressure || 0).toFixed(1)} cmH2O`],
-                                    ["Score", noData ? "Excluded" : Math.round(selectedDay.therapy_stability_score || 0)]
+                                    ["Score", noData ? "Excluded" : selectedDay.therapy_stability_score == null ? "N/A" : Math.round(selectedDay.therapy_stability_score)]
                                 ].map(([k, v]) => (
                                     <div key={k}>
                                         <div style={{ fontSize: "0.65rem", color: "var(--muted)", textTransform: "uppercase" }}>{k}</div>

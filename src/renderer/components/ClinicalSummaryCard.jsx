@@ -1,7 +1,9 @@
 import React from "react";
 import { isNoDataDay } from "../utils/reportBuilder";
+import { formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
 
 function getScoreTier(score) {
+    if (score === null || score === undefined) return { tier: 0, badge: "badge-nodata", label: "N/A" };
     if (score >= 95) return { tier: 1, badge: "badge-t1", label: "Optimal" };
     if (score >= 85) return { tier: 2, badge: "badge-t2", label: "Stable" };
     if (score >= 70) return { tier: 3, badge: "badge-t3", label: "Acceptable" };
@@ -10,6 +12,7 @@ function getScoreTier(score) {
 }
 
 function getScoreMeaning(score) {
+    if (score === null || score === undefined) return "Not enough derived data is available to compute a therapy score for this night.";
     if (score >= 95) return "Optimal Therapy - All metrics are within ideal clinical parameters.";
     if (score >= 85) return "Very Good Therapy - Minor deviations present but therapy is effective.";
     if (score >= 70) return "Good Therapy - Minor adjustments may further improve outcomes.";
@@ -18,14 +21,14 @@ function getScoreMeaning(score) {
 }
 
 function formatFixed(value, digits = 1) {
-    return Number(value || 0).toFixed(digits);
+    return formatMetricValue(value, digits);
 }
 
 export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
     if (!night) return null;
 
     const noData = isNoDataDay(night);
-    const score = noData ? null : Math.round(night.therapy_stability_score || 0);
+    const score = noData || night.therapy_stability_score == null ? null : Math.round(night.therapy_stability_score);
     const badgeMeta = noData ? { badge: "badge-nodata", label: "No Data" } : getScoreTier(score);
     const metrics = night.raw || night;
 
@@ -53,12 +56,12 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
                 </div>
                 <div className="cc-stat">
                     <label>Leak.95</label>
-                    <strong>{noData ? "-" : Math.round(night.leak95 || night.leak50 || 0)}</strong>
+                    <strong>{noData ? "-" : formatMetricValue(toMetricNumber(night.leak95) ?? toMetricNumber(night.leak50), 0)}</strong>
                     <span>L/min</span>
                 </div>
                 <div className="cc-stat">
                     <label>Pressure</label>
-                    <strong>{noData ? "-" : formatFixed(metrics.pressure_median || night.pressure, 1)}</strong>
+                    <strong>{noData ? "-" : formatFixed(metrics.pressure_median ?? night.pressure, 1)}</strong>
                     <span>cmH2O</span>
                 </div>
                 <div className="cc-stat">
@@ -71,7 +74,7 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
             <div className="cc-row" style={{ marginTop: "15px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "12px" }}>
                 <div className="cc-stat">
                     <label>Consistency</label>
-                    <strong>{noData ? "-" : `${Math.round(night.leak_consistency_index || 0)}%`}</strong>
+                    <strong>{noData ? "-" : (night.leak_consistency_index == null ? "N/A" : `${Math.round(night.leak_consistency_index)}%`)}</strong>
                     <span>stable</span>
                 </div>
                 <div className="cc-stat">
@@ -81,12 +84,12 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
                 </div>
                 <div className="cc-stat">
                     <label>Cluster</label>
-                    <strong>{noData ? "-" : Math.round(night.event_cluster_index || 0)}</strong>
+                    <strong>{noData ? "-" : formatMetricValue(night.event_cluster_index, 0)}</strong>
                     <span>max/10m</span>
                 </div>
                 <div className="cc-stat">
                     <label>Flow Lim</label>
-                    <strong>{noData ? "-" : Math.round(night.flow_limitation_score || 0)}</strong>
+                    <strong>{noData ? "-" : formatMetricValue(night.flow_limitation_score, 0)}</strong>
                     <span>Score</span>
                 </div>
             </div>

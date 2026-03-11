@@ -12,7 +12,11 @@
     "postinstall": "electron-builder install-app-deps",
     "dist": "npm run build && electron-builder --win --x64 --arm64",
     "dist:x64": "npm run build && electron-builder --win --x64",
-    "dist:arm64": "npm run build && electron-builder --win --arm64"
+    "dist:arm64": "npm run build && electron-builder --win --arm64",
+    "format": "prettier --write .",
+    "lint": "eslint .",
+    "test-types": "tsc --noEmit",
+    "prepare": "husky"
   },
   "keywords": [
     "cpap",
@@ -24,8 +28,26 @@
     "react",
     "sqlite"
   ],
-  "author": "",
+  "author": {
+    "name": "Gabriel Chavez",
+    "email": "gabox@example.com",
+    "url": "https://github.com/GChavez0210"
+  },
+  "contributors": [
+    {
+      "name": "xpaulso",
+      "url": "https://github.com/xpaulso"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/GChavez0210/PAPLens.git"
+  },
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/GChavez0210/PAPLens/issues"
+  },
+  "homepage": "https://github.com/GChavez0210/PAPLens#readme",
   "build": {
     "appId": "com.gabox.paplens",
     "productName": "PAPLens",
@@ -58,13 +80,35 @@
       "allowToChangeInstallationDirectory": true
     }
   },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.json": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.0",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
     "electron": "^36.5.0",
     "electron-builder": "^26.0.12",
+    "eslint": "^10.0.3",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "globals": "^17.4.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.3.3",
+    "prettier": "^3.8.1",
+    "typescript": "^5.9.3",
     "vite": "^7.1.12",
+    "vite-plugin-compression": "^0.5.1",
     "wait-on": "^9.0.3"
   },
   "dependencies": {
