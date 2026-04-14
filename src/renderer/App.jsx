@@ -686,7 +686,7 @@ export function App() {
                         ))}
                       </div>
                       <div className="stability-overview" style={{ margin: 0 }}>
-                        <div className={last?.leak_severity_tier ? `score-circle tier-${last.leak_severity_tier}` : "score-circle"}>
+                        <div className={`score-circle ${(() => { const s = last?.therapy_stability_score == null ? null : Math.round(last.therapy_stability_score); if (s === null) return ''; if (s === 100) return 'score-tier-blue'; if (s >= 85) return 'score-tier-green'; if (s >= 75) return 'score-tier-yellow'; if (s >= 50) return 'score-tier-orange'; return 'score-tier-red'; })()}`}>
                           <div className="score-value">{last?.therapy_stability_score == null ? "-" : Math.round(last.therapy_stability_score)}</div>
                           <div className="score-label">{last ? "Score" : "No Data"}</div>
                         </div>

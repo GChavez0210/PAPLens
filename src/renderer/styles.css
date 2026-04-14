@@ -776,6 +776,32 @@ th {
   border-color: var(--critical);
 }
 
+/* Score-based tiers (therapy_stability_score) */
+.score-circle.score-tier-blue {
+  border-color: #3b82f6;
+  box-shadow: 0 0 18px rgba(59, 130, 246, 0.35);
+}
+
+.score-circle.score-tier-green {
+  border-color: var(--success);
+  box-shadow: 0 0 18px rgba(16, 185, 129, 0.3);
+}
+
+.score-circle.score-tier-yellow {
+  border-color: var(--warning);
+  box-shadow: 0 0 18px rgba(245, 158, 11, 0.3);
+}
+
+.score-circle.score-tier-orange {
+  border-color: #f97316;
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.3);
+}
+
+.score-circle.score-tier-red {
+  border-color: var(--critical);
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.3);
+}
+
 .score-value {
   font-size: 2.2rem;
   font-weight: 800;
