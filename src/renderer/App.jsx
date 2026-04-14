@@ -118,6 +118,7 @@ export function App() {
   const [sessionDetail, setSessionDetail] = useState(null);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataLoadingMessage, setDataLoadingMessage] = useState("");
+  const [isReportGenerating, setIsReportGenerating] = useState(false);
   const hasBootstrappedRef = useRef(false);
 
   const [theme, setTheme] = useState(() => localStorage.getItem('paplens-theme') || 'dark');
@@ -313,8 +314,22 @@ export function App() {
   };
 
   const saveReport = async () => {
+    setIsReportGenerating(true);
     setStatus("Generating PDF report...");
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    // Charts are only rendered at full size when the overview tab is visible.
+    // If the user is on a different tab, briefly switch to overview so Chart.js
+    // can resize its canvases back to their normal dimensions before we capture.
+    const prevTab = activeTab;
+    if (activeTab !== "overview") {
+      setActiveTab("overview");
+      // Two animation frames for React to commit the style change, plus a short
+      // delay for Chart.js's ResizeObserver to re-paint the canvases.
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      await new Promise((resolve) => setTimeout(resolve, 120));
+    } else {
+      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    }
 
     const charts = {
       ahiDataUri: captureChartDataUri(getChartCanvasByKey("ahi")),
@@ -442,6 +457,14 @@ export function App() {
 
 
     const result = await window.cpapAPI.saveReport(reportData);
+
+    // Restore the tab the user was on before the report was triggered
+    if (prevTab !== "overview") {
+      setActiveTab(prevTab);
+    }
+
+    setIsReportGenerating(false);
+
     if (result.success) {
       setStatus(`Saved to ${result.filePath}`);
     } else {
@@ -498,6 +521,33 @@ export function App() {
             </h2>
             <p style={{ color: 'var(--muted)', margin: 0, fontSize: '0.875rem', lineHeight: 1.6 }}>
               {dataLoadingMessage}
+            </p>
+          </div>
+        </div>
+      )}
+      {isReportGenerating && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1001,
+          backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+          background: 'rgba(0,0,0,0.60)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{
+            background: 'var(--card)', border: '1px solid var(--border)',
+            borderRadius: 16, padding: '36px 52px', textAlign: 'center',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.65)', maxWidth: 360
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: '50%',
+              border: '3px solid var(--border)', borderTopColor: '#22D3EE',
+              margin: '0 auto 20px',
+              animation: 'spin 0.9s linear infinite'
+            }} />
+            <h2 style={{ color: 'var(--text)', margin: '0 0 10px', fontSize: '1.15rem', fontWeight: 700 }}>
+              Generating Report
+            </h2>
+            <p style={{ color: 'var(--muted)', margin: 0, fontSize: '0.875rem', lineHeight: 1.6 }}>
+              Capturing charts and building your PDF&hellip;
             </p>
           </div>
         </div>
