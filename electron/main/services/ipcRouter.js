@@ -116,6 +116,7 @@ class IpcRouter {
                             logoDataUri = `data:image/png;base64,${fs.readFileSync(logoPath).toString("base64")}`;
                         } catch (err) { console.error("PLReportLogo.png not found", err); }
                         reportData.header = { logoUrl: logoDataUri };
+                        if (logoDataUri) reportData.brand = { logoDataUri };
 
                         const windowDays = reportData.report.windowDays || 30;
                         let nights;
@@ -149,10 +150,6 @@ class IpcRouter {
                             }))
                         };
 
-                        const defaultLogoPath = this.resolveAssetPath(path.join("src", "renderer", "assets", "PLReportLogo.png"));
-                        if (fs.existsSync(defaultLogoPath)) {
-                            reportData.brand = { logoDataUri: "data:image/png;base64," + fs.readFileSync(defaultLogoPath).toString('base64') };
-                        }
                     }
                 }
 
@@ -220,7 +217,8 @@ class IpcRouter {
 
             const history30 = this.profileDb.db.prepare(`
         SELECT n.usage_hours, m.ahi_total, m.leak_p50, m.leak_p95, m.pressure_median, m.pressure_p95,
-               m.minute_vent_p50, m.minute_vent_p95, m.tidal_vol_p50, m.tidal_vol_p95, m.flow_limitation_p95
+               m.minute_vent_p50, m.minute_vent_p95, m.tidal_vol_p50, m.tidal_vol_p95,
+               m.flow_limitation_p95, m.rin_per_hr
         FROM nights n JOIN night_metrics m ON m.night_id = n.id
         WHERE n.device_id = ? AND n.night_date < ? AND n.usage_hours > 0
         ORDER BY n.night_date DESC LIMIT 30
@@ -236,11 +234,19 @@ class IpcRouter {
             if (!device) return null;
 
             const { days = 30, from = null, to = null } = payload || {};
+            const insightsCols = `
+                 n.night_date, n.usage_hours,
+                 m.ahi_total, m.obstructive_apneas_per_hr, m.central_apneas_per_hr,
+                 m.unclassified_apneas_per_hr, m.hypopneas_per_hr, m.apneas_per_hr,
+                 m.pressure_median, m.pressure_p95, m.leak_p50, m.leak_p95,
+                 m.minute_vent_p50, m.resp_rate_p50, m.tidal_vol_p50,
+                 m.flow_limitation_p95, m.rin_per_hr, m.csr_per_hr,
+                 m.snore_index, m.leak_spike_count, m.pressure_histogram, m.pressure_efficiency,
+                 d.residual_burden, d.stability_score, d.compliance_risk`;
             let trendRows;
             if (from && to) {
                 trendRows = this.profileDb.db.prepare(`
-          SELECT n.night_date, m.ahi_total, n.usage_hours, m.pressure_median, m.leak_p50, m.leak_p95,
-                 m.minute_vent_p50, m.resp_rate_p50, m.tidal_vol_p50, d.residual_burden
+          SELECT ${insightsCols}
           FROM nights n JOIN night_metrics m ON m.night_id = n.id
           LEFT JOIN derived_metrics d ON d.night_id = n.id
           WHERE n.device_id = ? AND n.usage_hours > 0 AND n.night_date BETWEEN ? AND ?
@@ -249,14 +255,24 @@ class IpcRouter {
             } else {
                 const limit = days === 0 ? 99999 : days;
                 trendRows = this.profileDb.db.prepare(`
-          SELECT n.night_date, m.ahi_total, n.usage_hours, m.pressure_median, m.leak_p50, m.leak_p95,
-                 m.minute_vent_p50, m.resp_rate_p50, m.tidal_vol_p50, d.residual_burden
+          SELECT ${insightsCols}
           FROM nights n JOIN night_metrics m ON m.night_id = n.id
           LEFT JOIN derived_metrics d ON d.night_id = n.id
           WHERE n.device_id = ? AND n.usage_hours > 0
           ORDER BY n.night_date DESC LIMIT ?
         `).all(device.id, limit);
             }
+
+            // 30-day compliance rate: % of nights with ≥ 4 hours of usage
+            const complianceWindow = this.profileDb.db.prepare(`
+          SELECT usage_hours FROM nights
+          WHERE device_id = ? AND usage_hours > 0
+          ORDER BY night_date DESC LIMIT 30
+        `).all(device.id);
+            const compliantNights = complianceWindow.filter(r => r.usage_hours >= 4).length;
+            const complianceRate = complianceWindow.length > 0
+                ? Math.round((compliantNights / complianceWindow.length) * 100)
+                : null;
 
             const corrWindow = (days >= 30 || days === 0) ? 30 : 7;
             const latestCorrs = this.profileDb.db.prepare(`
@@ -276,7 +292,10 @@ class IpcRouter {
                 trends: trendRows,
                 correlations: latestCorrs ? JSON.parse(latestCorrs.results) : [],
                 explanations,
-                metricSummary: buildLeakAndTidalSummary(trendRows, console, "analytics:insights")
+                metricSummary: buildLeakAndTidalSummary(trendRows, console, "analytics:insights"),
+                complianceRate,
+                complianceWindowNights: complianceWindow.length,
+                compliantNights
             };
         });
 
@@ -285,8 +304,12 @@ class IpcRouter {
             this.appDb.createProfile(id, name, age, notes); return { success: true };
         });
         ipcMain.handle("app:delete-profile", async (_event, profileId) => {
+            if (!profileId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId)) {
+                return { success: false, error: "Invalid profile ID" };
+            }
             try {
-                if (profileId === this.appContainer.get("activeProfileId")) {
+                const activeId = this.appContainer.get("activeProfileId");
+                if (profileId === activeId) {
                     if (this.profileDb) { this.profileDb.close(); this.appContainer.register("profileDatabase", null); }
                     this.appContainer.register("activeProfileId", null);
                     this.cpap.currentSummary = null; this.cpap.currentDataPath = null; this.cpap.dataLoader = null;
@@ -299,6 +322,9 @@ class IpcRouter {
             } catch (error) { return { success: false, error: error.message }; }
         });
         ipcMain.handle("app:set-active-profile", async (_event, profileId) => {
+            if (profileId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId)) {
+                return { success: false, error: "Invalid profile ID" };
+            }
             if (this.profileDb) this.profileDb.close();
             this.cpap.currentSummary = null; this.cpap.dataLoader = null; this.cpap.currentDataPath = null;
             if (profileId) {

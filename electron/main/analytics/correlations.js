@@ -38,6 +38,30 @@ function analyzeCorrelations(metricsList) {
     checkCorrelation("usage_hours", "ahi_total", "Usage", "AHI");
     checkCorrelation("pressure_median", "leak_p50", "Pressure", "Leak");
 
+    // Therapy response index: does a night with higher delivered pressure (N) predict
+    // lower AHI the following night (N+1)?  Uses a lag-1 shift.
+    if (usableMetrics.length >= 3) {
+        const lagPairs = [];
+        for (let i = 0; i < usableMetrics.length - 1; i++) {
+            const pressureN = usableMetrics[i].pressure_median;
+            const ahiNext = usableMetrics[i + 1].ahi_total;
+            if (pressureN !== undefined && pressureN !== null && ahiNext !== undefined && ahiNext !== null) {
+                lagPairs.push([pressureN, ahiNext]);
+            }
+        }
+        if (lagPairs.length >= 2) {
+            const xVals = lagPairs.map(p => p[0]);
+            const yVals = lagPairs.map(p => p[1]);
+            const r = pearsonR(xVals, yVals);
+            const absR = Math.abs(r);
+            let label = "weak";
+            if (absR >= 0.6) label = "strong";
+            else if (absR >= 0.4) label = "moderate";
+            else if (absR >= 0.2) label = "mild";
+            results.push({ x: "Pressure (N)", y: "AHI (N+1)", r, n: lagPairs.length, label, lag: 1 });
+        }
+    }
+
     return results;
 }
 

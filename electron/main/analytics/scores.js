@@ -1,4 +1,4 @@
-const { EPSILON, mean, std } = require("./rolling");
+const { EPSILON, mean } = require("./rolling");
 const { regressionSlope } = require("./regression");
 const { calculatePercentile } = require("../services/therapyMetrics");
 
@@ -15,6 +15,7 @@ function computeTherapyStabilityScore(currentMetrics, historyMetrics) {
             penaltyLeak: null,
             penaltyUsage: null,
             penaltyPressureVar: null,
+            penaltyRin: null,
             penaltyFlowLim: null,
             pressureVariance: null,
             flScore: null,
@@ -45,25 +46,27 @@ function computeTherapyStabilityScore(currentMetrics, historyMetrics) {
     else if (usageStr >= 4) penaltyUsage = (7 - usageStr) * 3;
     else penaltyUsage = Math.min(15, 9 + (4 - usageStr) * 3);
 
-    let penaltyPressureVar = 0;
+    // Pressure variance: p95 − median of actual delivered mask pressure (MaskPress.50/95).
+    // Both columns now store real delivery percentiles after the Phase 10 mapping fix,
+    // so the spread is always on the same cmH₂O scale as the penalty thresholds.
+    let penaltyPressureVar = null;
     let pressureSd = null;
-    if (currentMetrics.pressure_p95 !== undefined && currentMetrics.pressure_p95 !== null && currentMetrics.pressure_median !== undefined && currentMetrics.pressure_median !== null) {
+    if (currentMetrics.pressure_p95 !== undefined && currentMetrics.pressure_p95 !== null &&
+        currentMetrics.pressure_median !== undefined && currentMetrics.pressure_median !== null) {
         pressureSd = currentMetrics.pressure_p95 - currentMetrics.pressure_median;
-    } else if (validHistory.length > 0) {
-        const pList = validHistory.map(h => h.pressure_median).filter(v => v !== undefined);
-        if (currentMetrics.pressure_median !== undefined && currentMetrics.pressure_median !== null) {
-            pList.push(currentMetrics.pressure_median);
-        }
-        if (pList.length > 1) {
-            pressureSd = std(pList, mean(pList));
-        }
-    }
-    if (pressureSd !== null) {
         if (pressureSd <= 2) penaltyPressureVar = 0;
         else if (pressureSd <= 6) penaltyPressureVar = (pressureSd - 2) * 1.25;
         else penaltyPressureVar = 5;
-    } else {
-        penaltyPressureVar = null;
+    }
+
+    // RIN (Respiratory Disturbance Index): flow limitations that scored below the
+    // hypopnea threshold. A penalty starts at RIN > 5 and caps at 10 events/hr (5 pts).
+    let penaltyRin = null;
+    const rin = currentMetrics.rin_per_hr;
+    if (rin !== undefined && rin !== null) {
+        if (rin <= 5) penaltyRin = 0;
+        else if (rin <= 15) penaltyRin = (rin - 5) * 0.5;
+        else penaltyRin = 5;
     }
 
     let penaltyFlowLim = null;
@@ -74,47 +77,24 @@ function computeTherapyStabilityScore(currentMetrics, historyMetrics) {
         else penaltyFlowLim = 5;
     }
 
-    const totalPenalty = [penaltyAhi, penaltyLeak, penaltyUsage, penaltyPressureVar, penaltyFlowLim]
+    const totalPenalty = [penaltyAhi, penaltyLeak, penaltyUsage, penaltyPressureVar, penaltyRin, penaltyFlowLim]
         .filter((value) => value !== null)
         .reduce((sum, value) => sum + value, 0);
     const finalScore = Math.max(0, Math.min(100, 100 - totalPenalty));
 
+    // Round penalties first so that flScore is derived from the same value consumers see.
+    const roundedFlPenalty = penaltyFlowLim === null ? null : Math.round(penaltyFlowLim);
     return {
         stabilityScore: finalScore,
         penaltyAhi: Math.round(penaltyAhi),
         penaltyLeak: Math.round(penaltyLeak),
         penaltyUsage: Math.round(penaltyUsage),
         penaltyPressureVar: penaltyPressureVar === null ? null : Math.round(penaltyPressureVar),
-        penaltyFlowLim: penaltyFlowLim === null ? null : Math.round(penaltyFlowLim),
+        penaltyRin: penaltyRin === null ? null : Math.round(penaltyRin),
+        penaltyFlowLim: roundedFlPenalty,
         pressureVariance: pressureSd,
-        flScore: penaltyFlowLim === null ? null : Math.round(penaltyFlowLim * 20),
+        flScore: roundedFlPenalty === null ? null : roundedFlPenalty * 20,
         clusterIndex: null
-    };
-}
-
-function classifyLeakSeverity(leak95, leakDurationMinutes, totalUsageMinutes) {
-    if (leak95 === null || leak95 === undefined) {
-        return {
-            tier: null,
-            consistencyIndex: null
-        };
-    }
-    const usageStr = totalUsageMinutes || 480;
-    const duration = leakDurationMinutes || 0;
-    const durationPct = (duration / usageStr) * 100;
-
-    let tier = 1;
-    if (leak95 > 35 || duration >= 30) {
-        tier = 4;
-    } else if (leak95 > 24 || durationPct > 10) {
-        tier = 3;
-    } else if (leak95 > 10 || (durationPct > 0 && durationPct <= 10)) {
-        tier = 2;
-    }
-
-    return {
-        tier,
-        consistencyIndex: durationPct
     };
 }
 
@@ -145,7 +125,6 @@ function processResidualBurden(ahiList30) {
 
 module.exports = {
     computeTherapyStabilityScore,
-    classifyLeakSeverity,
     computeComplianceRisk,
     processResidualBurden,
     hasTherapyData

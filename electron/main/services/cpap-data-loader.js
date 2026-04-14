@@ -300,6 +300,8 @@ class CPAPDataLoader {
           minVentSamples: [],
           respRateSamples: [],
           flowLimSamples: [],
+          snoreSamples: [],
+          pressureSamples: [],
           spo2Samples: [],
           pulseSamples: [],
           annotations: []
@@ -316,6 +318,9 @@ class CPAPDataLoader {
           aggregate.minVentSamples.push(...(pld.data["MinVent.2s"] || []));
           aggregate.respRateSamples.push(...(pld.data["RespRate.2s"] || []));
           aggregate.flowLimSamples.push(...(pld.data["FlowLim.2s"] || []));
+          aggregate.snoreSamples.push(...(pld.data["Snore.2s"] || []));
+          // MaskPress.2s is actual delivered mask pressure — used for histogram and efficiency
+          aggregate.pressureSamples.push(...(pld.data["MaskPress.2s"] || pld.data["Press.2s"] || []));
         } catch (error) {
           safeInfo(console, `[session-parse] Failed PLD parse for ${session.id}: ${error.message}`);
         }
@@ -403,10 +408,18 @@ class CPAPDataLoader {
         const leakMax = pickMappedValue(day, leakMappings.max);
         const tidVol50 = pickMappedValue(day, tidalMappings.p50);
         const tidVol95 = pickMappedValue(day, tidalMappings.p95);
-        const mappedPressure = toOptionalNumber(day["S.C.Press"]) ?? toOptionalNumber(day["S.AS.MinPress"]);
-        const mappedMaxPressure = toOptionalNumber(day["S.AS.MaxPress"]) ?? toOptionalNumber(day["S.C.Press"]);
-        const respRate50 = toOptionalNumber(day["RespRate.50"]);
-        const respRate95 = toOptionalNumber(day["RespRate.95"]);
+
+        // MaskPress.50/95 are actual delivered pressure percentiles from the device.
+        // Fall back to configured settings only when delivered stats are absent.
+        const maskPressP50 = this.pickPositiveMetric(day["MaskPress.50"]);
+        const maskPressP95 = this.pickPositiveMetric(day["MaskPress.95"]);
+        const configuredMinPress = this.pickPositiveMetric(day["S.C.Press"], day["S.A.MinPress"], day["S.AS.MinPress"]);
+        const configuredMaxPress = this.pickPositiveMetric(day["S.A.MaxPress"], day["S.AFH.MaxPress"], day["S.C.Press"]);
+        const mappedPressure = maskPressP50 ?? configuredMinPress;
+        const mappedMaxPressure = maskPressP95 ?? configuredMaxPress;
+
+        const respRate50 = this.pickPositiveMetric(day["RespRate.50"]);
+        const respRate95 = this.pickPositiveMetric(day["RespRate.95"]);
 
         return {
           date: dateStr || `Day ${index + 1}`,
@@ -416,6 +429,8 @@ class CPAPDataLoader {
           oai: toOptionalNumber(day.OAI) ?? 0,
           cai: toOptionalNumber(day.CAI) ?? 0,
           uai: toOptionalNumber(day.UAI) ?? 0,
+          rin: toOptionalNumber(day.RIN),
+          csr: toOptionalNumber(day.CSR),
           duration: toOptionalNumber(day.Duration) ?? 0,
           onDuration: toOptionalNumber(day.OnDuration) ?? 0,
           usageHours: usageMinutes / 60,
@@ -423,15 +438,19 @@ class CPAPDataLoader {
           leak50: sessionMetrics?.leak50 ?? leak50.value,
           leak95: sessionMetrics?.leak95 ?? leak95.value,
           leakMax: sessionMetrics?.leakMax ?? leakMax.value,
+          leakSpikeCount: sessionMetrics?.leakSpikeCount ?? null,
           pressure: mappedPressure,
           maxPressure: mappedMaxPressure,
-          minVent50: sessionMetrics?.minVent50 ?? toOptionalNumber(day["MinVent.50"]),
-          minVent95: sessionMetrics?.minVent95 ?? toOptionalNumber(day["MinVent.95"]),
+          minVent50: sessionMetrics?.minVent50 ?? this.pickPositiveMetric(day["MinVent.50"]),
+          minVent95: sessionMetrics?.minVent95 ?? this.pickPositiveMetric(day["MinVent.95"]),
           tidVol50: sessionMetrics?.tidVol50 ?? tidVol50.value,
           tidVol95: sessionMetrics?.tidVol95 ?? tidVol95.value,
           respRate50: sessionMetrics?.respRate50 ?? respRate50,
           respRate95: sessionMetrics?.respRate95 ?? respRate95,
           flowLimP95: sessionMetrics?.flowLimP95 ?? null,
+          snoreIndex: sessionMetrics?.snoreIndex ?? null,
+          pressureHistogram: sessionMetrics?.pressureHistogram ?? null,
+          pressureEfficiency: sessionMetrics?.pressureEfficiency ?? null,
           eventClusterIndexSource: sessionMetrics?.eventClusterIndexSource ?? null,
           // Current ResMed flow generators do not provide valid onboard oximetry,
           // so PAPLens preserves null instead of probing SA2/summary sentinels.

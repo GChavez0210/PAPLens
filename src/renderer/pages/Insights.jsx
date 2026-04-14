@@ -4,6 +4,9 @@ import { calculatePercentile, formatMetricValue, toMetricNumber } from "../utils
 import { AHITrendChart } from "../components/charts/AHITrendChart";
 import { TherapyStabilityCard } from "../components/charts/TherapyStabilityCard";
 import { LeakSeverityGauge } from "../components/charts/LeakSeverityGauge";
+import { EventTypeSplitChart } from "../components/charts/EventTypeSplitChart";
+import { FlowLimitationChart } from "../components/charts/FlowLimitationChart";
+import { PressureHistogramChart } from "../components/charts/PressureHistogramChart";
 
 // ── Icon map ────────────────────────────────────────────────────────────────
 const ICONS = {
@@ -20,6 +23,69 @@ const KEY_COLOR = {
     compliance: { border: "#f59e0b", bg: "rgba(245,158,11,0.08)" },
     outlier: { border: "#ef4444", bg: "rgba(239,68,68,0.08)" },
     default: { border: "#4F46E5", bg: "rgba(79,70,229,0.08)" },
+};
+
+// ── Hover tooltip content for each insight type ─────────────────────────────
+const INSIGHT_TOOLTIPS = {
+    stability: {
+        title: "What this means",
+        what: "Therapy stability measures how consistent your breathing patterns and pressure delivery were across the night. High variance can signal unresolved obstruction, positional changes, or mask issues affecting how well your device adapts.",
+        action: "Check your sleep position and mask fit. If events cluster in the second half of the night, consider positional therapy aids or review your pressure settings with your care team."
+    },
+    mask_fit: {
+        title: "What this means",
+        what: "High leak rates reduce the effective pressure delivered to your airway, potentially allowing breathing events to go unresolved. Large leaks also disrupt your device's auto-titration algorithm, causing it to escalate pressure unnecessarily.",
+        action: "Inspect the mask cushion for wear and clean the seal surface. Re-adjust headgear tension — it should be snug but not tight. If leaks persist across multiple nights, consider a mask fitting session or a different mask style."
+    },
+    compliance: {
+        title: "What this means",
+        what: "Insurance and clinical guidelines typically require 4+ hours of use on at least 70% of nights to classify therapy as \"compliant.\" Consistent use is critical — benefits like blood pressure reduction and daytime alertness depend on regular nightly therapy.",
+        action: "Set a consistent sleep schedule and address comfort barriers: pressure ramp settings, heated humidifier, a chin strap for mouth breathing, or a different mask interface can all significantly improve adherence."
+    },
+    outlier: {
+        title: "What this means",
+        what: "This night's metrics deviated significantly from your recent baseline using statistical z-score analysis. Outliers can reflect a genuine acute issue (illness, alcohol, new sleep position) or simply natural night-to-night variability.",
+        action: "Review the specific metrics flagged. Isolated outliers rarely require action — watch for a pattern across multiple nights before adjusting therapy. If outliers occur frequently, discuss with your healthcare provider."
+    },
+    default: {
+        title: "What this means",
+        what: "This observation was flagged based on analysis of your recent therapy data and clinical thresholds.",
+        action: "Review the details and discuss with your healthcare provider if the pattern persists across multiple nights."
+    }
+};
+
+// ── Hover tooltip content for each stat metric ─────────────────────────────
+const STAT_TOOLTIPS = {
+    ahi: {
+        title: "Apnea-Hypopnea Index (AHI)",
+        what: "Average number of breathing pauses (apneas) and near-pauses (hypopneas) per hour of sleep. This is the primary measure of how well your therapy is controlling your sleep apnea.",
+        impact: "Under 5 is normal; 5–15 mild; 15–30 moderate; above 30 is severe. Consistently elevated AHI means your airway is not staying open effectively."
+    },
+    usage: {
+        title: "Nightly Therapy Usage",
+        what: "Average hours per night the CPAP device was actively running across the selected date range.",
+        impact: "4+ hours/night is the clinical compliance minimum. More consistent use directly correlates with better health outcomes — daytime alertness, blood pressure, and cardiovascular risk all improve with regular therapy."
+    },
+    pressure: {
+        title: "Delivered Pressure (P50)",
+        what: "The median air pressure in cmH₂O that your device delivered to keep your airway open. The 50th percentile excludes brief spikes, giving a representative picture of typical nighttime pressure.",
+        impact: "Higher than your prescribed minimum may signal unresolved events driving the device up. Consistently near your max setting suggests your pressure range may need widening."
+    },
+    flow: {
+        title: "Minute Ventilation (MV P50)",
+        what: "Total volume of air exchanged per minute, combining breathing rate and tidal volume depth. Reflects how effectively your lungs are ventilating during therapy.",
+        impact: "Stable ventilation confirms effective breathing support. Drops in MV alongside rising AHI may indicate central events or flow limitation not fully addressed by pressure alone."
+    },
+    tidal: {
+        title: "Tidal Volume (P50)",
+        what: "Average volume of air moved per breath, in milliliters. Measured as the 50th percentile from high-resolution session data.",
+        impact: "Normal adult tidal volume is roughly 400–600 mL. Consistently low values may indicate shallow breathing, significant air leak reducing delivered volume, or mask sizing issues."
+    },
+    nights: {
+        title: "Nights Analyzed",
+        what: "Count of nights with sufficient therapy data (usage hours > 0) within the selected date range. Nights with no recorded usage are excluded from all averages.",
+        impact: "More nights = more reliable statistical averages. Short ranges (under 7 nights) may show misleading averages due to natural night-to-night variability."
+    }
 };
 
 function AppIcon({ type = "default", color = "var(--muted)", size = 18 }) {
@@ -44,12 +110,11 @@ function AppIcon({ type = "default", color = "var(--muted)", size = 18 }) {
 
 function CorrelationBar({ r, pair, label }) {
     const [hovered, setHovered] = useState(false);
-    const MathAlias = Math; // To pacify strict eslint
-    const pct = MathAlias.abs(r) * 100;
+    const pct = Math.abs(r) * 100;
     const color = r > 0.4 ? "#22D3EE" : r < -0.4 ? "#ef4444" : "var(--muted)";
     const positive = r >= 0;
     const tooltipText = getCorrelationInsight(pair, r);
-    const absR = MathAlias.abs(r);
+    const absR = Math.abs(r);
     const strength = absR >= 0.60 ? { label: "Strong", color: "#22D3EE" }
         : absR >= 0.40 ? { label: "Moderate", color: "#f59e0b" }
             : absR >= 0.20 ? { label: "Mild", color: "#9ca3af" }
@@ -95,15 +160,23 @@ function CorrelationBar({ r, pair, label }) {
 }
 
 function InsightCard({ insight }) {
+    const [hovered, setHovered] = useState(false);
     const theme = KEY_COLOR[insight.key] || KEY_COLOR.default;
     const icon = ICONS[insight.key] || ICONS.default;
+    const tooltip = INSIGHT_TOOLTIPS[insight.key] || INSIGHT_TOOLTIPS.default;
+
     return (
-        <div style={{
-            display: "flex", gap: 14, padding: "14px 16px",
-            background: theme.bg, border: `1px solid ${theme.border}`,
-            borderLeft: `4px solid ${theme.border}`,
-            borderRadius: 8, alignItems: "flex-start"
-        }}>
+        <div
+            style={{
+                display: "flex", gap: 14, padding: "14px 16px",
+                background: theme.bg, border: `1px solid ${theme.border}`,
+                borderLeft: `4px solid ${theme.border}`,
+                borderRadius: 8, alignItems: "flex-start",
+                position: 'relative', cursor: 'help'
+            }}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+        >
             <span
                 style={{
                     width: 30, height: 30, borderRadius: 6, display: "inline-flex",
@@ -117,6 +190,25 @@ function InsightCard({ insight }) {
                 <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text)" }}>{insight.title}</div>
                 <div style={{ color: "var(--muted)", fontSize: "0.85rem", lineHeight: 1.5 }}>{insight.summary}</div>
             </div>
+            {hovered && (
+                <div style={{
+                    position: 'absolute', bottom: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 50,
+                    background: 'var(--card)', border: `1px solid ${theme.border}`, borderRadius: 10,
+                    padding: '14px 16px', fontSize: '0.78rem', color: 'var(--text)', lineHeight: 1.7,
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.55)', pointerEvents: 'none'
+                }}>
+                    <div style={{ fontWeight: 700, color: theme.border, fontSize: '0.82rem', marginBottom: 8 }}>
+                        {tooltip.title}
+                    </div>
+                    <div style={{ color: 'var(--muted)', marginBottom: 10 }}>{tooltip.what}</div>
+                    <div style={{ borderTop: `1px solid ${theme.border}40`, paddingTop: 8 }}>
+                        <span style={{ fontWeight: 700, color: theme.border, fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: 1 }}>
+                            How to address
+                        </span>
+                        <div style={{ color: 'var(--text)', marginTop: 4 }}>{tooltip.action}</div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -129,8 +221,14 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
         if (range === "custom") payload = { from: customFrom, to: customTo };
         else if (range === "all") payload = { days: 0 };
         else payload = { days: parseInt(range, 10) };
-        const res = await window.cpapAPI.getInsights(payload);
-        if (res) setData(res);
+        try {
+            const res = await window.cpapAPI.getInsights(payload);
+            if (res) setData(res);
+            else setData({});
+        } catch (err) {
+            console.error("Failed to load insights", err);
+            setData({});
+        }
     };
 
     useEffect(() => {
@@ -140,13 +238,13 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
         return () => unsub();
     }, [range, customFrom, customTo]);
 
-    if (!data) return (
+    if (data === null) return (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#9ca3af" }}>
             <span style={{ fontSize: "1.2rem" }}>Loading insights...</span>
         </div>
     );
 
-    const { trends, correlations, explanations } = data;
+    const { trends, correlations, explanations, complianceRate, complianceWindowNights, compliantNights } = data;
     const seenKeys = new Set();
     const uniqueExplanations = (explanations || []).filter(exp => {
         if (seenKeys.has(exp.key)) return false;
@@ -171,18 +269,19 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             {analyzed.length > 0 && (() => {
-                const avg = (fn) => {
+                // positiveOnly=true excludes stored zeros for metrics where 0 = "no data"
+                const avg = (fn, positiveOnly = false) => {
                     const vals = analyzed
                         .map(fn)
                         .map((value) => toMetricNumber(value))
-                        .filter((value) => value !== null && value >= 0);
+                        .filter((value) => value !== null && (positiveOnly ? value > 0 : value >= 0));
                     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
                 };
-                const avgAhi = avg(d => d.ahi_total);
-                const avgUsage = avg(d => d.usage_hours);
-                const avgPress = avg(d => d.pressure_median);
-                const avgLeak50 = avg(d => d.leak_p50);
-                const avgFlow = avg(d => d.minute_vent_p50);
+                const avgAhi = avg(d => d.ahi_total);          // 0 is valid (great night)
+                const avgUsage = avg(d => d.usage_hours);       // 0 would be filtered by filterAnalyzedDays already
+                const avgPress = avg(d => d.pressure_median, true);  // 0 = no data sentinel
+                const avgLeak50 = avg(d => d.leak_p50, true);        // 0 = no data sentinel
+                const avgFlow = avg(d => d.minute_vent_p50, true);   // 0 = no data sentinel
                 const metricSummary = data.metricSummary || {
                     leak: calculatePercentile(analyzed.map((day) => day.leak_p95), 0.95),
                     tidalVolume: calculatePercentile(analyzed.map((day) => day.tidal_vol_p50), 0.5)
@@ -190,16 +289,51 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                 const displayLeak95 = toMetricNumber(metricSummary.leak);
                 const displayTidal = toMetricNumber(metricSummary.tidalVolume);
 
-                const StatCard = ({ label, value, unit, sub, color = "#22D3EE" }) => (
-                    <div style={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px 16px", display: "flex", flexDirection: "column", gap: 4 }}>
-                        <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-                            <span style={{ fontSize: "1.8rem", fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
-                            <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>{unit}</span>
+                const StatCard = ({ label, value, unit, sub, color = "#22D3EE", tooltipKey, tooltipDown = false }) => {
+                    const [hovered, setHovered] = useState(false);
+                    const tip = tooltipKey ? STAT_TOOLTIPS[tooltipKey] : null;
+                    const tipPos = tooltipDown
+                        ? { top: 'calc(100% + 8px)' }
+                        : { bottom: 'calc(100% + 8px)' };
+
+                    return (
+                        <div
+                            style={{
+                                background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8,
+                                padding: "14px 16px", display: "flex", flexDirection: "column", gap: 4,
+                                position: 'relative', cursor: tip ? 'help' : 'default'
+                            }}
+                            onMouseEnter={() => tip && setHovered(true)}
+                            onMouseLeave={() => tip && setHovered(false)}
+                        >
+                            <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
+                            <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+                                <span style={{ fontSize: "1.8rem", fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
+                                <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>{unit}</span>
+                            </div>
+                            {sub && <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>{sub}</div>}
+                            {hovered && tip && (
+                                <div style={{
+                                    position: 'absolute', ...tipPos, left: 0, right: 0, zIndex: 50,
+                                    background: 'var(--card)', border: `1px solid ${color}60`, borderRadius: 10,
+                                    padding: '14px 16px', fontSize: '0.78rem', color: 'var(--text)', lineHeight: 1.7,
+                                    boxShadow: '0 12px 40px rgba(0,0,0,0.55)', pointerEvents: 'none', minWidth: 240
+                                }}>
+                                    <div style={{ fontWeight: 700, color, fontSize: '0.82rem', marginBottom: 8 }}>
+                                        {tip.title}
+                                    </div>
+                                    <div style={{ color: 'var(--muted)', marginBottom: 10 }}>{tip.what}</div>
+                                    <div style={{ borderTop: `1px solid ${color}30`, paddingTop: 8 }}>
+                                        <span style={{ fontWeight: 700, color, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 1 }}>
+                                            Therapy impact
+                                        </span>
+                                        <div style={{ color: 'var(--text)', marginTop: 4 }}>{tip.impact}</div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
-                        {sub && <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>{sub}</div>}
-                    </div>
-                );
+                    );
+                };
 
                 return (
                     <>
@@ -208,16 +342,16 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                                 {rangeLabel} Averages
                             </h3>
                             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-                                <StatCard label="Average AHI" value={formatMetricValue(avgAhi, 1)} unit="events/hr" sub={rangeLabel} color="#ef4444" />
-                                <StatCard label="Average Usage" value={formatMetricValue(avgUsage, 1)} unit="hours" sub="per night" color="#10b981" />
-                                <StatCard label="Average Pressure" value={formatMetricValue(avgPress, 1)} unit="cmH₂O" sub="50th percentile" color="#22D3EE" />
+                                <StatCard label="Average AHI" value={formatMetricValue(avgAhi, 1)} unit="events/hr" sub={rangeLabel} color="#ef4444" tooltipKey="ahi" tooltipDown />
+                                <StatCard label="Average Usage" value={formatMetricValue(avgUsage, 1)} unit="hours" sub="per night" color="#10b981" tooltipKey="usage" tooltipDown />
+                                <StatCard label="Average Pressure" value={formatMetricValue(avgPress, 1)} unit="cmH₂O" sub="50th percentile" color="#22D3EE" tooltipKey="pressure" tooltipDown />
                                 <div style={{ gridRow: "span 2", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px" }}>
                                     <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1, textAlign: "center", marginBottom: 10 }}>Average Mask Leak</div>
                                     <LeakSeverityGauge leak50={avgLeak50} leak95={displayLeak95} height={180} />
                                 </div>
-                                <StatCard label="Average Flow" value={formatMetricValue(avgFlow, 1)} unit="L/min" sub="50th percentile" color="#8b5cf6" />
-                                <StatCard label="Average Vol." value={formatMetricValue(displayTidal, 0)} unit="mL" sub="50th percentile" color="#22D3EE" />
-                                <StatCard label="Nights Analyzed" value={analyzed.length} unit="" sub="excluding no-data" color="#8b5cf6" />
+                                <StatCard label="Average Flow" value={formatMetricValue(avgFlow, 1)} unit="L/min" sub="50th percentile" color="#8b5cf6" tooltipKey="flow" />
+                                <StatCard label="Average Vol." value={formatMetricValue(displayTidal, 0)} unit="mL" sub="50th percentile" color="#22D3EE" tooltipKey="tidal" />
+                                <StatCard label="Nights Analyzed" value={analyzed.length} unit="" sub="excluding no-data" color="#8b5cf6" tooltipKey="nights" />
                             </div>
                         </section>
 
@@ -227,6 +361,130 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                             </h3>
                             <AHITrendChart labels={labels} data={ahiData} height={220} />
                         </section>
+
+                        {(() => {
+                            // Weekend vs weekday AHI and usage comparison
+                            const weekendDays = analyzed.filter(d => { const dow = new Date(d.night_date).getDay(); return dow === 0 || dow === 6; });
+                            const weekdayDays = analyzed.filter(d => { const dow = new Date(d.night_date).getDay(); return dow >= 1 && dow <= 5; });
+                            const wkndAhi = weekendDays.length > 0 ? weekendDays.reduce((a, d) => a + (d.ahi_total || 0), 0) / weekendDays.length : null;
+                            const wkdyAhi = weekdayDays.length > 0 ? weekdayDays.reduce((a, d) => a + (d.ahi_total || 0), 0) / weekdayDays.length : null;
+                            const wkndUsage = weekendDays.length > 0 ? weekendDays.reduce((a, d) => a + (d.usage_hours || 0), 0) / weekendDays.length : null;
+                            const wkdyUsage = weekdayDays.length > 0 ? weekdayDays.reduce((a, d) => a + (d.usage_hours || 0), 0) / weekdayDays.length : null;
+                            if (wkndAhi === null && wkdyAhi === null) return null;
+
+                            const compColor = complianceRate === null ? "#6b7280"
+                                : complianceRate >= 70 ? "#10b981"
+                                : complianceRate >= 50 ? "#f59e0b" : "#ef4444";
+
+                            return (
+                                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                                    {/* Compliance rate */}
+                                    {complianceRate !== null && (
+                                        <section className="panel" style={{ padding: 20 }}>
+                                            <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
+                                                30-Day Compliance Rate
+                                            </h3>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+                                                <div style={{ textAlign: "center" }}>
+                                                    <div style={{ fontSize: "3rem", fontWeight: 800, color: compColor, lineHeight: 1 }}>{complianceRate}%</div>
+                                                    <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginTop: 4 }}>nights ≥ 4 hrs</div>
+                                                </div>
+                                                <div style={{ flex: 1 }}>
+                                                    <div style={{ background: "var(--card-inner)", borderRadius: 6, height: 10 }}>
+                                                        <div style={{ width: `${complianceRate}%`, background: compColor, height: "100%", borderRadius: 6, transition: "width 0.8s" }} />
+                                                    </div>
+                                                    <div style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: 8 }}>
+                                                        {compliantNights} of {complianceWindowNights} nights qualify
+                                                    </div>
+                                                    <div style={{ fontSize: "0.7rem", color: complianceRate >= 70 ? "#10b981" : "#f59e0b", marginTop: 4 }}>
+                                                        {complianceRate >= 70 ? "Insurance compliance threshold met" : "Below 70% CMS compliance threshold"}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </section>
+                                    )}
+
+                                    {/* Weekend vs weekday */}
+                                    <section className="panel" style={{ padding: 20 }}>
+                                        <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
+                                            Weekend vs Weekday
+                                        </h3>
+                                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                                            {[
+                                                { label: "AHI", wkdy: wkdyAhi, wknd: wkndAhi, unit: "events/hr", color: "#ef4444" },
+                                                { label: "Usage", wkdy: wkdyUsage, wknd: wkndUsage, unit: "hrs", color: "#10b981" }
+                                            ].map(({ label, wkdy, wknd, unit, color }) => {
+                                                const delta = wkdy !== null && wknd !== null ? wknd - wkdy : null;
+                                                return (
+                                                    <div key={label} style={{ background: "var(--bg)", borderRadius: 8, padding: "12px 14px" }}>
+                                                        <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>{label}</div>
+                                                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+                                                            <div>
+                                                                <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>Weekday</div>
+                                                                <div style={{ fontSize: "1.2rem", fontWeight: 700, color }}>{wkdy !== null ? wkdy.toFixed(1) : "—"}</div>
+                                                            </div>
+                                                            <div style={{ textAlign: "right" }}>
+                                                                <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>Weekend</div>
+                                                                <div style={{ fontSize: "1.2rem", fontWeight: 700, color }}>{wknd !== null ? wknd.toFixed(1) : "—"}</div>
+                                                            </div>
+                                                        </div>
+                                                        {delta !== null && (
+                                                            <div style={{ fontSize: "0.7rem", color: Math.abs(delta) < 0.3 ? "#6b7280" : "#f59e0b" }}>
+                                                                Δ {delta > 0 ? "+" : ""}{delta.toFixed(1)} {unit} on weekends
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </section>
+                                </div>
+                            );
+                        })()}
+
+                        {/* Event type split */}
+                        {analyzed.some(d => (d.obstructive_apneas_per_hr ?? 0) + (d.central_apneas_per_hr ?? 0) + (d.hypopneas_per_hr ?? 0) > 0) && (
+                            <section className="panel" style={{ padding: 20 }}>
+                                <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
+                                    Event Type Breakdown ({rangeLabel})
+                                </h3>
+                                <EventTypeSplitChart trends={sorted} height={220} />
+                            </section>
+                        )}
+
+                        {/* Flow limitation & RIN */}
+                        {analyzed.some(d => d.flow_limitation_p95 !== null && d.flow_limitation_p95 !== undefined) && (
+                            <section className="panel" style={{ padding: 20 }}>
+                                <h3 style={{ margin: "0 0 4px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
+                                    Flow Limitation & Respiratory Disturbance ({rangeLabel})
+                                </h3>
+                                <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: 14 }}>
+                                    FL P95 measures airway narrowing intensity; RIN counts flow-limited breaths that didn't score as events.
+                                </div>
+                                <FlowLimitationChart trends={sorted} height={200} />
+                            </section>
+                        )}
+
+                        {/* Pressure histogram — latest night with histogram data */}
+                        {(() => {
+                            const withHist = sorted.find(d => d.pressure_histogram);
+                            if (!withHist) return null;
+                            let hist;
+                            try { hist = JSON.parse(withHist.pressure_histogram); } catch (_) { return null; }
+                            if (!hist || hist.length === 0) return null;
+                            return (
+                                <section className="panel" style={{ padding: 20 }}>
+                                    <h3 style={{ margin: "0 0 4px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
+                                        Pressure Distribution — {withHist.night_date}
+                                    </h3>
+                                    <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: 14 }}>
+                                        Percentage of each 2-second epoch spent at each pressure level (cmH₂O).
+                                        {withHist.pressure_efficiency !== null && ` Device was near ceiling ${withHist.pressure_efficiency?.toFixed(1)}% of the session.`}
+                                    </div>
+                                    <PressureHistogramChart histogram={hist} height={200} />
+                                </section>
+                            );
+                        })()}
                     </>
                 );
             })()}
@@ -238,7 +496,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                         Recent Findings
                     </h3>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        {uniqueExplanations.map((exp, i) => <InsightCard key={i} insight={exp} />)}
+                        {uniqueExplanations.map((exp) => <InsightCard key={`${exp.night_id}-${exp.key}`} insight={exp} />)}
                     </div>
                 </section>
             )}
@@ -252,8 +510,8 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                 </h3>
                 {correlations && correlations.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                        {correlations.map((c, i) => (
-                            <CorrelationBar key={i} pair={`${c.x} ↔ ${c.y}`} r={c.r} label={c.label} />
+                        {correlations.map((c) => (
+                            <CorrelationBar key={`${c.x}-${c.y}`} pair={`${c.x} ↔ ${c.y}`} r={c.r} label={c.label} />
                         ))}
                     </div>
                 ) : (

@@ -109,7 +109,7 @@ class EDFParser {
           data[signal.label].push(...this.parseAnnotationRecord(annotationBytes));
           continue;
         }
-        for (let samp = 0; samp < numSamples && offset + 1 < buffer.length; samp++) {
+        for (let samp = 0; samp < numSamples && offset + 2 <= buffer.length; samp++) {
           const digitalValue = buffer.readInt16LE(offset);
           offset += 2;
           const physicalValue = this.digitalToPhysical(digitalValue, signal);

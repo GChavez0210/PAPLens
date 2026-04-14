@@ -86,6 +86,9 @@ class AppDatabase {
 
 class ProfileDatabase {
   constructor(userDataPath, profileId) {
+    if (!profileId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(profileId)) {
+      throw new Error(`Invalid profileId: "${profileId}"`);
+    }
     const profilesPath = path.join(userDataPath, "data", "profiles", profileId);
     if (!fs.existsSync(profilesPath)) {
       fs.mkdirSync(profilesPath, { recursive: true });
@@ -230,6 +233,13 @@ class ProfileDatabase {
     addColumnIfNotExists('night_metrics', 'pulse_avg', 'REAL');
     addColumnIfNotExists('night_metrics', 'flow_limitation_p95', 'REAL');
     addColumnIfNotExists('night_metrics', 'event_cluster_index_source', 'REAL');
+    // Phase 10: richer clinical metrics
+    addColumnIfNotExists('night_metrics', 'rin_per_hr', 'REAL');
+    addColumnIfNotExists('night_metrics', 'csr_per_hr', 'REAL');
+    addColumnIfNotExists('night_metrics', 'snore_index', 'REAL');
+    addColumnIfNotExists('night_metrics', 'leak_spike_count', 'INTEGER');
+    addColumnIfNotExists('night_metrics', 'pressure_histogram', 'TEXT');
+    addColumnIfNotExists('night_metrics', 'pressure_efficiency', 'REAL');
   }
 
   close() {

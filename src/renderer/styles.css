@@ -547,6 +547,11 @@ button {
   letter-spacing: 1.5px;
 }
 
+/* Data-loading spinner */
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Score pulse animation */
 @keyframes score-pulse {
   0% {

@@ -6,6 +6,7 @@ import { ProfileSelector } from "./components/ProfileSelector";
 import { ClinicalSummaryCard } from "./components/ClinicalSummaryCard";
 import { SleepCalendar } from "./components/SleepCalendar";
 import { buildClinicalContext, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
+import { formatMetricValue, toMetricNumber } from "./utils/therapyMetrics";
 
 const RANGE_OPTIONS = ["7", "14", "30", "60", "90", "180", "365", "all", "custom"];
 const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN = /(airsense|aircurve|lumis|airmini)/i;
@@ -115,6 +116,8 @@ export function App() {
   const [selectedDay, setSelectedDay] = useState(null);
   const [selectedSession, setSelectedSession] = useState(null);
   const [sessionDetail, setSessionDetail] = useState(null);
+  const [isDataLoading, setIsDataLoading] = useState(false);
+  const [dataLoadingMessage, setDataLoadingMessage] = useState("");
   const hasBootstrappedRef = useRef(false);
 
   const [theme, setTheme] = useState(() => localStorage.getItem('paplens-theme') || 'dark');
@@ -276,24 +279,36 @@ export function App() {
   }, [filteredStats]);
 
   const chooseFolder = async () => {
+    setIsDataLoading(true);
+    setDataLoadingMessage("Parsing your CPAP data files and running analysis...");
     setStatus("Importing data folder...");
-    const result = await window.cpapAPI.selectDataFolder();
-    if (result.success) {
-      setSummary(result.summary);
-      setStatus(`Imported data from ${result.path}`);
-    } else {
-      setStatus(result.error);
+    try {
+      const result = await window.cpapAPI.selectDataFolder();
+      if (result.success) {
+        setSummary(result.summary);
+        setStatus(`Imported data from ${result.path}`);
+      } else {
+        setStatus(result.error);
+      }
+    } finally {
+      setIsDataLoading(false);
     }
   };
 
   const refresh = async () => {
+    setIsDataLoading(true);
+    setDataLoadingMessage("Refreshing therapy data and recomputing metrics...");
     setStatus("Refreshing data...");
-    const result = await window.cpapAPI.refresh();
-    if (result.success) {
-      setSummary(result.summary);
-      setStatus("Refreshed");
-    } else {
-      setStatus(result.error);
+    try {
+      const result = await window.cpapAPI.refresh();
+      if (result.success) {
+        setSummary(result.summary);
+        setStatus("Refreshed");
+      } else {
+        setStatus(result.error);
+      }
+    } finally {
+      setIsDataLoading(false);
     }
   };
 
@@ -327,8 +342,8 @@ export function App() {
         footerPage2: "Page 2 of 2"
       },
       profile: {
-        name: activeProfile.name || "Unknown",
-        age: activeProfile.age || "",
+        name: activeProfile?.name || "Unknown",
+        age: activeProfile?.age || "",
         notes: "Generated from PAPLens Desktop."
       },
       device: {
@@ -431,6 +446,33 @@ export function App() {
 
   return (
     <main className="app-shell">
+      {isDataLoading && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 1000,
+          backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center'
+        }}>
+          <div style={{
+            background: 'var(--card)', border: '1px solid var(--border)',
+            borderRadius: 16, padding: '36px 52px', textAlign: 'center',
+            boxShadow: '0 24px 80px rgba(0,0,0,0.65)', maxWidth: 380
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: '50%',
+              border: '3px solid var(--border)', borderTopColor: '#22D3EE',
+              margin: '0 auto 20px',
+              animation: 'spin 0.9s linear infinite'
+            }} />
+            <h2 style={{ color: 'var(--text)', margin: '0 0 10px', fontSize: '1.15rem', fontWeight: 700 }}>
+              Loading Data
+            </h2>
+            <p style={{ color: 'var(--muted)', margin: 0, fontSize: '0.875rem', lineHeight: 1.6 }}>
+              {dataLoadingMessage}
+            </p>
+          </div>
+        </div>
+      )}
       <header className="top-nav">
         <div className="brand">
           <img src={theme === 'light' ? new URL("./assets/PLLogoL.png", import.meta.url).href : new URL("./assets/PLLogoD.png", import.meta.url).href} alt="PAPLens" style={{ height: "48px", width: "auto" }} />
@@ -537,12 +579,12 @@ export function App() {
                 {/* SECTION A: Device Info + Therapy Efficacy Overview */}
                 {filteredStats.length > 0 && (() => {
                   const last = analyzedStats[analyzedStats.length - 1];
-                  const rangeAvg = (fn) => {
-                    const vals = analyzedStats.map(fn).filter(v => v != null && !isNaN(v) && v >= 0);
+                  const rangeAvg = (fn, positiveOnly = false) => {
+                    const vals = analyzedStats.map(fn).filter(v => v != null && !isNaN(v) && (positiveOnly ? v > 0 : v >= 0));
                     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
                   };
                   const avgAhi = rangeAvg(d => d.ahi);
-                  const avgLeak = rangeAvg(d => d.leak50);
+                  const avgLeak = rangeAvg(d => d.leak50, true);
                   const usageValues = usageTrackedStats.map(d => d.usageHours).filter(v => v != null && !isNaN(v) && v >= 0);
                   const avgUsage = usageValues.length ? usageValues.reduce((a, b) => a + b, 0) / usageValues.length : null;
                   const rangeLabel = range === 'all' ? 'All Time' : range === 'custom' ? 'Custom' : `Last ${range} Days`;
@@ -759,12 +801,14 @@ export function App() {
                           </div>
                           <div className="info-item">
                             <label>Median Pressure</label>
-                            <strong>{Number(selectedDay.pressure).toFixed(1)} cmH2O</strong>
+                            <strong>
+                              {formatMetricValue(toMetricNumber(selectedDay.pressure) > 0 ? selectedDay.pressure : null, 1)} cmH₂O
+                            </strong>
                           </div>
                           <div className="info-item">
                             <label>Median Leak</label>
                             <strong className={`badge badge-${severity("leak50", selectedDay.leak50)}`}>
-                              {Math.round(selectedDay.leak50)} L/min
+                              {formatMetricValue(toMetricNumber(selectedDay.leak50) > 0 ? selectedDay.leak50 : null, 0)} L/min
                             </strong>
                           </div>
                         </div>

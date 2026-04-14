@@ -1,6 +1,5 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import viteCompression from "vite-plugin-compression";
 
 export default defineConfig(({ mode }) => {
   const isProd = mode === 'production';
@@ -8,8 +7,7 @@ export default defineConfig(({ mode }) => {
   return {
     base: "./",
     plugins: [
-      react(),
-      isProd && viteCompression({ algorithm: "gzip", ext: ".gz" })
+      react()
     ],
     build: {
       outDir: "dist/renderer",

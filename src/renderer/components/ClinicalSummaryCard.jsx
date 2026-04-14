@@ -20,8 +20,25 @@ function getScoreMeaning(score) {
     return "Therapy May Not Be Effective - Significant clinical intervention may be needed.";
 }
 
-function formatFixed(value, digits = 1) {
-    return formatMetricValue(value, digits);
+/** Return value only if it is a positive finite number; otherwise null → "N/A" */
+function positiveOrNull(value) {
+    const n = toMetricNumber(value);
+    return n !== null && n > 0 ? n : null;
+}
+
+/** Format flow limitation score: null → N/A, 0 → "None", >0 → numeric */
+function formatFlowLim(value) {
+    const n = toMetricNumber(value);
+    if (n === null) return "N/A";
+    if (n === 0) return "None";
+    return String(Math.round(n));
+}
+
+/** Format leak consistency index: null → N/A, otherwise percentage */
+function formatConsistency(value) {
+    const n = toMetricNumber(value);
+    if (n === null) return "N/A";
+    return `${Math.round(n)}%`;
 }
 
 export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
@@ -31,6 +48,14 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
     const score = noData || night.therapy_stability_score == null ? null : Math.round(night.therapy_stability_score);
     const badgeMeta = noData ? { badge: "badge-nodata", label: "No Data" } : getScoreTier(score);
     const metrics = night.raw || night;
+
+    // Leak: prefer p95, fall back to p50 — treat 0 as no-data for both
+    const leak95 = positiveOrNull(night.leak95);
+    const leak50 = positiveOrNull(night.leak50);
+    const leakDisplay = formatMetricValue(leak95 ?? leak50, 0);
+
+    // Pressure: treat 0 as no-data
+    const pressure = positiveOrNull(metrics.pressure_median ?? night.pressure);
 
     return (
         <div
@@ -51,22 +76,22 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
             <div className="cc-row">
                 <div className="cc-stat">
                     <label>AHI</label>
-                    <strong>{noData ? "-" : formatFixed(night.ahi, 1)}</strong>
+                    <strong>{noData ? "-" : formatMetricValue(night.ahi, 1)}</strong>
                     <span>events/hr</span>
                 </div>
                 <div className="cc-stat">
                     <label>Leak.95</label>
-                    <strong>{noData ? "-" : formatMetricValue(toMetricNumber(night.leak95) ?? toMetricNumber(night.leak50), 0)}</strong>
+                    <strong>{noData ? "-" : leakDisplay}</strong>
                     <span>L/min</span>
                 </div>
                 <div className="cc-stat">
                     <label>Pressure</label>
-                    <strong>{noData ? "-" : formatFixed(metrics.pressure_median ?? night.pressure, 1)}</strong>
-                    <span>cmH2O</span>
+                    <strong>{noData ? "-" : formatMetricValue(pressure, 1)}</strong>
+                    <span>cmH₂O</span>
                 </div>
                 <div className="cc-stat">
                     <label>Usage</label>
-                    <strong>{noData ? "No data" : formatFixed(night.usageHours, 1)}</strong>
+                    <strong>{noData ? "No data" : formatMetricValue(night.usageHours, 1)}</strong>
                     <span>Hours</span>
                 </div>
             </div>
@@ -74,12 +99,12 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
             <div className="cc-row" style={{ marginTop: "15px", borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: "12px" }}>
                 <div className="cc-stat">
                     <label>Consistency</label>
-                    <strong>{noData ? "-" : (night.leak_consistency_index == null ? "N/A" : `${Math.round(night.leak_consistency_index)}%`)}</strong>
-                    <span>stable</span>
+                    <strong>{noData ? "-" : formatConsistency(night.leak_consistency_index)}</strong>
+                    <span>leak var.</span>
                 </div>
                 <div className="cc-stat">
                     <label>Pres. Var</label>
-                    <strong>{noData ? "-" : formatFixed(night.pressure_variance, 2)}</strong>
+                    <strong>{noData ? "-" : formatMetricValue(night.pressure_variance, 2)}</strong>
                     <span>SD</span>
                 </div>
                 <div className="cc-stat">
@@ -89,8 +114,8 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
                 </div>
                 <div className="cc-stat">
                     <label>Flow Lim</label>
-                    <strong>{noData ? "-" : formatMetricValue(night.flow_limitation_score, 0)}</strong>
-                    <span>Score</span>
+                    <strong>{noData ? "-" : formatFlowLim(night.flow_limitation_score)}</strong>
+                    <span>penalty</span>
                 </div>
             </div>
 

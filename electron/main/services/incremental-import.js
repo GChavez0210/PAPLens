@@ -36,14 +36,16 @@ class IncrementalImporter {
           pressure_median, pressure_p95, leak_p50, leak_p95,
           minute_vent_p50, minute_vent_p95, resp_rate_p50, resp_rate_p95, flow_limitation_p95, event_cluster_index_source,
           tidal_vol_p50, tidal_vol_p95, duration_minutes, on_duration_minutes,
-          patient_hours_cumulative, spo2_avg, pulse_avg, data_quality
+          patient_hours_cumulative, spo2_avg, pulse_avg, data_quality,
+          rin_per_hr, csr_per_hr, snore_index, leak_spike_count, pressure_histogram, pressure_efficiency
         ) VALUES (
           @night_id, @ahi_total, @apneas_per_hr, @hypopneas_per_hr,
           @obstructive_apneas_per_hr, @central_apneas_per_hr, @unclassified_apneas_per_hr,
           @pressure_median, @pressure_p95, @leak_p50, @leak_p95,
           @minute_vent_p50, @minute_vent_p95, @resp_rate_p50, @resp_rate_p95, @flow_limitation_p95, @event_cluster_index_source,
           @tidal_vol_p50, @tidal_vol_p95, @duration_minutes, @on_duration_minutes,
-          @patient_hours_cumulative, @spo2_avg, @pulse_avg, @data_quality
+          @patient_hours_cumulative, @spo2_avg, @pulse_avg, @data_quality,
+          @rin_per_hr, @csr_per_hr, @snore_index, @leak_spike_count, @pressure_histogram, @pressure_efficiency
         )
         ON CONFLICT(night_id) DO UPDATE SET
           ahi_total = excluded.ahi_total,
@@ -69,7 +71,13 @@ class IncrementalImporter {
           patient_hours_cumulative = excluded.patient_hours_cumulative,
           spo2_avg = excluded.spo2_avg,
           pulse_avg = excluded.pulse_avg,
-          data_quality = excluded.data_quality
+          data_quality = excluded.data_quality,
+          rin_per_hr = excluded.rin_per_hr,
+          csr_per_hr = excluded.csr_per_hr,
+          snore_index = excluded.snore_index,
+          leak_spike_count = excluded.leak_spike_count,
+          pressure_histogram = excluded.pressure_histogram,
+          pressure_efficiency = excluded.pressure_efficiency
       `);
 
             for (const day of summary.dailyStats || []) {
@@ -129,7 +137,13 @@ class IncrementalImporter {
                     patient_hours_cumulative: toOptionalNumber(day.patientHoursCumulative) ?? 0,
                     spo2_avg: toOptionalNumber(day.spo2Avg),
                     pulse_avg: toOptionalNumber(day.pulseAvg),
-                    data_quality: JSON.stringify(dq)
+                    data_quality: JSON.stringify(dq),
+                    rin_per_hr: toOptionalNumber(day.rin),
+                    csr_per_hr: toOptionalNumber(day.csr),
+                    snore_index: toOptionalNumber(day.snoreIndex),
+                    leak_spike_count: toOptionalNumber(day.leakSpikeCount),
+                    pressure_histogram: day.pressureHistogram ? JSON.stringify(day.pressureHistogram) : null,
+                    pressure_efficiency: toOptionalNumber(day.pressureEfficiency)
                 });
             }
 

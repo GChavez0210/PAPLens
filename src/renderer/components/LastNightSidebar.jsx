@@ -1,6 +1,57 @@
 import { useEffect, useState, useRef } from "react";
 import { formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
 
+// Human-readable labels for raw DB/analytics metric keys
+const METRIC_LABELS = {
+    ahi_total: "AHI (breathing events/hr)",
+    usage_hours: "therapy usage time",
+    leak_p50: "median mask leak",
+    leak_p95: "peak mask leak (95th pct)",
+    pressure_median: "delivered pressure",
+    minute_vent_p50: "minute ventilation",
+    tidal_vol_p50: "tidal volume (breath depth)",
+    resp_rate_p50: "respiratory rate",
+    flow_limitation_p95: "flow limitation index",
+};
+
+// Direction-aware natural language for a flagged metric
+function describeFlagInSidebar(metric, z) {
+    const higher = z > 0;
+    switch (metric) {
+        case "ahi_total":
+            return higher
+                ? "AHI was notably higher than your recent average — more breathing pauses than usual during the night."
+                : "AHI was unusually low — a positive sign of well-controlled therapy.";
+        case "usage_hours":
+            return higher
+                ? "You used therapy longer than usual last night."
+                : "Therapy was shorter than usual — check that the device ran through your full sleep window.";
+        case "leak_p50":
+        case "leak_p95":
+            return higher
+                ? "Mask leak was higher than your baseline — the seal may have been compromised during the night."
+                : "Mask leak was unusually low — excellent seal maintained throughout.";
+        case "pressure_median":
+            return higher
+                ? "Delivered pressure was higher than your recent average, possibly in response to more events."
+                : "Delivered pressure was lower than your recent average.";
+        case "minute_vent_p50":
+            return higher
+                ? "Breathing volume was notably higher than usual."
+                : "Breathing volume was lower than usual — may indicate shallow breathing or flow limitation.";
+        case "tidal_vol_p50":
+            return higher
+                ? "Breath depth (tidal volume) was above your baseline."
+                : "Breath depth was below your baseline — could reflect reduced ventilation effectiveness.";
+        default: {
+            const label = METRIC_LABELS[metric] || metric;
+            return higher
+                ? `${label} was higher than your recent average.`
+                : `${label} was lower than your recent average.`;
+        }
+    }
+}
+
 // ── Inline SVG sparkline (lightweight, no Chart.js) ─────────────────────────
 function AhiSparkline({ data = [] }) {
     if (!data.length) return null;
@@ -102,6 +153,10 @@ export function LastNightSidebar() {
     const scoreColor = score === null ? 'var(--muted)' : score >= 95 ? '#10b981' : score >= 85 ? '#22d3ee' : score >= 70 ? '#f59e0b' : score >= 50 ? '#f97316' : '#ef4444';
     const scoreTierLabel = score === null ? 'N/A' : score >= 95 ? 'Optimal' : score >= 85 ? 'Stable' : score >= 70 ? 'Acceptable' : score >= 50 ? 'Suboptimal' : 'High Risk';
 
+    // Leak p95 — treat 0 as no-data
+    const leak95Val = toMetricNumber(data.leak_p95);
+    const leak95Display = leak95Val !== null && leak95Val > 0 ? leak95Val : null;
+
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             <h3 style={{ margin: "0 0 1px 0", fontSize: '0.82rem' }}>Last Night Overview</h3>
@@ -119,7 +174,7 @@ export function LastNightSidebar() {
                 <div style={{ fontSize: '0.65rem', color: 'var(--muted)', marginTop: 1 }}>Treatment Score</div>
             </div>
 
-            {/* Score decomposition — estimated from available metrics */}
+            {/* Score decomposition */}
             {(() => {
                 const pAhi = scoreDetails.penaltyAhi ?? null;
                 const pLeak = scoreDetails.penaltyLeak ?? null;
@@ -144,8 +199,8 @@ export function LastNightSidebar() {
                 {[
                     ["AHI", `${formatMetricValue(data.ahi_total, 1)} ev/hr`],
                     ["Usage", `${formatMetricValue(data.usage_hours, 1)} hrs`],
-                    ["Pressure", `${formatMetricValue(data.pressure_median, 1)} cmH₂O`],
-                    ["Leak P95", `${formatMetricValue(data.leak_p95, 1)} L/min`],
+                    ["Pressure", `${formatMetricValue(toMetricNumber(data.pressure_median) > 0 ? data.pressure_median : null, 1)} cmH₂O`],
+                    ["Leak P95", `${formatMetricValue(leak95Display, 1)} L/min`],
                 ].map(([label, val]) => (
                     <div key={label} style={{ display: "flex", justifyContent: "space-between" }}>
                         <span style={{ color: "var(--muted)" }}>{label}</span>
@@ -154,26 +209,36 @@ export function LastNightSidebar() {
                 ))}
             </div>
 
-            {/* Alert flags */}
-            <div style={{ display: "flex", flexDirection: "column", gap: "5px", marginTop: 8 }}>
-                {outliers.length > 0 && (
-                    <div style={{ background: "rgba(239,68,68,0.1)", borderLeft: "3px solid #EF4444", padding: "8px", fontSize: "0.82em" }}>
-                        ⚠️ Unusual night detected ({outliers.map(o => o.metric).join(", ")})
+            {/* Alert flags — plain English, no raw keys */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: 8 }}>
+                {outliers.length > 0 && outliers.map((o, i) => (
+                    <div key={i} style={{ background: "rgba(239,68,68,0.1)", borderLeft: "3px solid #EF4444", padding: "8px 10px", fontSize: "0.80em", lineHeight: 1.5, borderRadius: "0 4px 4px 0" }}>
+                        <div style={{ fontWeight: 700, color: "#ef4444", marginBottom: 2 }}>Unusual Reading Flagged</div>
+                        <div style={{ color: "var(--text)" }}>{describeFlagInSidebar(o.metric, o.z)}</div>
                     </div>
-                )}
-                {toMetricNumber(data.leak_p95) !== null && data.leak_p95 >= 24 && (
-                    <div style={{ background: "rgba(245,158,11,0.1)", borderLeft: "3px solid #F59E0B", padding: "8px", fontSize: "0.82em" }}>
-                        💨 Leak elevated/high
+                ))}
+                {leak95Display !== null && leak95Display >= 24 && (
+                    <div style={{ background: "rgba(245,158,11,0.1)", borderLeft: "3px solid #F59E0B", padding: "8px 10px", fontSize: "0.80em", lineHeight: 1.5, borderRadius: "0 4px 4px 0" }}>
+                        <div style={{ fontWeight: 700, color: "#f59e0b", marginBottom: 2 }}>Elevated Mask Leak</div>
+                        <div style={{ color: "var(--text)" }}>
+                            Peak leak ({leak95Display.toFixed(1)} L/min) exceeded the 24 L/min clinical threshold. This reduces effective pressure delivery and may allow unresolved events during the night.
+                        </div>
                     </div>
                 )}
                 {toMetricNumber(data.ahi_total) !== null && data.ahi_total > 5 && (
-                    <div style={{ background: "rgba(245,158,11,0.1)", borderLeft: "3px solid #F59E0B", padding: "8px", fontSize: "0.82em" }}>
-                        📈 AHI above 5
+                    <div style={{ background: "rgba(245,158,11,0.1)", borderLeft: "3px solid #F59E0B", padding: "8px 10px", fontSize: "0.80em", lineHeight: 1.5, borderRadius: "0 4px 4px 0" }}>
+                        <div style={{ fontWeight: 700, color: "#f59e0b", marginBottom: 2 }}>AHI Above Normal Range</div>
+                        <div style={{ color: "var(--text)" }}>
+                            AHI of {Number(data.ahi_total).toFixed(1)} events/hr is above the 5 events/hr threshold considered controlled therapy. Occasional elevated nights are common — watch for a persistent pattern.
+                        </div>
                     </div>
                 )}
                 {toMetricNumber(data.usage_hours) !== null && data.usage_hours < 4 && (
-                    <div style={{ background: "rgba(239,68,68,0.1)", borderLeft: "3px solid #EF4444", padding: "8px", fontSize: "0.82em" }}>
-                        ⏳ Usage below 4h
+                    <div style={{ background: "rgba(239,68,68,0.1)", borderLeft: "3px solid #EF4444", padding: "8px 10px", fontSize: "0.80em", lineHeight: 1.5, borderRadius: "0 4px 4px 0" }}>
+                        <div style={{ fontWeight: 700, color: "#ef4444", marginBottom: 2 }}>Usage Below Compliance Minimum</div>
+                        <div style={{ color: "var(--text)" }}>
+                            Therapy ran for {Number(data.usage_hours).toFixed(1)} hrs, under the 4-hour nightly minimum required for clinical compliance. Check your sleep schedule and address any comfort issues.
+                        </div>
                     </div>
                 )}
             </div>

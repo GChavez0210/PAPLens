@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run:*)",
+      "Bash(node --test electron/main/analytics/scores.test.js)",
+      "Bash(node -e ':*)",
+      "Read(//d/DATALOG/**)"
+    ]
+  }
+}
