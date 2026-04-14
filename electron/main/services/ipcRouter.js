@@ -86,9 +86,12 @@ class IpcRouter {
             const mainWindow = this.windowManager.getMainWindow();
             if (!mainWindow) return { success: false, error: "No active window" };
             try {
+                const now = new Date();
+                const datePart = now.toISOString().slice(0, 10);
+                const timePart = now.toTimeString().slice(0, 8).replace(/:/g, "-");
                 const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
                     title: "Export Report as PDF",
-                    defaultPath: "PAPLens_Report.pdf",
+                    defaultPath: `PAPLens_Report_${datePart}_${timePart}.pdf`,
                     filters: [{ name: "PDF Files", extensions: ["pdf"] }]
                 });
                 if (canceled || !filePath) return { success: false, error: "Cancelled" };

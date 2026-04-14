@@ -4,7 +4,10 @@
       "Bash(npm run:*)",
       "Bash(node --test electron/main/analytics/scores.test.js)",
       "Bash(node -e ':*)",
-      "Read(//d/DATALOG/**)"
+      "Read(//d/DATALOG/**)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts, null, 2\\)\\); console.log\\(JSON.stringify\\(p.build?.win, null, 2\\)\\)\")",
+      "Bash(electron-builder --win --x64)",
+      "Bash(electron-builder --win --x64 --config.win.target=portable)"
     ]
   }
 }

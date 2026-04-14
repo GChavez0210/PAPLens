@@ -465,23 +465,47 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                             </section>
                         )}
 
-                        {/* Pressure histogram — latest night with histogram data */}
+                        {/* Pressure distribution — averaged across all nights with histogram data */}
                         {(() => {
-                            const withHist = sorted.find(d => d.pressure_histogram);
-                            if (!withHist) return null;
-                            let hist;
-                            try { hist = JSON.parse(withHist.pressure_histogram); } catch (_) { return null; }
-                            if (!hist || hist.length === 0) return null;
+                            const histNights = sorted.filter(d => d.pressure_histogram);
+                            if (histNights.length === 0) return null;
+
+                            // Parse all available histograms
+                            const parsed = histNights
+                                .map(d => { try { return JSON.parse(d.pressure_histogram); } catch (_) { return null; } })
+                                .filter(Boolean);
+                            if (parsed.length === 0) return null;
+
+                            // Average each bucket's pct across all nights
+                            const bucketMap = {};
+                            for (const hist of parsed) {
+                                for (const b of hist) {
+                                    const key = `${b.lo}-${b.hi}`;
+                                    if (!bucketMap[key]) bucketMap[key] = { lo: b.lo, hi: b.hi, total: 0, count: 0 };
+                                    bucketMap[key].total += b.pct;
+                                    bucketMap[key].count += 1;
+                                }
+                            }
+                            const avgHist = Object.values(bucketMap)
+                                .sort((a, b) => a.lo - b.lo)
+                                .map(b => ({ lo: b.lo, hi: b.hi, pct: b.total / b.count }));
+
+                            // Average pressure efficiency across nights that have it
+                            const effNights = histNights.filter(d => d.pressure_efficiency !== null && d.pressure_efficiency !== undefined);
+                            const avgEff = effNights.length > 0
+                                ? effNights.reduce((s, d) => s + d.pressure_efficiency, 0) / effNights.length
+                                : null;
+
                             return (
                                 <section className="panel" style={{ padding: 20 }}>
                                     <h3 style={{ margin: "0 0 4px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
-                                        Pressure Distribution — {withHist.night_date}
+                                        Pressure Distribution ({rangeLabel})
                                     </h3>
                                     <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: 14 }}>
-                                        Percentage of each 2-second epoch spent at each pressure level (cmH₂O).
-                                        {withHist.pressure_efficiency !== null && ` Device was near ceiling ${withHist.pressure_efficiency?.toFixed(1)}% of the session.`}
+                                        Average % of 2-second epochs at each pressure level across {parsed.length} night{parsed.length !== 1 ? "s" : ""} with high-resolution data.
+                                        {avgEff !== null && ` Avg time near pressure ceiling: ${avgEff.toFixed(1)}%.`}
                                     </div>
-                                    <PressureHistogramChart histogram={hist} height={200} />
+                                    <PressureHistogramChart histogram={avgHist} height={200} />
                                 </section>
                             );
                         })()}

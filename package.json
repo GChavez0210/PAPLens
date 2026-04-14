@@ -13,6 +13,7 @@
     "dist": "npm run build && electron-builder --win --x64 --arm64",
     "dist:x64": "npm run build && electron-builder --win --x64",
     "dist:arm64": "npm run build && electron-builder --win --arm64",
+    "dist:portable": "npm run build && electron-builder --win --x64 --config.win.target=portable",
     "format": "prettier --write .",
     "lint": "eslint .",
     "test-types": "tsc --noEmit",
@@ -67,11 +68,7 @@
       "icon": "src/renderer/assets/PLIcon.ico",
       "target": [
         {
-          "target": "nsis",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+          "target": "nsis"
         }
       ]
     },

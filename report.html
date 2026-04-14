@@ -408,16 +408,23 @@
                     <strong>CAI</strong><span>{{clinicalContext.avgCAI}} events/hr</span>
                     <strong>OAI/AI</strong><span>{{clinicalContext.avgOAI}} events/hr</span>
                     <strong>HI</strong><span>{{clinicalContext.avgHI}} events/hr</span>
+                    {{#if clinicalContext.avgRin}}<strong>RIN</strong><span>{{clinicalContext.avgRin}} events/hr</span>{{/if}}
+                    {{#if clinicalContext.avgSnoreIndex}}<strong>Snore Index</strong><span>{{clinicalContext.avgSnoreIndex}}% of session</span>{{/if}}
+                    {{#if clinicalContext.avgPressureEfficiency}}<strong>Pressure Efficiency</strong><span>{{clinicalContext.avgPressureEfficiency}}% near ceiling</span>{{/if}}
                     <strong>Nights analyzed</strong><span>{{clinicalContext.nightsAnalyzed}}</span>
                 </div>
-                <div class="mini" style="margin-top:6px;">Clinical value: event mix helps determine whether unresolved burden appears more obstructive, central, or mixed.</div>
+                <div class="mini" style="margin-top:6px;">Clinical value: event mix helps determine whether unresolved burden appears more obstructive, central, or mixed. RIN captures sub-threshold flow limitation not counted in AHI.</div>
             </div>
 
             <div class="card avoid-break">
                 <h3 class="section-title">Adherence Snapshot</h3>
                 <div class="kpi-value">{{clinicalContext.adherenceRate}}%</div>
-                <div class="kpi-label">Nights with usage >= 4 hours</div>
+                <div class="kpi-label">Nights with usage >= 4 hours (this range)</div>
                 <div class="mini">Formula: compliant nights / nights with recorded usage x 100</div>
+                {{#if clinicalContext.complianceRate}}
+                <div class="mini" style="margin-top:6px; font-weight:700;">30-Day CMS Compliance: {{clinicalContext.complianceRate}}%</div>
+                <div class="mini">{{clinicalContext.compliantNights}} of {{clinicalContext.complianceWindowNights}} nights qualify (≥ 4 hrs). CMS threshold is 70%.</div>
+                {{/if}}
                 <div class="mini" style="margin-top:6px;">Clinical value: helps separate therapy efficacy issues from insufficient exposure time.</div>
             </div>
             {{/if}}
@@ -455,19 +462,29 @@
                     <div class="why">Clinical value: tracks residual sleep-disordered breathing burden under therapy.</div>
                 </div>
                 <div class="formula">
-                    <div class="name">Adherence Rate</div>
-                    <div class="expr">nights with usage >= 4h / nights with recorded usage x 100</div>
-                    <div class="why">Clinical value: low adherence can explain persistent symptoms despite otherwise adequate settings.</div>
+                    <div class="name">Adherence Rate / 30-Day CMS Compliance</div>
+                    <div class="expr">nights ≥ 4 hrs / nights with recorded usage × 100</div>
+                    <div class="why">Clinical value: CMS requires ≥ 70% of nights with ≥ 4 hrs to classify therapy as compliant for coverage.</div>
                 </div>
                 <div class="formula">
                     <div class="name">Leak 95th Percentile</div>
-                    <div class="expr">95th percentile of nightly leak values</div>
-                    <div class="why">Clinical value: high leak can reduce delivered pressure and event detection accuracy.</div>
+                    <div class="expr">95th percentile of nightly peak leak values</div>
+                    <div class="why">Clinical value: values ≥ 24 L/min can reduce delivered pressure and event detection accuracy.</div>
+                </div>
+                <div class="formula">
+                    <div class="name">Respiratory Disturbance Index (RIN)</div>
+                    <div class="expr">flow-limited breaths not classified as apneas or hypopneas / hr</div>
+                    <div class="why">Clinical value: captures sub-threshold upper airway resistance that may fragment sleep without scoring in AHI.</div>
+                </div>
+                <div class="formula">
+                    <div class="name">Snore Index</div>
+                    <div class="expr">% of 2-second epochs where snore amplitude > 0.1</div>
+                    <div class="why">Clinical value: persistent snoring on therapy may indicate sub-optimal pressure or mouth breathing leak.</div>
                 </div>
                 <div class="formula" style="margin-bottom:0;">
-                    <div class="name">Correlation r</div>
-                    <div class="expr">Pearson coefficient from -1.00 to +1.00</div>
-                    <div class="why">Clinical value: shows what variables move together. Correlation does not prove causation.</div>
+                    <div class="name">Pressure Efficiency / Correlation r</div>
+                    <div class="expr">% epochs ≥ 90% of session max pressure | Pearson r from -1.00 to +1.00</div>
+                    <div class="why">High efficiency near ceiling suggests the max setting may be constraining the device. Correlation shows co-movement, not causation.</div>
                 </div>
             </div>
 
@@ -477,7 +494,8 @@
                     <li>Are my residual events mostly obstructive, central, or mixed based on this event profile and trend charts?</li>
                     <li>If leak is elevated, should we adjust mask type/fit before pressure setting changes?</li>
                     <li>Does my pressure pattern look reactive (events first, pressure second) or insufficient baseline support?</li>
-                    <li>Given adherence and symptom history, what is the most useful next intervention before my next follow-up?</li>
+                    <li>If RIN is elevated relative to AHI, could upper airway resistance or flow limitation be causing sleep fragmentation not captured by the event index?</li>
+                    <li>Given adherence, compliance rate, and symptom history, what is the most useful next intervention before my next follow-up?</li>
                 </ol>
                 <div class="callout" style="margin-top:8px;">
                     <div class="mini"><strong>Note:</strong> This report is an analytics aid and does not replace medical diagnosis or treatment decisions.</div>
@@ -551,7 +569,11 @@
                     <strong>Observed mode</strong><span>{{clinicalContext.therapyMode}}</span>
                     <strong>Nights analyzed</strong><span>{{clinicalContext.nightsAnalyzed}}</span>
                     <strong>Adherence</strong><span>{{clinicalContext.adherenceRate}}%</span>
+                    {{#if clinicalContext.complianceRate}}<strong>30-Day CMS</strong><span>{{clinicalContext.complianceRate}}% ({{clinicalContext.compliantNights}}/{{clinicalContext.complianceWindowNights}} nights)</span>{{/if}}
                     <strong>Leak 95th</strong><span>{{clinicalContext.leak95th}} L/min</span>
+                    {{#if clinicalContext.avgRin}}<strong>Avg RIN</strong><span>{{clinicalContext.avgRin}} events/hr</span>{{/if}}
+                    {{#if clinicalContext.avgSnoreIndex}}<strong>Snore Index</strong><span>{{clinicalContext.avgSnoreIndex}}% of session</span>{{/if}}
+                    {{#if clinicalContext.avgPressureEfficiency}}<strong>Pressure Efficiency</strong><span>{{clinicalContext.avgPressureEfficiency}}% near ceiling</span>{{/if}}
                 </div>
                 {{/if}}
 

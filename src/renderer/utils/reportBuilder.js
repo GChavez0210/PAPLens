@@ -13,6 +13,15 @@ export function getCorrelationInsight(pair, r) {
         return "Strong positive. Leak is a major driver of elevated AHI and should be prioritized for correction.";
     }
 
+    // Lag-1 therapy response index: Pressure (N) vs AHI (N+1)
+    if (p.includes("pressure (n)") && p.includes("ahi (n+1)")) {
+        if (r <= -0.40) return "Negative lag-1 relationship. Higher pressure tonight is associated with lower AHI the following night — consistent with effective auto-titration suppressing events.";
+        if (r < 0.20) return "No lag-1 relationship. Tonight's pressure level does not predict tomorrow's AHI, which is typical when therapy is well-calibrated.";
+        if (r < 0.40) return "Mild positive lag-1. Higher pressure slightly predicts higher next-night AHI, possibly reflecting reactive escalation that hasn't resolved the underlying obstruction.";
+        if (r < 0.60) return "Moderate positive lag-1. Pressure is rising in response to events but failing to suppress them on subsequent nights; settings may need adjustment.";
+        return "Strong positive lag-1. Pressure escalation is not resolving events night-over-night; mask fit or pressure ceiling limits may require clinical review.";
+    }
+
     if ((hasAll("pressure") && hasAll("ahi")) || (hasAll("ahi") && hasAll("pressure"))) {
         if (r <= -0.20) return "Negative relationship. Higher pressure is associated with lower AHI, indicating effective event suppression.";
         if (r < 0.20) return "No meaningful relationship. Pressure changes are not influencing AHI.";

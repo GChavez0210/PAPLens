@@ -397,14 +397,43 @@ export function App() {
       if (insightsData && insightsData.correlations) {
         reportData.correlations = {
           windowDays: insightPayload.days || 90,
-          pairs: insightsData.correlations.map(c => ({
-            pair: c.pair,
-            r: Number(c.r).toFixed(2),
-            n: clinicalContext?.nightsAnalyzed || 30, // Map against the actual analyzed density
-            label: c.r > 0.4 ? "Positive" : c.r < -0.4 ? "Negative" : "Weak/None",
-            plain: getCorrelationInsight(c.pair, c.r)
-          }))
+          pairs: insightsData.correlations.map(c => {
+            const pairLabel = `${c.x} ↔ ${c.y}`;
+            return {
+              pair: pairLabel,
+              r: Number(c.r).toFixed(2),
+              n: c.n || clinicalContext?.nightsAnalyzed || 30,
+              label: c.r > 0.4 ? "Positive" : c.r < -0.4 ? "Negative" : "Weak/None",
+              plain: getCorrelationInsight(pairLabel, c.r)
+            };
+          })
         };
+      }
+
+      // Augment clinicalContext with new metrics from high-resolution trend data
+      if (insightsData && insightsData.trends && reportData.clinicalContext) {
+        const trendsWithData = insightsData.trends.filter(d => (d.usage_hours || 0) > 0);
+
+        const rinNights = trendsWithData.filter(d => d.rin_per_hr !== null && d.rin_per_hr !== undefined);
+        if (rinNights.length > 0) {
+          reportData.clinicalContext.avgRin = (rinNights.reduce((s, d) => s + d.rin_per_hr, 0) / rinNights.length).toFixed(1);
+        }
+
+        const snoreNights = trendsWithData.filter(d => d.snore_index !== null && d.snore_index !== undefined);
+        if (snoreNights.length > 0) {
+          reportData.clinicalContext.avgSnoreIndex = (snoreNights.reduce((s, d) => s + d.snore_index, 0) / snoreNights.length).toFixed(1);
+        }
+
+        const effNights = trendsWithData.filter(d => d.pressure_efficiency !== null && d.pressure_efficiency !== undefined);
+        if (effNights.length > 0) {
+          reportData.clinicalContext.avgPressureEfficiency = (effNights.reduce((s, d) => s + d.pressure_efficiency, 0) / effNights.length).toFixed(1);
+        }
+
+        if (insightsData.complianceRate !== null && insightsData.complianceRate !== undefined) {
+          reportData.clinicalContext.complianceRate = insightsData.complianceRate;
+          reportData.clinicalContext.complianceWindowNights = insightsData.complianceWindowNights;
+          reportData.clinicalContext.compliantNights = insightsData.compliantNights;
+        }
       }
     } catch (e) {
       console.warn("Could not fetch correlations for pdf report", e);
@@ -552,9 +581,8 @@ export function App() {
         </aside>
 
         <section className="main-content">
-          {activeTab === "overview" && (
-            <>
-              <section style={{ margin: 0 }}>
+          <div style={{ display: activeTab === "overview" ? "block" : "none" }}>
+            <section style={{ margin: 0 }}>
                 {/* RANGE CONTROLS ROW */}
                 <div className="control-row" style={{ marginBottom: "20px" }}>
                   <h2 style={{ margin: 0 }}>Clinical Dashboard</h2>
@@ -728,8 +756,7 @@ export function App() {
                 )}
 
               </section>
-            </>
-          )}
+          </div>
 
           {activeTab === "sessions" && (
             <section className="panel flex-split" style={{ margin: 0 }}>
