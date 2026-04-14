@@ -115,7 +115,7 @@ PAPLens uses and builds upon the parsing approach from:
 
 ## Built with AI
 
-This application was built using an AI-assisted development workflow powered by **[Antigravity](https://antigravity.google/)** and **[Codex](https://chatgpt.com/codex)**. AI accelerated the creation of the codebase, enabling faster iteration cycles and a consistent architecture across the project.
+This application was built using an AI-assisted development workflow powered by **[Antigravity](https://antigravity.google/)** **[Claude Code](https://claude.ai)** and **[Codex](https://chatgpt.com/codex)**. AI accelerated the creation of the codebase, enabling faster iteration cycles and a consistent architecture across the project.
 
 All system design, validation, and testing remain under developer control. The application runs locally and deterministically, with no external AI services involved during normal operation, ensuring reliability and data privacy.
 
