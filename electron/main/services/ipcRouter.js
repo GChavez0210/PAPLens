@@ -277,11 +277,10 @@ class IpcRouter {
                 ? Math.round((compliantNights / complianceWindow.length) * 100)
                 : null;
 
-            const corrWindow = (days >= 30 || days === 0) ? 30 : 7;
             const latestCorrs = this.profileDb.db.prepare(`
-        SELECT results FROM correlations WHERE device_id = ? AND window_days = ?
+        SELECT results FROM correlations WHERE device_id = ?
         ORDER BY computed_at DESC LIMIT 1
-      `).get(device.id, corrWindow);
+      `).get(device.id);
 
             const explanations = this.profileDb.db.prepare(`
         SELECT title, summary, details, key, night_id 

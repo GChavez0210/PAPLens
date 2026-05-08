@@ -469,7 +469,19 @@
                 <div class="mini">{{summaryScores.explanations.maskFit}}</div>
             </div>
             {{else}}
+            {{#if correlations}}
+            <div class="card avoid-break">
+                <h3 class="section-title">Metric Correlations</h3>
+                <div class="mini" style="margin-bottom:5px;">|r| &lt; 0.20: minimal · 0.20–0.39: mild · 0.40–0.59: moderate · ≥ 0.60: strong</div>
+                <ol class="list" style="margin-bottom:0;">
+                    {{#each correlations.pairs}}
+                    <li><strong>{{this.pair}}</strong> (r={{this.r}}, n={{this.n}}): {{this.plain}}</li>
+                    {{/each}}
+                </ol>
+            </div>
+            {{else}}
             <div></div>
+            {{/if}}
             {{/if}}
         </div>
         {{/if}}

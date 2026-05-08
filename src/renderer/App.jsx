@@ -119,6 +119,7 @@ export function App() {
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataLoadingMessage, setDataLoadingMessage] = useState("");
   const [isReportGenerating, setIsReportGenerating] = useState(false);
+  const [showReportTip, setShowReportTip] = useState(false);
   const hasBootstrappedRef = useRef(false);
 
   const [theme, setTheme] = useState(() => localStorage.getItem('paplens-theme') || 'dark');
@@ -573,9 +574,24 @@ export function App() {
           >
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
-          <button className="btn-primary" onClick={saveReport}>
-            Save Data Report
-          </button>
+          <div style={{ position: 'relative' }}
+               onMouseEnter={() => setShowReportTip(true)}
+               onMouseLeave={() => setShowReportTip(false)}>
+            <button className="btn-primary" onClick={saveReport}>
+              Save Data Report
+            </button>
+            {showReportTip && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                background: 'var(--card-bg)', border: '1px solid var(--border)',
+                borderRadius: 10, padding: '10px 14px', width: 230, zIndex: 200,
+                fontSize: '0.8rem', color: 'var(--muted)', lineHeight: 1.55,
+                boxShadow: '0 4px 20px rgba(0,0,0,0.22)', pointerEvents: 'none'
+              }}>
+                Generates a printable PDF clinical summary — AHI, usage, leak, event profile, trend charts, and metric correlations. Designed to bring to your care team appointment.
+              </div>
+            )}
+          </div>
           <button className="btn-secondary" onClick={chooseFolder}>
             Import Data Folder
           </button>

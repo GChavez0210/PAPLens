@@ -65,9 +65,8 @@ class NightMetricsRepository {
         WHERE n.device_id = ? AND n.usage_hours > 0
       `),
             getNightsWithLimit: db.prepare(`
-        SELECT n.night_date AS date, m.ahi_total AS ahi, n.usage_hours AS usage,
-               m.pressure_median AS pressure, m.leak_p50 AS leak_p50, m.leak_p95 AS leak_p95,
-               m.minute_vent_p50 AS minute_vent_p50, m.resp_rate_p50 AS resp_rate_p50, m.tidal_vol_p50 AS tidal_vol_p50
+        SELECT n.night_date, m.ahi_total, n.usage_hours, m.pressure_median,
+               m.leak_p50, m.leak_p95, m.minute_vent_p50, m.resp_rate_p50, m.tidal_vol_p50
         FROM nights n JOIN night_metrics m ON m.night_id = n.id
         WHERE n.device_id = ? AND n.usage_hours > 0
         ORDER BY n.night_date DESC LIMIT ?
