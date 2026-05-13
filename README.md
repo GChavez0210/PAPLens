@@ -1,4 +1,4 @@
-# PAPLens (v1.0.0)
+# PAPLens (v1.3.0)
 
 <p align="center">
   <img src="PAPLens-logo.png" alt="PAPLens Logo" width="250">
@@ -133,57 +133,98 @@ Compatible devices: **ResMed AirSense 10** and **AirSense 11** series.
 
 ## Runtime requirements (for users)
 
-- Windows 10/11
-- `x64` or `arm64`
-- No cloud services required (local/offline use)
+- Windows 10 or 11 (x64 or arm64)
+- No internet connection required — all processing is local
 
-## Development requirements (for contributors/builders)
+## Build your own installer
 
-- Node.js 22+
-- npm 10+
-- Python 3.12+ (for native module rebuild via `node-gyp`)
-- Visual Studio 2022 Build Tools with C++ workload
+These steps produce a signed NSIS installer (`PAPLens Setup x.x.x.exe`) from source.
 
-## Install and run locally (development)
+### 1. Install prerequisites
+
+All of the following are required. Install them in order.
+
+| Tool | Minimum version | Download |
+|------|-----------------|----------|
+| **Git** | any recent | https://git-scm.com/downloads |
+| **Node.js** | 22 LTS | https://nodejs.org/ |
+| **Python** | 3.12 | https://www.python.org/downloads/ |
+| **Visual Studio Build Tools** | 2022 | https://visualstudio.microsoft.com/visual-cpp-build-tools/ |
+
+> **Visual Studio Build Tools setup**: run the installer and select the **"Desktop development with C++"** workload. This is required by `node-gyp` to compile `better-sqlite3` native bindings.
+
+Verify your environment before continuing:
+
+```powershell
+node --version   # should print v22.x.x or higher
+npm --version    # should print 10.x.x or higher
+python --version # should print 3.12.x or higher
+```
+
+### 2. Clone and install dependencies
 
 ```bash
 git clone https://github.com/GChavez0210/PAPLens.git
 cd PAPLens
 npm install
-npm run dev
 ```
 
-Notes:
+`npm install` will automatically rebuild the native `better-sqlite3` binary for your Electron version via the `postinstall` hook.
 
-- Dev server uses `5173` with strict port mode.
-- If Electron fails with `app.whenReady` undefined, clear `ELECTRON_RUN_AS_NODE` in your shell:
+### 3. Build the installer
 
-```powershell
-$env:ELECTRON_RUN_AS_NODE=$null
-npm run dev
-```
-
-## Build commands
+**x64 (most users):**
 
 ```bash
-npm run build
-npm run dist
 npm run dist:x64
+```
+
+**arm64 (Surface Pro X, Snapdragon laptops):**
+
+```bash
 npm run dist:arm64
 ```
 
-Outputs are written to `release/`.
+**Both architectures in one pass:**
 
-## Installer output
+```bash
+npm run dist
+```
 
-Primary installer (multi-arch NSIS):
+The build takes 2–5 minutes. Output is written to `release/`:
 
-- `release/PAPLens Setup 1.0.0.exe`
+```
+release/
+  PAPLens Setup 1.3.0.exe        ← NSIS installer
+  PAPLens Setup 1.3.0.exe.blockmap
+  win-unpacked/                  ← runnable without installing
+```
 
-Unpacked folders are also produced for direct binary testing:
+### 4. Run without installing (optional)
 
-- `release/win-unpacked`
-- `release/win-arm64-unpacked`
+To test the build without running the installer:
+
+```powershell
+.\release\win-unpacked\PAPLens.exe
+```
+
+### Troubleshooting common build errors
+
+| Error | Fix |
+|-------|-----|
+| `gyp ERR! find Python` | Add Python to `PATH` or run `npm config set python C:\path\to\python.exe` |
+| `MSBuild not found` | Open the Visual Studio Installer and confirm the **C++ build tools** workload is installed |
+| `ELECTRON_RUN_AS_NODE` prevents startup | Run `$env:ELECTRON_RUN_AS_NODE=$null` in PowerShell before `npm run dev` |
+| `node_modules` missing after cloning a worktree | Run `npm install` inside the worktree directory, or symlink the parent's `node_modules` |
+| Antivirus locks the output `.exe` | Temporarily pause real-time protection during the packaging step, or add `release/` to exclusions |
+
+## Run in development mode
+
+```bash
+npm run dev
+```
+
+Opens the Vite dev server on `http://localhost:5173` and launches Electron pointing at it. Hot-reload is active for renderer changes; restart Electron for main-process changes.
 
 ## PDF report generation
 

@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented in this file.
 
+## [1.3.0] - 2026-05-13
+
+### Added
+
+- **Metrics:** RIN (respiratory irregularity) and snore index tracking per night, surfaced in reports and the database.
+- **Analytics:** Correlation analysis between key therapy metrics (AHI, leak, pressure, tidal volume), stored per device and surfaced in the Insights view.
+- **Analytics:** Therapy stability score tier labels and visual badges for at-a-glance session quality.
+- **Report:** Tooltip overlays on report section headers for contextual metric explanations.
+- **Report:** Pressure histogram data captured from PLD waveform files and included in exported reports.
+- **Report:** Configurable export filename with datestamp and time suffix.
+
+### Changed
+
+- Polished report UI layout and export flow (dialog and progress feedback).
+- Pressure chart uses P95 delivered mask pressure as primary source, falling back to configured max.
+- DB queries tuned for insights and last-night overview endpoints.
+
 ## [1.0.0] - 2026-03-05
 
 ### Added

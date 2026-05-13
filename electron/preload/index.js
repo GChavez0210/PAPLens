@@ -22,6 +22,11 @@ contextBridge.exposeInMainWorld("cpapAPI", {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("cpap:data-loaded", listener);
     return () => ipcRenderer.removeListener("cpap:data-loaded", listener);
+  },
+  onImportProgress: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("cpap:import-progress", listener);
+    return () => ipcRenderer.removeListener("cpap:import-progress", listener);
   }
 });
 

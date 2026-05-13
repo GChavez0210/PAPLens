@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { parseSTRFile, parseSessionFile } = require("../parsers/edf-parser");
+const { parseSTRFile, parseSessionFile, parseSessionFileAsync } = require("../parsers/edf-parser");
 const {
   buildLeakAndTidalSummary,
   describeSamples,
@@ -65,11 +65,11 @@ class CPAPDataLoader {
     return this.deviceCapabilities;
   }
 
-  async loadAll() {
+  async loadAll(onProgress) {
     await this.loadDeviceInfo();
     await this.loadDailySummary();
     await this.loadSessionList();
-    return this.getSummary();
+    return this.getSummary(onProgress);
   }
 
   async loadDeviceInfo() {
@@ -278,7 +278,7 @@ class CPAPDataLoader {
     return detail;
   }
 
-  buildNightlySessionMetrics() {
+  async buildNightlySessionMetrics(onProgress) {
     if (this.nightlySessionMetrics) {
       return this.nightlySessionMetrics;
     }
@@ -286,10 +286,14 @@ class CPAPDataLoader {
     const { supportsOximetry } = this.getDeviceCapabilities();
     const nightly = new Map();
     let skippedUnsupportedSa2 = false;
+    const total = this.sessions.length;
+    let done = 0;
 
     for (const session of this.sessions) {
       const nightKey = this.getSleepNightKey(session.timestamp);
       if (!nightKey) {
+        done++;
+        if (onProgress) onProgress({ done, total });
         continue;
       }
 
@@ -312,7 +316,7 @@ class CPAPDataLoader {
 
       if (session.files.PLD) {
         try {
-          const pld = parseSessionFile(session.files.PLD);
+          const pld = await parseSessionFileAsync(session.files.PLD);
           aggregate.leakSamples.push(...(pld.data["Leak.2s"] || []));
           aggregate.tidalSamples.push(...(pld.data["TidVol.2s"] || []));
           aggregate.minVentSamples.push(...(pld.data["MinVent.2s"] || []));
@@ -328,7 +332,7 @@ class CPAPDataLoader {
 
       if (session.files.SA2 && supportsOximetry) {
         try {
-          const sa2 = parseSessionFile(session.files.SA2);
+          const sa2 = await parseSessionFileAsync(session.files.SA2);
           aggregate.pulseSamples.push(...(sa2.data["Pulse.1s"] || []));
           aggregate.spo2Samples.push(...(sa2.data["SpO2.1s"] || []));
         } catch (error) {
@@ -340,12 +344,17 @@ class CPAPDataLoader {
 
       if (session.files.EVE) {
         try {
-          const eve = parseSessionFile(session.files.EVE);
+          const eve = await parseSessionFileAsync(session.files.EVE);
           aggregate.annotations.push(...(eve.data["EDF Annotations"] || []));
         } catch (error) {
           safeInfo(console, `[session-parse] Failed EVE parse for ${session.id}: ${error.message}`);
         }
       }
+
+      done++;
+      if (onProgress) onProgress({ done, total });
+      // Yield to the event loop so IPC and renderer remain responsive
+      await new Promise((resolve) => setImmediate(resolve));
     }
 
     this.nightlySessionMetrics = new Map(
@@ -362,13 +371,13 @@ class CPAPDataLoader {
     return this.nightlySessionMetrics;
   }
 
-  getDailyStats() {
+  async getDailyStats(onProgress) {
     if (!this.dailySummary || !this.dailySummary.days) {
       return [];
     }
 
     const { supportsOximetry } = this.getDeviceCapabilities();
-    const nightlySessionMetrics = this.buildNightlySessionMetrics();
+    const nightlySessionMetrics = await this.buildNightlySessionMetrics(onProgress);
 
     const stats = this.dailySummary.days
       .map((day, index) => {
@@ -486,8 +495,8 @@ class CPAPDataLoader {
     return stats;
   }
 
-  getSummary() {
-    const stats = this.getDailyStats();
+  async getSummary(onProgress) {
+    const stats = await this.getDailyStats(onProgress);
     const recentDays = stats.slice(-30);
 
     const calcAvg = (field) => {

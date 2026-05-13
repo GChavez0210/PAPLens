@@ -39,3 +39,7 @@ DATALOG/
 release/
 release_debug/
 Test Data/
+
+# Claude Code — local config and worktrees (may contain local paths or session data)
+.claude/
+CLAUDE.md

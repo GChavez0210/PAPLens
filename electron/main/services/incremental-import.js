@@ -9,10 +9,10 @@ class IncrementalImporter {
         this.loader = new CPAPDataLoader(dataPath);
     }
 
-    async runImport() {
+    async runImport(onProgress) {
         this.db.exec('BEGIN TRANSACTION;');
         try {
-            const summary = await this.loader.loadAll();
+            const summary = await this.loader.loadAll(onProgress);
             const deviceId = this.upsertDevice();
 
             let insertedCount = 0;

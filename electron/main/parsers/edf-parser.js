@@ -266,8 +266,15 @@ function parseSessionFile(filePath) {
   return parser.parse(filePath);
 }
 
+async function parseSessionFileAsync(filePath) {
+  const buffer = await fs.promises.readFile(filePath);
+  const parser = new EDFParser();
+  return parser.parseBuffer(buffer);
+}
+
 module.exports = {
   EDFParser,
   parseSTRFile,
-  parseSessionFile
+  parseSessionFile,
+  parseSessionFileAsync
 };

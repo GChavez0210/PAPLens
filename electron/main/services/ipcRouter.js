@@ -179,7 +179,7 @@ class IpcRouter {
         ipcMain.handle("cpap:set-time-filter", async (_event, dayStartHour, dayEndHour) => {
             if (!this.cpap.dataLoader) return { success: false, error: "No data loaded" };
             this.cpap.dataLoader.setDayBoundary(dayStartHour, dayEndHour);
-            const summary = this.cpap.dataLoader.getSummary();
+            const summary = await this.cpap.dataLoader.getSummary();
             this.cpap.currentSummary = summary;
             if (this.windowManager.getMainWindow()) {
                 this.windowManager.getMainWindow().webContents.send("cpap:data-loaded", summary);

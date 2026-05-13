@@ -75,7 +75,10 @@ class CpapService {
             return null;
         }
         const importer = new IncrementalImporter(this.profileDatabase.db, dataPath);
-        const result = await importer.runImport();
+        const onProgress = (progress) => {
+            this.mainWindow?.webContents.send("cpap:import-progress", progress);
+        };
+        const result = await importer.runImport(onProgress);
         if (!result.success) return { error: result.error };
 
         const summary = result.summary;

@@ -118,6 +118,7 @@ export function App() {
   const [sessionDetail, setSessionDetail] = useState(null);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataLoadingMessage, setDataLoadingMessage] = useState("");
+  const [importProgress, setImportProgress] = useState(null);
   const [isReportGenerating, setIsReportGenerating] = useState(false);
   const [showReportTip, setShowReportTip] = useState(false);
   const hasBootstrappedRef = useRef(false);
@@ -203,10 +204,14 @@ export function App() {
       setSummary(data);
       setStatus("Loaded");
     });
+    const unsubscribeProgress = window.cpapAPI.onImportProgress((progress) => {
+      setImportProgress(progress);
+    });
 
     return () => {
       cancelled = true;
       unsubscribe();
+      unsubscribeProgress();
     };
   }, []);
 
@@ -282,6 +287,7 @@ export function App() {
 
   const chooseFolder = async () => {
     setIsDataLoading(true);
+    setImportProgress(null);
     setDataLoadingMessage("Parsing your CPAP data files and running analysis...");
     setStatus("Importing data folder...");
     try {
@@ -294,11 +300,13 @@ export function App() {
       }
     } finally {
       setIsDataLoading(false);
+      setImportProgress(null);
     }
   };
 
   const refresh = async () => {
     setIsDataLoading(true);
+    setImportProgress(null);
     setDataLoadingMessage("Refreshing therapy data and recomputing metrics...");
     setStatus("Refreshing data...");
     try {
@@ -311,6 +319,7 @@ export function App() {
       }
     } finally {
       setIsDataLoading(false);
+      setImportProgress(null);
     }
   };
 
@@ -523,6 +532,22 @@ export function App() {
             <p style={{ color: 'var(--muted)', margin: 0, fontSize: '0.875rem', lineHeight: 1.6 }}>
               {dataLoadingMessage}
             </p>
+            {importProgress && importProgress.total > 0 && (
+              <div style={{ marginTop: 16, width: '100%' }}>
+                <div style={{ height: 4, background: 'var(--border)', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${Math.round((importProgress.done / importProgress.total) * 100)}%`,
+                    background: '#22D3EE',
+                    transition: 'width 0.15s ease',
+                    borderRadius: 2
+                  }} />
+                </div>
+                <p style={{ color: 'var(--muted)', margin: '8px 0 0', fontSize: '0.75rem' }}>
+                  {importProgress.done} / {importProgress.total} sessions parsed
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}
