@@ -1,4 +1,4 @@
-# PAPLens (v1.3.0)
+# PAPLens (v1.4.0)
 
 <p align="center">
   <img src="PAPLens-logo.png" alt="PAPLens Logo" width="250">
@@ -23,7 +23,7 @@ PAPLens is a fully offline desktop analytics tool for ResMed PAP therapy data. I
 - Provides a dashboard with trend charts, a sleep calendar heatmap, and a last-night summary sidebar.
 - Provides an Insights page with metric trends, CMS compliance tracking, and Pearson correlation analysis.
 - Generates print-ready two-page PDF reports intended for patient-to-clinician review.
-- Exports a Windows installer for both `x64` and `arm64`.
+- Exports platform-native installers: **Windows** (NSIS `.exe`), **macOS** (DMG), and **Linux** (AppImage) — each supporting `x64` and `arm64`.
 
 ## Screenshots
 
@@ -129,39 +129,42 @@ Compatible devices: **ResMed AirSense 10** and **AirSense 11** series.
 | Charts | Chart.js 4 |
 | Database | SQLite via better-sqlite3 |
 | Report templating | Handlebars |
-| Packaging | electron-builder — NSIS installer, x64 + arm64 |
+| Packaging | electron-builder — NSIS (Windows), DMG (macOS), AppImage (Linux), x64 + arm64 |
 
 ## Runtime requirements (for users)
 
-- Windows 10 or 11 (x64 or arm64)
-- No internet connection required — all processing is local
+| Platform | Supported versions |
+|----------|--------------------|
+| **Windows** | 10 or 11 (x64 or arm64) |
+| **macOS** | 11 Big Sur or later (Intel x64 or Apple Silicon arm64) |
+| **Linux** | Any modern distro with FUSE support (x64 or arm64) — runs as AppImage, no install needed |
+
+No internet connection required — all processing is local.
 
 ## Build your own installer
 
-These steps produce a signed NSIS installer (`PAPLens Setup x.x.x.exe`) from source.
+Each platform must be built on its matching OS — cross-compilation is not supported. The `npm run dist` command automatically targets the OS you're building on.
 
-### 1. Install prerequisites
+### Prerequisites
 
-All of the following are required. Install them in order.
+| Tool | Minimum version | All platforms | Windows only |
+|------|-----------------|:---:|:---:|
+| **Git** | any recent | ✓ | |
+| **Node.js** | 22 LTS | ✓ | |
+| **Python** | 3.12 | ✓ | |
+| **Visual Studio Build Tools 2022** | — | | ✓ |
 
-| Tool | Minimum version | Download |
-|------|-----------------|----------|
-| **Git** | any recent | https://git-scm.com/downloads |
-| **Node.js** | 22 LTS | https://nodejs.org/ |
-| **Python** | 3.12 | https://www.python.org/downloads/ |
-| **Visual Studio Build Tools** | 2022 | https://visualstudio.microsoft.com/visual-cpp-build-tools/ |
+> **Windows — Visual Studio Build Tools**: run the installer and select the **"Desktop development with C++"** workload. Required by `node-gyp` to compile `better-sqlite3` native bindings.
 
-> **Visual Studio Build Tools setup**: run the installer and select the **"Desktop development with C++"** workload. This is required by `node-gyp` to compile `better-sqlite3` native bindings.
+Verify your environment:
 
-Verify your environment before continuing:
-
-```powershell
-node --version   # should print v22.x.x or higher
-npm --version    # should print 10.x.x or higher
-python --version # should print 3.12.x or higher
+```bash
+node --version   # v22.x.x or higher
+npm --version    # 10.x.x or higher
+python --version # 3.12.x or higher
 ```
 
-### 2. Clone and install dependencies
+### 1. Clone and install dependencies
 
 ```bash
 git clone https://github.com/GChavez0210/PAPLens.git
@@ -169,54 +172,62 @@ cd PAPLens
 npm install
 ```
 
-`npm install` will automatically rebuild the native `better-sqlite3` binary for your Electron version via the `postinstall` hook.
+`npm install` automatically rebuilds the native `better-sqlite3` binary for your Electron version via the `postinstall` hook.
 
-### 3. Build the installer
+### 2. Build the installer
 
-**x64 (most users):**
+Run the appropriate command for your OS:
 
+**Windows** — produces `release/PAPLens Setup x.x.x.exe` (NSIS):
 ```bash
-npm run dist:x64
+npm run dist:win        # both x64 and arm64
+npm run dist:win:x64    # x64 only
+npm run dist:win:arm64  # arm64 only (Surface Pro X, Snapdragon)
 ```
 
-**arm64 (Surface Pro X, Snapdragon laptops):**
-
+**macOS** — produces `release/PAPLens-x.x.x.dmg` (Intel + Apple Silicon):
 ```bash
-npm run dist:arm64
+npm run dist:mac
 ```
 
-**Both architectures in one pass:**
+**Linux** — produces `release/PAPLens-x.x.x.AppImage` (x64 + arm64):
+```bash
+npm run dist:linux
+```
 
+**Current OS (auto-detect):**
 ```bash
 npm run dist
 ```
 
-The build takes 2–5 minutes. Output is written to `release/`:
+The build takes 2–5 minutes. Output goes to `release/`.
 
-```
-release/
-  PAPLens Setup 1.3.0.exe        ← NSIS installer
-  PAPLens Setup 1.3.0.exe.blockmap
-  win-unpacked/                  ← runnable without installing
-```
+### 3. Run without installing (optional)
 
-### 4. Run without installing (optional)
-
-To test the build without running the installer:
-
+**Windows:**
 ```powershell
 .\release\win-unpacked\PAPLens.exe
 ```
 
-### Troubleshooting common build errors
+**macOS:**
+```bash
+open release/mac/PAPLens.app
+```
+
+**Linux:**
+```bash
+chmod +x release/PAPLens-*.AppImage && ./release/PAPLens-*.AppImage
+```
+
+### Troubleshooting
 
 | Error | Fix |
 |-------|-----|
-| `gyp ERR! find Python` | Add Python to `PATH` or run `npm config set python C:\path\to\python.exe` |
-| `MSBuild not found` | Open the Visual Studio Installer and confirm the **C++ build tools** workload is installed |
-| `ELECTRON_RUN_AS_NODE` prevents startup | Run `$env:ELECTRON_RUN_AS_NODE=$null` in PowerShell before `npm run dev` |
-| `node_modules` missing after cloning a worktree | Run `npm install` inside the worktree directory, or symlink the parent's `node_modules` |
-| Antivirus locks the output `.exe` | Temporarily pause real-time protection during the packaging step, or add `release/` to exclusions |
+| `gyp ERR! find Python` | Add Python to `PATH` or run `npm config set python /path/to/python` |
+| `MSBuild not found` (Windows) | Open the Visual Studio Installer and confirm the **C++ build tools** workload is installed |
+| `ELECTRON_RUN_AS_NODE` prevents startup | Run `$env:ELECTRON_RUN_AS_NODE=$null` (PowerShell) or `unset ELECTRON_RUN_AS_NODE` (bash) before `npm run dev` |
+| AppImage won't run on Linux | Install FUSE: `sudo apt install libfuse2` (Debian/Ubuntu) or `sudo dnf install fuse` (Fedora) |
+| Antivirus locks the output `.exe` | Temporarily pause real-time protection during packaging, or add `release/` to exclusions |
 
 ## Run in development mode
 
