@@ -1,6 +1,6 @@
 {
   "name": "paplens",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Self-contained Electron CPAP Viewer forked from xpaulso/cpap-viewer",
   "main": "electron/main/index.js",
   "scripts": {
