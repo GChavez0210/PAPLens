@@ -385,6 +385,24 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
 
   const [activeIdx, setActiveIdx] = useState(initialIdx);
   const [detail, setDetail] = useState(null);
+  const [reattaching, setReattaching] = useState(false);
+
+  const loadSession = async (session, onResult) => {
+    try {
+      let d;
+      if (session.id) {
+        d = await window.cpapAPI.getSessionDetail(session.id);
+      } else if (session.timestamp) {
+        const dateStr = String(session.timestamp).split("T")[0];
+        d = await window.cpapAPI.getBestSessionForDate(dateStr);
+      } else {
+        d = { error: "No session identifier available." };
+      }
+      onResult(d);
+    } catch (err) {
+      onResult({ error: err?.message || "Failed to load session." });
+    }
+  };
 
   // Reload EDF data whenever the selected session changes.
   useEffect(() => {
@@ -392,27 +410,28 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
     if (!session) return undefined;
     setDetail(null);
     let cancelled = false;
-
-    const load = async () => {
-      try {
-        let d;
-        if (session.id) {
-          d = await window.cpapAPI.getSessionDetail(session.id);
-        } else if (session.timestamp) {
-          const dateStr = String(session.timestamp).split("T")[0];
-          d = await window.cpapAPI.getBestSessionForDate(dateStr);
-        } else {
-          d = { error: "No session identifier available." };
-        }
-        if (!cancelled) setDetail(d);
-      } catch (err) {
-        if (!cancelled) setDetail({ error: err?.message || "Failed to load session." });
-      }
-    };
-
-    load();
+    loadSession(session, (d) => { if (!cancelled) setDetail(d); });
     return () => { cancelled = true; };
   }, [activeIdx, sessions]);
+
+  const handleReattach = async () => {
+    setReattaching(true);
+    try {
+      const result = await window.cpapAPI.reattachSessionFolder();
+      if (!result?.success) {
+        setReattaching(false);
+        return;
+      }
+      // Retry loading the current session now that the folder is attached.
+      setDetail(null);
+      const session = sessions[activeIdx];
+      if (session) loadSession(session, setDetail);
+    } catch (err) {
+      setDetail({ error: err?.message || "Failed to locate folder." });
+    } finally {
+      setReattaching(false);
+    }
+  };
 
   const activeSession = sessions[activeIdx] || null;
 
@@ -577,7 +596,24 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
         {!detail ? (
           <EmptyGraph title="Loading session graphs" message="Parsing the selected session EDF files..." />
         ) : detail?.error ? (
-          <EmptyGraph title="Session unavailable" message={detail.error} />
+          <section className="session-graph-card session-graph-empty">
+            <h3>Session unavailable</h3>
+            <p>{detail.error}</p>
+            {detail.error.toLowerCase().includes("original folder") && (
+              <button
+                type="button"
+                onClick={handleReattach}
+                disabled={reattaching}
+                style={{
+                  marginTop: 12, padding: "8px 18px", borderRadius: 6, cursor: reattaching ? "wait" : "pointer",
+                  background: "var(--accent, #22D3EE)", color: "#000", border: "none",
+                  fontWeight: 700, fontSize: "0.85rem", opacity: reattaching ? 0.6 : 1
+                }}
+              >
+                {reattaching ? "Locating…" : "Locate data folder"}
+              </button>
+            )}
+          </section>
         ) : (
           <div className="session-graphs-grid">
             {graphData.pressure.length > 0 ? (

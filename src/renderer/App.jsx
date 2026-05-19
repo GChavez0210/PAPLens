@@ -122,6 +122,7 @@ export function App() {
   const [importProgress, setImportProgress] = useState(null);
   const [isReportGenerating, setIsReportGenerating] = useState(false);
   const [showReportTip, setShowReportTip] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
   const hasBootstrappedRef = useRef(false);
 
   const [theme, setTheme] = useState(() => localStorage.getItem('paplens-theme') || 'dark');
@@ -136,6 +137,11 @@ export function App() {
       document.body.classList.remove('light-mode');
     }
   }, [theme]);
+
+  useEffect(() => {
+    const unsub = window.cpapAPI.onShowAbout(() => setShowAboutModal(true));
+    return unsub;
+  }, []);
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -891,6 +897,9 @@ export function App() {
                 )}
 
               </section>
+              <div style={{ textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 }}>
+                PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
+              </div>
           </div>
 
           {activeTab === "sessions" && (
@@ -990,6 +999,9 @@ export function App() {
                   </div>
                 )}
               </div>
+              <div style={{ textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 }}>
+                PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
+              </div>
             </section>
           )}
 
@@ -1024,10 +1036,67 @@ export function App() {
                 </div>
               </div>
               <Insights range={range} customFrom={customFrom} customTo={customTo} theme={theme} sessions={summary?.sessions || []} />
+              <div style={{ textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 }}>
+                PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
+              </div>
             </section>
           )}
         </section>
       </div>
+
+      {showAboutModal && (
+        <div
+          onClick={() => setShowAboutModal(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 2000,
+            backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+            background: 'rgba(0,0,0,0.65)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
+          }}
+        >
+          <div
+            role="dialog" aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: 'var(--card-bg)', border: '1px solid var(--border)',
+              borderRadius: 20, padding: '48px 56px', textAlign: 'center',
+              boxShadow: '0 32px 100px rgba(0,0,0,0.7)', maxWidth: 420, width: '90%'
+            }}
+          >
+            <img
+              src={theme === 'light'
+                ? new URL("./assets/PLLogoL.png", import.meta.url).href
+                : new URL("./assets/PLLogoD.png", import.meta.url).href}
+              alt="PAPLens"
+              style={{ height: 64, width: 'auto', marginBottom: 20 }}
+            />
+            <h2 style={{ margin: '0 0 6px', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)' }}>
+              PAPLens
+            </h2>
+            <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>
+              Clinical CPAP Analytics
+            </div>
+            <p style={{ margin: '0 0 28px', fontSize: '0.9rem', color: 'var(--muted)', lineHeight: 1.7 }}>
+              PAPLens processes your CPAP data entirely offline — no accounts,
+              no cloud, no data leaving your device.
+            </p>
+            <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20, fontSize: '0.8rem', color: 'var(--muted)' }}>
+              PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
+            </div>
+            <button
+              onClick={() => setShowAboutModal(false)}
+              style={{
+                marginTop: 24, padding: '10px 28px',
+                background: 'var(--brand)', color: '#fff',
+                border: 'none', borderRadius: 10, cursor: 'pointer',
+                fontSize: '0.9rem', fontWeight: 600
+              }}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

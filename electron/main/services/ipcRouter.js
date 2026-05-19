@@ -383,6 +383,23 @@ class IpcRouter {
             return pId ? this.appDb.getProfile(pId) : null;
         });
 
+        ipcMain.handle("cpap:reattach-session-folder", async () => {
+            const mainWindow = this.windowManager.getMainWindow();
+            if (!mainWindow) return { success: false, error: "No active window" };
+            const result = await dialog.showOpenDialog(mainWindow, {
+                properties: ["openDirectory"],
+                title: "Locate CPAP Data Folder"
+            });
+            if (result.canceled || result.filePaths.length === 0) {
+                return { success: false, error: "No folder selected" };
+            }
+            try {
+                return await this.cpap.reattachSessionFolder(result.filePaths[0]);
+            } catch (err) {
+                return { success: false, error: err.message };
+            }
+        });
+
         ipcMain.handle("diag:resolve-host", async (_event, hostname) => resolveHost(hostname));
         ipcMain.handle("diag:tcp-probe", async (_event, host, port, timeoutMs) => probeTcp(host, port, timeoutMs));
         ipcMain.handle("diag:node-version", async () => getNodeVersionFromChildProcess());

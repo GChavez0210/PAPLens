@@ -28,7 +28,7 @@ PAPLens is a fully offline desktop analytics tool for ResMed PAP therapy data. I
 - Runs a full analytics pipeline on import: scoring, outlier detection, correlation analysis, periodic breathing detection, and insight narrative generation — all local, no cloud.
 - Provides a dashboard with trend charts, a sleep calendar heatmap, and a last-night summary sidebar.
 - Provides an Insights page with metric trends, CMS compliance tracking, Pearson correlation analysis, periodic breathing analysis, and flow limitation tracking.
-- Opens per-session waveform viewers showing high-resolution EDF signals (flow, pressure, leak, SpO₂) with detected event overlays.
+- Opens per-session waveform viewers showing high-resolution EDF signals (flow, pressure, leak, SpO₂) with detected event overlays — session data is cached locally on first import so graphs remain accessible after the SD card is removed.
 - Generates print-ready two-page PDF reports intended for patient-to-clinician review.
 - Exports platform-native installers: **Windows** (NSIS `.exe`), **macOS** (DMG), and **Linux** (AppImage) — each supporting `x64` and `arm64`.
 
@@ -74,7 +74,7 @@ PAPLens is a fully offline desktop analytics tool for ResMed PAP therapy data. I
 - **Tidal volume chart** — nightly tidal volume P50
 - **Sleep calendar heatmap** — colour-coded calendar across all imported nights
 - **Last night sidebar** — most recent session summary with sparklines for key metrics
-- **Session waveform viewer** — click any day to open high-resolution EDF signal charts for that session (flow rate, breathing amplitude, flagged events, flow limitation, leak, pressure) with periodic breathing episode overlays
+- **Session waveform viewer** — click any day to open high-resolution EDF signal charts for that session (flow rate, breathing amplitude, flagged events, flow limitation, leak, pressure) with periodic breathing episode overlays; EDF files are cached locally during import so waveforms remain accessible without the SD card
 - **Time range filter** — presets (7 / 14 / 30 / 90 / 180 days / all time) plus a custom date range picker
 - **Sleep boundary hour** — adjustable start-of-day hour for shift workers or non-standard schedules
 - **Dark / light theme** toggle
@@ -129,7 +129,7 @@ The **Save Data Report** button (hover for description) generates a print-ready 
 ## Multi-profile support
 
 - Create, switch, and delete profiles for different patients or device configurations
-- Each profile has its own isolated SQLite database and remembers the last-used data path
+- Each profile has its own isolated SQLite database, session EDF cache, and last-used data path
 - Active profile is persisted securely between sessions using OS-level credential storage (Electron `safeStorage` → Windows Credential Manager)
 
 ## Data requirements

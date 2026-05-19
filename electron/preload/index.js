@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("cpapAPI", {
   getDailyStats: () => ipcRenderer.invoke("cpap:get-daily-stats"),
   getSessionDetail: (sessionId) => ipcRenderer.invoke("cpap:get-session-detail", sessionId),
   getBestSessionForDate: (date) => ipcRenderer.invoke("cpap:get-best-session-for-date", date),
+  reattachSessionFolder: () => ipcRenderer.invoke("cpap:reattach-session-folder"),
   refresh: () => ipcRenderer.invoke("cpap:refresh"),
   saveReport: (reportData) => ipcRenderer.invoke("cpap:save-report", reportData),
   setTimeFilter: (dayStartHour, dayEndHour) =>
@@ -28,6 +29,11 @@ contextBridge.exposeInMainWorld("cpapAPI", {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("cpap:import-progress", listener);
     return () => ipcRenderer.removeListener("cpap:import-progress", listener);
+  },
+  onShowAbout: (callback) => {
+    const listener = () => callback();
+    ipcRenderer.on("app:show-about", listener);
+    return () => ipcRenderer.removeListener("app:show-about", listener);
   }
 });
 

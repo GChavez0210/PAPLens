@@ -1,4 +1,4 @@
-const { BrowserWindow } = require("electron");
+const { BrowserWindow, Menu } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -61,7 +61,34 @@ class WindowManager {
             this.mainWindow.loadFile(path.join(__dirname, "..", "..", "..", "dist", "renderer", "index.html"));
         }
 
+        this._buildMenu();
+
         return this.mainWindow;
+    }
+
+    _buildMenu() {
+        const menu = Menu.buildFromTemplate([
+            ...(process.platform === "darwin" ? [{ role: "appMenu" }] : []),
+            { role: "fileMenu" },
+            { role: "editMenu" },
+            { role: "viewMenu" },
+            { role: "windowMenu" },
+            {
+                label: "Help",
+                submenu: [
+                    {
+                        label: "About PAPLens",
+                        click: () => {
+                            if (this.mainWindow) {
+                                this.mainWindow.webContents.send("app:show-about");
+                            }
+                        }
+                    }
+                ]
+            }
+        ]);
+
+        Menu.setApplicationMenu(menu);
     }
 
     getMainWindow() {

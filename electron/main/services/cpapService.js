@@ -1,4 +1,6 @@
 const fs = require("fs");
+const fsPromises = require("fs").promises;
+const path = require("path");
 const { IncrementalImporter } = require("./incremental-import");
 const { AnalyticsOrchestrator } = require("../analytics/orchestrator");
 const { CPAPDataLoader } = require("./cpap-data-loader");
@@ -107,6 +109,17 @@ class CpapService {
         if (this.mainWindow) {
             this.mainWindow.webContents.send("cpap:data-loaded", summary);
         }
+
+        // Sync EDF files to profile-local cache so session graphs survive SD-card removal.
+        if (this.profileDatabase?.profilePath) {
+            const cacheDir = path.join(this.profileDatabase.profilePath, "session-cache");
+            setImmediate(() => {
+                this._syncSessionCache(dataPath, cacheDir).catch(err =>
+                    console.warn("[cache] Session cache sync failed:", err)
+                );
+            });
+        }
+
         return summary;
     }
 
@@ -147,10 +160,71 @@ class CpapService {
         return this.dataLoader;
     }
 
+    async reattachSessionFolder(folderPath) {
+        if (!fs.existsSync(path.join(folderPath, "STR.edf"))) {
+            return { success: false, error: "STR.edf not found. Please select your CPAP data folder." };
+        }
+        const loader = new CPAPDataLoader(folderPath);
+        await loader.loadSessionList();
+        this.dataLoader = loader;
+        this.currentDataPath = folderPath;
+        return { success: true, sessionCount: loader.sessions.length };
+    }
+
+    // Incrementally copies STR.edf, Identification files, and DATALOG session folders
+    // from sourcePath into cachePath. Already-cached date folders are skipped so
+    // repeat imports after the first are nearly instant.
+    async _syncSessionCache(sourcePath, cachePath) {
+        await fsPromises.mkdir(cachePath, { recursive: true });
+
+        // Always refresh STR.edf — it grows with each new night.
+        const strSrc = path.join(sourcePath, "STR.edf");
+        if (fs.existsSync(strSrc)) {
+            await fsPromises.copyFile(strSrc, path.join(cachePath, "STR.edf"));
+        }
+
+        // Identification files are static — copy once.
+        for (const idFile of ["Identification.json", "Identification.tgt"]) {
+            const src = path.join(sourcePath, idFile);
+            const dst = path.join(cachePath, idFile);
+            if (fs.existsSync(src) && !fs.existsSync(dst)) {
+                await fsPromises.copyFile(src, dst);
+            }
+        }
+
+        // DATALOG: copy only date directories not already in the cache.
+        const srcDatalog = path.join(sourcePath, "DATALOG");
+        const dstDatalog = path.join(cachePath, "DATALOG");
+        if (!fs.existsSync(srcDatalog)) return;
+        await fsPromises.mkdir(dstDatalog, { recursive: true });
+
+        const dateDirs = await fsPromises.readdir(srcDatalog);
+        for (const dateDir of dateDirs) {
+            if (!/^\d{8}$/.test(dateDir)) continue;
+            const dstDate = path.join(dstDatalog, dateDir);
+            if (fs.existsSync(dstDate)) continue; // already cached
+
+            await fsPromises.mkdir(dstDate, { recursive: true });
+            const files = await fsPromises.readdir(path.join(srcDatalog, dateDir));
+            for (const file of files) {
+                if (!file.endsWith(".edf")) continue;
+                await fsPromises.copyFile(
+                    path.join(srcDatalog, dateDir, file),
+                    path.join(dstDate, file)
+                );
+            }
+        }
+        console.info(`[cache] Session cache synced → ${cachePath}`);
+    }
+
     async hydrateSummaryFromDatabase() {
         if (!this.profileDatabase) return null;
 
-        this.currentDataPath = this.getLatestImportedPath();
+        // Prefer the local session cache (populated during import) so that session
+        // graphs work even when the original SD card is no longer mounted.
+        const cacheDir = path.join(this.profileDatabase.profilePath, "session-cache");
+        const cacheHasDatalog = fs.existsSync(path.join(cacheDir, "DATALOG"));
+        this.currentDataPath = cacheHasDatalog ? cacheDir : this.getLatestImportedPath();
         const device = this.getLatestDevice();
         if (!device) {
             this.currentSummary = null;
