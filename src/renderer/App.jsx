@@ -4,6 +4,7 @@ import { LastNightSidebar } from "./components/LastNightSidebar";
 import { Insights } from "./pages/Insights";
 import { ProfileSelector } from "./components/ProfileSelector";
 import { ClinicalSummaryCard } from "./components/ClinicalSummaryCard";
+import { SessionGraphsModal } from "./components/SessionGraphsModal";
 import { SleepCalendar } from "./components/SleepCalendar";
 import { buildClinicalContext, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
 import { formatMetricValue, toMetricNumber } from "./utils/therapyMetrics";
@@ -55,7 +56,7 @@ function dayKeyFromSession(session) {
 }
 
 function getChartCanvasByKey(reportKey) {
-  return document.querySelector(`.clinical-charts-grid [data-report-key="${reportKey}"] canvas`);
+  return document.querySelector(`[data-report-key="${reportKey}"] canvas`);
 }
 
 function captureChartDataUri(canvas) {
@@ -114,8 +115,8 @@ export function App() {
   const [customTo, setCustomTo] = useState("");
   const [dayStartHour, setDayStartHour] = useState(12);
   const [selectedDay, setSelectedDay] = useState(null);
-  const [selectedSession, setSelectedSession] = useState(null);
-  const [sessionDetail, setSessionDetail] = useState(null);
+  const [modalSessions, setModalSessions] = useState([]);
+  const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
   const [isDataLoading, setIsDataLoading] = useState(false);
   const [dataLoadingMessage, setDataLoadingMessage] = useState("");
   const [importProgress, setImportProgress] = useState(null);
@@ -190,13 +191,10 @@ export function App() {
     }
     hasBootstrappedRef.current = true;
 
-    let cancelled = false;
     const bootstrap = async () => {
       await loadCurrentProfile();
-      if (!cancelled) {
-        setIsBooting(false);
-        dismissBootSplash();
-      }
+      setIsBooting(false);
+      dismissBootSplash();
     };
 
     bootstrap();
@@ -209,7 +207,6 @@ export function App() {
     });
 
     return () => {
-      cancelled = true;
       unsubscribe();
       unsubscribeProgress();
     };
@@ -327,31 +324,40 @@ export function App() {
     setIsReportGenerating(true);
     setStatus("Generating PDF report...");
 
-    // Charts are only rendered at full size when the overview tab is visible.
-    // If the user is on a different tab, briefly switch to overview so Chart.js
-    // can resize its canvases back to their normal dimensions before we capture.
     const prevTab = activeTab;
-    if (activeTab !== "overview") {
-      setActiveTab("overview");
-      // Two animation frames for React to commit the style change, plus a short
-      // delay for Chart.js's ResizeObserver to re-paint the canvases.
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-      await new Promise((resolve) => setTimeout(resolve, 120));
-    } else {
-      await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    // Step 1: Switch to insights tab to render and capture those charts
+    if (activeTab !== "insights") {
+      setActiveTab("insights");
     }
+    // Wait for Insights component to mount, IPC data to load, and Chart.js to render
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+
+    const ahiTrendUri = captureChartDataUri(getChartCanvasByKey("ahi-trend"));
+    const eventSplitUri = captureChartDataUri(getChartCanvasByKey("event-split"));
+    const flowLimitUri = captureChartDataUri(getChartCanvasByKey("flow-limit"));
+
+    // Step 2: Switch to overview tab to capture the remaining charts
+    setActiveTab("overview");
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await new Promise((resolve) => setTimeout(resolve, 200));
 
     const charts = {
-      ahiDataUri: captureChartDataUri(getChartCanvasByKey("ahi")),
+      ahiDataUri: ahiTrendUri,
+      eventSplitDataUri: eventSplitUri,
+      flowLimitDataUri: flowLimitUri,
+      leakDataUri: captureChartDataUri(getChartCanvasByKey("leak")),
       usageDataUri: captureChartDataUri(getChartCanvasByKey("usage")),
       pressureLeakDataUri: captureChartDataUri(getChartCanvasByKey("pressure")),
-      flowDataUri: captureChartDataUri(getChartCanvasByKey("flow")),
       tidalDataUri: captureChartDataUri(getChartCanvasByKey("tidal")),
-      ahiCaption: "Total AHI combined with event type breakdown.",
-      usageCaption: "Nightly therapy application time.",
-      pressureLeakCaption: "95th percentile and median delivered pressure.",
-      flowCaption: "Minute ventilation and respiration rate.",
-      tidalCaption: "Median and 95th percentile tidal volume."
+      ahiCaption: "Nightly AHI bars with 7-day rolling average. Bars colored red when AHI ≥ 5.",
+      eventSplitCaption: "Stacked breakdown of obstructive, central, unclassified apneas and hypopneas per hour.",
+      flowLimitCaption: "Flow Limitation P95 (airway narrowing intensity) and RIN (sub-threshold flow-limited breaths per hr).",
+      leakCaption: "Median and 95th percentile mask leak with 24 L/min critical threshold.",
+      usageCaption: "Nightly therapy usage hours with compliance threshold at 4 hrs.",
+      pressureLeakCaption: "Pressure 50th and 95th percentile delivery with variability index.",
+      tidalCaption: "Median and 95th percentile tidal volume per night."
     };
 
     const reportData = {
@@ -460,6 +466,19 @@ export function App() {
           reportData.clinicalContext.compliantNights = insightsData.compliantNights;
         }
       }
+
+      if (insightsData && insightsData.explanations && insightsData.explanations.length > 0) {
+        const seenKeys = new Set();
+        const uniqueFindings = insightsData.explanations.filter(e => {
+          if (seenKeys.has(e.key)) return false;
+          seenKeys.add(e.key);
+          return true;
+        });
+        reportData.findings = uniqueFindings.slice(0, 6).map(e => ({
+          title: e.title,
+          summary: e.summary
+        }));
+      }
     } catch (e) {
       console.warn("Could not fetch correlations for pdf report", e);
     }
@@ -469,9 +488,7 @@ export function App() {
     const result = await window.cpapAPI.saveReport(reportData);
 
     // Restore the tab the user was on before the report was triggered
-    if (prevTab !== "overview") {
-      setActiveTab(prevTab);
-    }
+    setActiveTab(prevTab);
 
     setIsReportGenerating(false);
 
@@ -492,10 +509,37 @@ export function App() {
     setStatus(result.error || "Sleep boundary update failed");
   };
 
-  const openSession = async (session) => {
-    setSelectedSession(session);
-    const detail = await window.cpapAPI.getSessionDetail(session.id);
-    setSessionDetail(detail);
+  const sessionsForDay = (day) => {
+    if (!summary?.sessions || !day?.date) return [];
+    // CPAP files are stored under the night they start (e.g. night of May 9→10 lives in
+    // the "20260509" folder) but the calendar labels it "2026-05-10". Check both the
+    // calendar date and the preceding calendar day to handle this convention.
+    const d = new Date(day.date);
+    d.setDate(d.getDate() - 1);
+    const prevDate = d.toISOString().split("T")[0];
+    return summary.sessions.filter(
+      (s) => dayKeyFromSession(s) === day.date || dayKeyFromSession(s) === prevDate
+    );
+  };
+
+  const selectDailySession = (day) => {
+    setSelectedDay(day);
+    if (isNoDataDay(day)) return;
+
+    const daySessions = sessionsForDay(day);
+    // Prefer sessions with recorded data (durationMinutes > 0).
+    // Fall back to the full list only if every session has 0 duration (edge case).
+    const usable = daySessions.filter((s) => s.durationMinutes > 0);
+    if (usable.length > 0) {
+      setModalSessions(usable);
+    } else if (daySessions.length > 0) {
+      setModalSessions(daySessions);
+    } else {
+      // Fallback synthetic session when EDF files aren't available locally
+      // (modal will use getBestSessionForDate internally via id=null path)
+      setModalSessions([{ id: null, timestamp: day.date, files: {} }]);
+    }
+    setIsSessionModalOpen(true);
   };
 
   if (isBooting) {
@@ -871,12 +915,12 @@ export function App() {
                 </div>
 
                 <div className="list-container" style={{ paddingRight: "10px" }}>
-                  {[...filteredStats].reverse().map((day) => (
+                  {[...filteredStats].reverse().filter((day) => !isNoDataDay(day)).map((day) => (
                     <ClinicalSummaryCard
                       key={day.date}
                       night={day}
                       isSelected={selectedDay?.date === day.date}
-                      onSelect={setSelectedDay}
+                      onSelect={selectDailySession}
                     />
                   ))}
                 </div>
@@ -885,7 +929,6 @@ export function App() {
               <div className="split-right">
                 {selectedDay ? (() => {
                   const selectedDayNoData = isNoDataDay(selectedDay);
-                  const daySessions = summary?.sessions?.filter((s) => dayKeyFromSession(s) === selectedDay.date) || [];
 
                   return (
                     <div>
@@ -931,64 +974,6 @@ export function App() {
                           </div>
                         </div>
                       )}
-
-                      <h4 style={{ marginTop: "20px" }}>Recorded Sessions</h4>
-                      <div className="list-container" style={{ maxHeight: "300px" }}>
-                        {daySessions.length > 0 ? (
-                          daySessions.map((session) => (
-                            <div
-                              key={session.id}
-                              className={`list-item ${selectedSession?.id === session.id ? "active" : ""}`}
-                              onClick={() => openSession(session)}
-                            >
-                              <div>
-                                <strong>
-                                  {new Date(session.timestamp).toLocaleTimeString([], {
-                                    hour: "2-digit",
-                                    minute: "2-digit"
-                                  })}
-                                </strong>
-                                <div style={{ fontSize: "0.85em", color: "var(--muted)" }}>
-                                  Duration: {Math.round(session.durationMinutes)}m / Files:{" "}
-                                  {Object.keys(session.files).length}
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                        ) : (
-                          <div style={{ color: "var(--muted)", fontSize: "0.9rem", padding: "8px 0" }}>
-                            {selectedDayNoData ? "No therapy sessions were recorded for this date." : "No sessions found for this date."}
-                          </div>
-                        )}
-                      </div>
-
-                      {!selectedDayNoData && sessionDetail && sessionDetail.id === selectedSession?.id && (
-                        <div
-                          style={{
-                            marginTop: "20px",
-                            padding: "15px",
-                            background: "rgba(0,0,0,0.2)",
-                            borderRadius: "8px"
-                          }}
-                        >
-                          <h4 style={{ marginBottom: "10px" }}>Session Raw EDF Maps</h4>
-                          {sessionDetail.files.map((data) => {
-                            const [fileType] = data.file.split(".");
-                            return (
-                              <div key={data.file} style={{ marginBottom: "8px" }}>
-                                <strong>{fileType}:</strong>{" "}
-                                {data.error ? (
-                                  <span style={{ color: "var(--danger)" }}>{data.error}</span>
-                                ) : (
-                                  <span style={{ fontSize: "0.85em", color: "var(--muted)" }}>
-                                    {data.signals?.join(", ")}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
                     </div>
                   );
                 })() : (
@@ -1006,6 +991,14 @@ export function App() {
                 )}
               </div>
             </section>
+          )}
+
+          {isSessionModalOpen && (
+            <SessionGraphsModal
+              sessions={modalSessions}
+              theme={theme}
+              onClose={() => setIsSessionModalOpen(false)}
+            />
           )}
 
           {activeTab === "insights" && (
@@ -1030,7 +1023,7 @@ export function App() {
                   )}
                 </div>
               </div>
-              <Insights range={range} customFrom={customFrom} customTo={customTo} theme={theme} />
+              <Insights range={range} customFrom={customFrom} customTo={customTo} theme={theme} sessions={summary?.sessions || []} />
             </section>
           )}
         </section>
@@ -1038,8 +1031,6 @@ export function App() {
     </main>
   );
 }
-
-
 
 
 

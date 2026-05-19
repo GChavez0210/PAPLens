@@ -240,6 +240,12 @@ class ProfileDatabase {
     addColumnIfNotExists('night_metrics', 'leak_spike_count', 'INTEGER');
     addColumnIfNotExists('night_metrics', 'pressure_histogram', 'TEXT');
     addColumnIfNotExists('night_metrics', 'pressure_efficiency', 'REAL');
+    // Periodic breathing detection
+    addColumnIfNotExists('night_metrics', 'pb_episode_count', 'INTEGER');
+    addColumnIfNotExists('night_metrics', 'pb_total_seconds', 'REAL');
+    addColumnIfNotExists('night_metrics', 'pb_pct', 'REAL');
+    addColumnIfNotExists('night_metrics', 'pb_avg_cycle_sec', 'REAL');
+    addColumnIfNotExists('night_metrics', 'pb_is_significant', 'INTEGER');
   }
 
   close() {

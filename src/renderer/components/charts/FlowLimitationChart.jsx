@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Chart from "chart.js/auto";
 
 /**
@@ -8,8 +8,9 @@ import Chart from "chart.js/auto";
 export function FlowLimitationChart({ trends, height = 200 }) {
     const ref = useRef(null);
 
-    const nights = (trends || []).filter(d =>
-        d.flow_limitation_p95 !== null && d.flow_limitation_p95 !== undefined
+    const nights = useMemo(
+        () => (trends || []).filter(d => d.flow_limitation_p95 !== null && d.flow_limitation_p95 !== undefined),
+        [trends]
     );
 
     useEffect(() => {
@@ -40,6 +41,28 @@ export function FlowLimitationChart({ trends, height = 200 }) {
                         pointRadius: 3,
                         fill: true,
                         yAxisID: "yRIN"
+                    },
+                    {
+                        label: "Mild threshold (0.10)",
+                        data: nights.map(() => 0.10),
+                        borderColor: "rgba(245,158,11,0.45)",
+                        borderWidth: 1,
+                        borderDash: [5, 4],
+                        pointRadius: 0,
+                        fill: false,
+                        yAxisID: "yFL",
+                        tension: 0
+                    },
+                    {
+                        label: "Significant threshold (0.30)",
+                        data: nights.map(() => 0.30),
+                        borderColor: "rgba(239,68,68,0.45)",
+                        borderWidth: 1,
+                        borderDash: [5, 4],
+                        pointRadius: 0,
+                        fill: false,
+                        yAxisID: "yFL",
+                        tension: 0
                     }
                 ]
             },

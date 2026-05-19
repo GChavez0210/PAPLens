@@ -221,7 +221,7 @@ class CPAPDataLoader {
   }
 
   getSleepNightKey(timestamp) {
-    const sessionDate = timestamp instanceof Date ? new Date(timestamp) : new Date(timestamp);
+    const sessionDate = new Date(timestamp instanceof Date ? timestamp.getTime() : timestamp);
     if (Number.isNaN(sessionDate.getTime())) {
       return null;
     }
@@ -248,6 +248,37 @@ class CPAPDataLoader {
     );
   }
 
+  getNearbySessionFiles(session, windowSeconds = 120) {
+    if (!session?.timestamp) {
+      return session?.files || {};
+    }
+
+    const sessionTime = new Date(session.timestamp).getTime();
+    if (!Number.isFinite(sessionTime)) {
+      return session.files || {};
+    }
+
+    const combinedFiles = { ...session.files };
+    const nearby = this.sessions
+      .filter((candidate) => candidate.id !== session.id && candidate.date === session.date && candidate.timestamp)
+      .map((candidate) => ({
+        candidate,
+        deltaSeconds: Math.abs(new Date(candidate.timestamp).getTime() - sessionTime) / 1000
+      }))
+      .filter(({ deltaSeconds }) => Number.isFinite(deltaSeconds) && deltaSeconds <= windowSeconds)
+      .sort((a, b) => a.deltaSeconds - b.deltaSeconds);
+
+    for (const { candidate } of nearby) {
+      for (const [fileType, filePath] of Object.entries(candidate.files || {})) {
+        if (!combinedFiles[fileType]) {
+          combinedFiles[fileType] = filePath;
+        }
+      }
+    }
+
+    return combinedFiles;
+  }
+
   async loadSessionDetail(sessionId) {
     const session = this.sessions.find((s) => s.id === sessionId);
     if (!session) {
@@ -261,7 +292,7 @@ class CPAPDataLoader {
       data: {}
     };
 
-    for (const [fileType, filePath] of Object.entries(session.files)) {
+    for (const [fileType, filePath] of Object.entries(this.getNearbySessionFiles(session))) {
       try {
         const parsed = parseSessionFile(filePath);
         detail.data[fileType] = {
@@ -461,6 +492,11 @@ class CPAPDataLoader {
           pressureHistogram: sessionMetrics?.pressureHistogram ?? null,
           pressureEfficiency: sessionMetrics?.pressureEfficiency ?? null,
           eventClusterIndexSource: sessionMetrics?.eventClusterIndexSource ?? null,
+          pbEpisodeCount: sessionMetrics?.periodicBreathing?.episodeCount ?? null,
+          pbTotalSeconds: sessionMetrics?.periodicBreathing?.totalPBSeconds ?? null,
+          pbPct: sessionMetrics?.periodicBreathing?.pbPct ?? null,
+          pbAvgCycleSec: sessionMetrics?.periodicBreathing?.avgCycleSec ?? null,
+          pbIsSignificant: sessionMetrics?.periodicBreathing?.isClinicallySignificant ?? null,
           // Current ResMed flow generators do not provide valid onboard oximetry,
           // so PAPLens preserves null instead of probing SA2/summary sentinels.
           spo2Avg: supportsOximetry

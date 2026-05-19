@@ -37,7 +37,8 @@ class IncrementalImporter {
           minute_vent_p50, minute_vent_p95, resp_rate_p50, resp_rate_p95, flow_limitation_p95, event_cluster_index_source,
           tidal_vol_p50, tidal_vol_p95, duration_minutes, on_duration_minutes,
           patient_hours_cumulative, spo2_avg, pulse_avg, data_quality,
-          rin_per_hr, csr_per_hr, snore_index, leak_spike_count, pressure_histogram, pressure_efficiency
+          rin_per_hr, csr_per_hr, snore_index, leak_spike_count, pressure_histogram, pressure_efficiency,
+          pb_episode_count, pb_total_seconds, pb_pct, pb_avg_cycle_sec, pb_is_significant
         ) VALUES (
           @night_id, @ahi_total, @apneas_per_hr, @hypopneas_per_hr,
           @obstructive_apneas_per_hr, @central_apneas_per_hr, @unclassified_apneas_per_hr,
@@ -45,7 +46,8 @@ class IncrementalImporter {
           @minute_vent_p50, @minute_vent_p95, @resp_rate_p50, @resp_rate_p95, @flow_limitation_p95, @event_cluster_index_source,
           @tidal_vol_p50, @tidal_vol_p95, @duration_minutes, @on_duration_minutes,
           @patient_hours_cumulative, @spo2_avg, @pulse_avg, @data_quality,
-          @rin_per_hr, @csr_per_hr, @snore_index, @leak_spike_count, @pressure_histogram, @pressure_efficiency
+          @rin_per_hr, @csr_per_hr, @snore_index, @leak_spike_count, @pressure_histogram, @pressure_efficiency,
+          @pb_episode_count, @pb_total_seconds, @pb_pct, @pb_avg_cycle_sec, @pb_is_significant
         )
         ON CONFLICT(night_id) DO UPDATE SET
           ahi_total = excluded.ahi_total,
@@ -77,7 +79,12 @@ class IncrementalImporter {
           snore_index = excluded.snore_index,
           leak_spike_count = excluded.leak_spike_count,
           pressure_histogram = excluded.pressure_histogram,
-          pressure_efficiency = excluded.pressure_efficiency
+          pressure_efficiency = excluded.pressure_efficiency,
+          pb_episode_count = excluded.pb_episode_count,
+          pb_total_seconds = excluded.pb_total_seconds,
+          pb_pct = excluded.pb_pct,
+          pb_avg_cycle_sec = excluded.pb_avg_cycle_sec,
+          pb_is_significant = excluded.pb_is_significant
       `);
 
             for (const day of summary.dailyStats || []) {
@@ -143,7 +150,12 @@ class IncrementalImporter {
                     snore_index: toOptionalNumber(day.snoreIndex),
                     leak_spike_count: toOptionalNumber(day.leakSpikeCount),
                     pressure_histogram: day.pressureHistogram ? JSON.stringify(day.pressureHistogram) : null,
-                    pressure_efficiency: toOptionalNumber(day.pressureEfficiency)
+                    pressure_efficiency: toOptionalNumber(day.pressureEfficiency),
+                    pb_episode_count: toOptionalNumber(day.pbEpisodeCount),
+                    pb_total_seconds: toOptionalNumber(day.pbTotalSeconds),
+                    pb_pct: toOptionalNumber(day.pbPct),
+                    pb_avg_cycle_sec: toOptionalNumber(day.pbAvgCycleSec),
+                    pb_is_significant: day.pbIsSignificant == null ? null : (day.pbIsSignificant ? 1 : 0)
                 });
             }
 

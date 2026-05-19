@@ -299,6 +299,13 @@
             border-radius: 6px;
         }
 
+        .chart-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 7px;
+            margin-bottom: 7px;
+        }
+
         .caption {
             margin-top: 4px;
             font-size: 9px;
@@ -452,37 +459,15 @@
             </div>
         </div>
 
-        <!-- Row 3: Stability + Mask Fit side by side (only if data exists) -->
-        {{#if summaryScores.stabilityScore}}
-        <div class="grid grid-2" style="margin-bottom:7px;">
-            <div class="card avoid-break">
-                <h3 class="section-title">Stability Score</h3>
-                <div class="kpi-value">{{summaryScores.stabilityScore}}<span style="font-size:10px; color:var(--muted);">/100</span></div>
-                <div class="status"><span class="dot {{summaryScores.stabilityClass}}"></span>{{summaryScores.stabilityLabel}}</div>
-                <div class="mini">{{summaryScores.explanations.stability}}</div>
-            </div>
-            {{#if summaryScores.maskFitScore}}
-            <div class="card avoid-break">
-                <h3 class="section-title">Mask Fit Score</h3>
-                <div class="kpi-value">{{summaryScores.maskFitScore}}<span style="font-size:10px; color:var(--muted);">/100</span></div>
-                <div class="status"><span class="dot {{summaryScores.maskFitClass}}"></span>{{summaryScores.maskFitLabel}}</div>
-                <div class="mini">{{summaryScores.explanations.maskFit}}</div>
-            </div>
-            {{else}}
-            {{#if correlations}}
-            <div class="card avoid-break">
-                <h3 class="section-title">Metric Correlations</h3>
-                <div class="mini" style="margin-bottom:5px;">|r| &lt; 0.20: minimal · 0.20–0.39: mild · 0.40–0.59: moderate · ≥ 0.60: strong</div>
-                <ol class="list" style="margin-bottom:0;">
-                    {{#each correlations.pairs}}
-                    <li><strong>{{this.pair}}</strong> (r={{this.r}}, n={{this.n}}): {{this.plain}}</li>
-                    {{/each}}
-                </ol>
-            </div>
-            {{else}}
-            <div></div>
-            {{/if}}
-            {{/if}}
+        <!-- Row 3: Key Findings from the analysis period -->
+        {{#if findings}}
+        <div class="card avoid-break" style="margin-bottom:7px;">
+            <h3 class="section-title">Key Findings ({{report.rangeLabel}})</h3>
+            <ol class="list" style="margin-bottom:0;">
+                {{#each findings}}
+                <li><strong>{{this.title}}</strong>: {{this.summary}}</li>
+                {{/each}}
+            </ol>
         </div>
         {{/if}}
         {{/if}}
@@ -534,11 +519,12 @@
             <div class="card avoid-break">
                 <h3 class="section-title">Bring these questions to your clinician</h3>
                 <ol class="list">
-                    <li>Are my residual events mostly obstructive, central, or mixed based on this event profile?</li>
-                    <li>If leak is elevated, should we adjust mask fit before changing pressure settings?</li>
-                    <li>Does my pressure pattern look reactive or does it suggest insufficient baseline support?</li>
-                    <li>If RIN is elevated relative to AHI, could flow limitation be causing sleep fragmentation?</li>
-                    <li>Given adherence, compliance rate, and symptom history, what is the most useful next intervention?</li>
+                    <li>Is the AHI trend over this period considered well-controlled, and at what point should a change in therapy be considered?</li>
+                    <li>What does the event type breakdown indicate about the nature of residual events — and does the mix suggest obstructive, central, or mixed causes?</li>
+                    <li>Can sub-threshold flow limitation contribute to sleep fragmentation even when AHI remains low?</li>
+                    <li>What factors most commonly affect therapy consistency, and what adjustments tend to improve long-term adherence?</li>
+                    <li>How should pressure delivery trends be interpreted — what patterns indicate effective titration versus an insufficient pressure range?</li>
+                    <li>Based on the data in this report, what would be the most appropriate next step in managing this therapy?</li>
                 </ol>
                 <div class="callout" style="margin-top:7px;">
                     <div class="mini"><strong>Note:</strong> This report is an analytics aid and does not replace medical diagnosis or treatment decisions.</div>
@@ -552,7 +538,7 @@
         </div>
     </section>
 
-    <!-- PAGE 2: Trend Charts and Interpretation -->
+    <!-- PAGE 2: Trend Charts (AHI, Usage, Pressure/Leak) -->
     <section class="page">
         <div class="header">
             <div class="brand">
@@ -578,65 +564,114 @@
             </div>
         </div>
 
-        <div class="grid grid-2" style="margin-bottom:7px;">
-            <div class="chart avoid-break">
-                {{#if charts.ahiDataUri}}<img src="{{charts.ahiDataUri}}" alt="AHI trend" />{{else}}<div class="mini">AHI chart unavailable.</div>{{/if}}
-                <div class="caption"><strong>AHI trend:</strong> {{charts.ahiCaption}}</div>
-            </div>
+        <div class="chart avoid-break" style="margin-bottom:7px;">
+            <div style="font-size:10.5px; font-weight:900; color:var(--accent); margin-bottom:4px;">AHI Trend</div>
+            {{#if charts.ahiDataUri}}<img src="{{charts.ahiDataUri}}" alt="AHI trend" style="width:100%; height:auto; display:block; border-radius:6px;" />{{else}}<div class="mini" style="padding:8px;">AHI chart unavailable.</div>{{/if}}
+            <div class="caption"><strong>AHI trend:</strong> {{charts.ahiCaption}}</div>
+        </div>
 
-            <div class="chart avoid-break">
-                {{#if charts.usageDataUri}}<img src="{{charts.usageDataUri}}" alt="usage trend" />{{else}}<div class="mini">Usage chart unavailable.</div>{{/if}}
-                <div class="caption"><strong>Usage trend:</strong> {{charts.usageCaption}}</div>
-            </div>
+        <div class="chart avoid-break" style="margin-bottom:7px;">
+            <div style="font-size:10.5px; font-weight:900; color:var(--accent); margin-bottom:4px;">Event Type Breakdown</div>
+            {{#if charts.eventSplitDataUri}}<img src="{{charts.eventSplitDataUri}}" alt="event type breakdown" style="width:100%; height:auto; display:block; border-radius:6px;" />{{else}}<div class="mini" style="padding:8px;">Event type chart unavailable.</div>{{/if}}
+            <div class="caption"><strong>Event breakdown:</strong> {{charts.eventSplitCaption}}</div>
+        </div>
 
-            <div class="chart avoid-break">
-                {{#if charts.pressureLeakDataUri}}<img src="{{charts.pressureLeakDataUri}}" alt="pressure and leak" />{{else}}<div class="mini">Pressure chart unavailable.</div>{{/if}}
-                <div class="caption"><strong>Pressure &amp; leak:</strong> {{charts.pressureLeakCaption}}</div>
+        <div class="chart-row avoid-break">
+            <div class="chart">
+                <div style="font-size:10.5px; font-weight:900; color:var(--accent); margin-bottom:4px;">Compliance Usage Hours</div>
+                {{#if charts.usageDataUri}}<img src="{{charts.usageDataUri}}" alt="usage hours" style="width:100%; height:auto; display:block; border-radius:6px;" />{{else}}<div class="mini" style="padding:8px;">Usage chart unavailable.</div>{{/if}}
+                <div class="caption"><strong>Usage hours:</strong> {{charts.usageCaption}}</div>
             </div>
-
-            <div class="chart avoid-break">
-                {{#if charts.flowDataUri}}<img src="{{charts.flowDataUri}}" alt="flow and ventilation" />{{else}}<div class="mini">Flow chart unavailable.</div>{{/if}}
-                <div class="caption"><strong>Ventilation &amp; flow:</strong> {{charts.flowCaption}}</div>
+            <div class="chart">
+                <div style="font-size:10.5px; font-weight:900; color:var(--accent); margin-bottom:4px;">Pressure Dynamics</div>
+                {{#if charts.pressureLeakDataUri}}<img src="{{charts.pressureLeakDataUri}}" alt="pressure dynamics" style="width:100%; height:auto; display:block; border-radius:6px;" />{{else}}<div class="mini" style="padding:8px;">Pressure chart unavailable.</div>{{/if}}
+                <div class="caption"><strong>Pressure:</strong> {{charts.pressureLeakCaption}}</div>
             </div>
+        </div>
 
-            <div class="chart avoid-break">
-                {{#if charts.tidalDataUri}}<img src="{{charts.tidalDataUri}}" alt="tidal volume" />{{else}}<div class="mini">Tidal volume chart unavailable.</div>{{/if}}
+        <div class="chart-row avoid-break">
+            <div class="chart">
+                <div style="font-size:10.5px; font-weight:900; color:var(--accent); margin-bottom:4px;">Leak (L/min) &amp; Percentiles</div>
+                {{#if charts.leakDataUri}}<img src="{{charts.leakDataUri}}" alt="leak percentiles" style="width:100%; height:auto; display:block; border-radius:6px;" />{{else}}<div class="mini" style="padding:8px;">Leak chart unavailable.</div>{{/if}}
+                <div class="caption"><strong>Leak:</strong> {{charts.leakCaption}}</div>
+            </div>
+            <div class="chart">
+                <div style="font-size:10.5px; font-weight:900; color:var(--accent); margin-bottom:4px;">Tidal Volume</div>
+                {{#if charts.tidalDataUri}}<img src="{{charts.tidalDataUri}}" alt="tidal volume" style="width:100%; height:auto; display:block; border-radius:6px;" />{{else}}<div class="mini" style="padding:8px;">Tidal volume chart unavailable.</div>{{/if}}
                 <div class="caption"><strong>Tidal volume:</strong> {{charts.tidalCaption}}</div>
-            </div>
-
-            <div class="card soft avoid-break">
-                <h3 class="section-title">Clinician interpretation panel</h3>
-
-                {{#if clinicalContext}}
-                <div class="kv" style="margin-top:0; margin-bottom:6px;">
-                    <strong>Mode</strong><span>{{clinicalContext.therapyMode}}</span>
-                    <strong>Nights</strong><span>{{clinicalContext.nightsAnalyzed}}</span>
-                    <strong>Adherence</strong><span>{{clinicalContext.adherenceRate}}%</span>
-                    {{#if clinicalContext.complianceRate}}<strong>30-Day CMS</strong><span>{{clinicalContext.complianceRate}}% ({{clinicalContext.compliantNights}}/{{clinicalContext.complianceWindowNights}})</span>{{/if}}
-                    <strong>Leak 95th</strong><span>{{clinicalContext.leak95th}} L/min</span>
-                    {{#if clinicalContext.avgRin}}<strong>Avg RIN</strong><span>{{clinicalContext.avgRin}} events/hr</span>{{/if}}
-                    {{#if clinicalContext.avgSnoreIndex}}<strong>Snore Index</strong><span>{{clinicalContext.avgSnoreIndex}}% of session</span>{{/if}}
-                    {{#if clinicalContext.avgPressureEfficiency}}<strong>Pressure Eff.</strong><span>{{clinicalContext.avgPressureEfficiency}}% near ceiling</span>{{/if}}
-                </div>
-                {{/if}}
-
-                <div class="mini" style="font-weight:700; color:var(--ink); margin-bottom:3px;">Correlation guide</div>
-                <div class="mini" style="margin-bottom:6px;">|r| &lt; 0.20: minimal · 0.20–0.39: mild · 0.40–0.59: moderate · ≥ 0.60: strong</div>
-
-                {{#if correlations}}
-                <ol class="list" style="margin-bottom:0;">
-                    {{#each correlations.pairs}}
-                    <li><strong>{{this.pair}}</strong> (r={{this.r}}, n={{this.n}}): {{this.plain}}</li>
-                    {{/each}}
-                </ol>
-                {{else}}
-                <div class="mini">No correlation data available for this export window.</div>
-                {{/if}}
             </div>
         </div>
 
         <div class="footer">
             <div>PAPLens — Chart evidence for visit discussion</div>
+            <div class="footer-page-num"></div>
+        </div>
+    </section>
+
+    <!-- PAGE 3: Flow Limitation + Clinician Interpretation -->
+    <section class="page">
+        <div class="header">
+            <div class="brand">
+                <div class="logo">
+                    {{#if branding.logoDataUri}}
+                    <img src="{{branding.logoDataUri}}" alt="PAPLens" />
+                    {{else}}
+                    {{#if brand.logoDataUri}}
+                    <img src="{{brand.logoDataUri}}" alt="PAPLens" />
+                    {{else}}
+                    {{#if header.logoUrl}}<img src="{{header.logoUrl}}" alt="PAPLens" />{{/if}}
+                    {{/if}}
+                    {{/if}}
+                </div>
+                <div>
+                    <p class="title">Flow Limitations &amp; Clinical Interpretation</p>
+                    <p class="subtitle">{{report.rangeLabel}} — supplementary signal detail</p>
+                </div>
+            </div>
+            <div class="meta">
+                <div><strong>Patient:</strong> {{profile.name}}</div>
+                <div><strong>Device:</strong> {{device.model}}</div>
+            </div>
+        </div>
+
+        <div class="chart avoid-break" style="margin-bottom:7px;">
+            <div style="font-size:10.5px; font-weight:900; color:var(--accent); margin-bottom:4px;">Flow Limitation &amp; Respiratory Disturbance</div>
+            {{#if charts.flowLimitDataUri}}<img src="{{charts.flowLimitDataUri}}" alt="flow limitation and RIN" style="width:100%; height:auto; display:block; border-radius:6px;" />{{else}}<div class="mini" style="padding:8px;">Flow limitation chart unavailable.</div>{{/if}}
+            <div class="caption"><strong>Flow limitation:</strong> {{charts.flowLimitCaption}}</div>
+        </div>
+
+        <div class="card soft avoid-break" style="margin-bottom:7px;">
+            <h3 class="section-title">Clinician Interpretation Panel</h3>
+
+            {{#if clinicalContext}}
+            <div class="kv" style="margin-top:0; margin-bottom:6px;">
+                <strong>Mode</strong><span>{{clinicalContext.therapyMode}}</span>
+                <strong>Nights</strong><span>{{clinicalContext.nightsAnalyzed}}</span>
+                <strong>Adherence</strong><span>{{clinicalContext.adherenceRate}}%</span>
+                {{#if clinicalContext.complianceRate}}<strong>30-Day CMS</strong><span>{{clinicalContext.complianceRate}}% ({{clinicalContext.compliantNights}}/{{clinicalContext.complianceWindowNights}})</span>{{/if}}
+                <strong>Leak 95th</strong><span>{{clinicalContext.leak95th}} L/min</span>
+                {{#if clinicalContext.avgRin}}<strong>Avg RIN</strong><span>{{clinicalContext.avgRin}} events/hr</span>{{/if}}
+                {{#if clinicalContext.avgSnoreIndex}}<strong>Snore Index</strong><span>{{clinicalContext.avgSnoreIndex}}% of session</span>{{/if}}
+                {{#if clinicalContext.avgPressureEfficiency}}<strong>Pressure Eff.</strong><span>{{clinicalContext.avgPressureEfficiency}}% near ceiling</span>{{/if}}
+            </div>
+            {{/if}}
+
+            <div class="mini" style="font-weight:700; color:var(--ink); margin-bottom:3px;">Correlation guide</div>
+            <div class="mini" style="margin-bottom:6px;">|r| &lt; 0.20: minimal · 0.20–0.39: mild · 0.40–0.59: moderate · ≥ 0.60: strong</div>
+
+            {{#if correlations}}
+            <ol class="list" style="margin-bottom:0;">
+                {{#each correlations.pairs}}
+                <li><strong>{{this.pair}}</strong> (r={{this.r}}, n={{this.n}}): {{this.plain}}</li>
+                {{/each}}
+            </ol>
+            {{else}}
+            <div class="mini">No correlation data available for this export window.</div>
+            {{/if}}
+        </div>
+
+        <div class="footer">
+            <div>PAPLens — Supplementary signals &amp; correlations</div>
             <div class="footer-page-num"></div>
         </div>
     </section>

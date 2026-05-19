@@ -1,4 +1,5 @@
 const { calculatePercentile, toOptionalNumber } = require("./therapyMetrics");
+const { detectPeriodicBreathing } = require("../analytics/periodicBreathing");
 
 function sanitizeSamples(values, { min = null } = {}) {
     return (values || [])
@@ -98,7 +99,7 @@ function computePressureHistogram(pressureRaw) {
 function computePressureEfficiency(pressureRaw) {
     const samples = sanitizeSamples(pressureRaw, { min: 0 }).filter(v => v > 0);
     if (samples.length === 0) return null;
-    const sessionMax = Math.max(...samples);
+    const sessionMax = samples.reduce((a, b) => (b > a ? b : a), -Infinity);
     if (sessionMax === 0) return null;
     const ceiling = sessionMax * 0.9;
     return (samples.filter(v => v >= ceiling).length / samples.length) * 100;
@@ -121,7 +122,7 @@ function summarizeNightlySessionMetrics(aggregate) {
     return {
         leak50: calculatePercentile(leakSamples, 0.5),
         leak95: calculatePercentile(leakSamples, 0.95),
-        leakMax: leakSamples.length > 0 ? Math.max(...leakSamples) : null,
+        leakMax: leakSamples.length > 0 ? leakSamples.reduce((a, b) => (b > a ? b : a), -Infinity) : null,
         leakSpikeCount: countLeakSpikes(leakSamples),
         minVent50: calculatePercentile(minVentSamples, 0.5),
         minVent95: calculatePercentile(minVentSamples, 0.95),
@@ -136,6 +137,7 @@ function summarizeNightlySessionMetrics(aggregate) {
         spo2Avg: average(spo2Samples),
         pulseAvg: average(pulseSamples),
         eventClusterIndexSource: computeEventClusterIndex(aggregate.annotations),
+        periodicBreathing: detectPeriodicBreathing(tidalSamples),
         sessionDerived: leakSamples.length > 0 || tidalSamples.length > 0 || flowLimSamples.length > 0 || spo2Samples.length > 0 || pulseSamples.length > 0 || (aggregate.annotations || []).length > 0
     };
 }

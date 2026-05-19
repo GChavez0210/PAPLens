@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("cpapAPI", {
   getSummary: () => ipcRenderer.invoke("cpap:get-summary"),
   getDailyStats: () => ipcRenderer.invoke("cpap:get-daily-stats"),
   getSessionDetail: (sessionId) => ipcRenderer.invoke("cpap:get-session-detail", sessionId),
+  getBestSessionForDate: (date) => ipcRenderer.invoke("cpap:get-best-session-for-date", date),
   refresh: () => ipcRenderer.invoke("cpap:refresh"),
   saveReport: (reportData) => ipcRenderer.invoke("cpap:save-report", reportData),
   setTimeFilter: (dayStartHour, dayEndHour) =>

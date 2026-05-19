@@ -253,7 +253,7 @@ class CpapService {
             },
             metricSummary,
             dailyStats,
-            sessions: sessionLoader ? sessionLoader.sessions.slice(0, 50) : []
+            sessions: sessionLoader ? sessionLoader.sessions : []
         };
 
         if (!sessionLoader) this.dataLoader = null;

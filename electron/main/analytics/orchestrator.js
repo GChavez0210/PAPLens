@@ -2,7 +2,7 @@ const { classifyLeakSeverity } = require("./clinicalInsights");
 const { computeTherapyStabilityScore, computeComplianceRisk, processResidualBurden, hasTherapyData } = require("./scores");
 const { detectOutliers } = require("./outliers");
 const { analyzeCorrelations } = require("./correlations");
-const { generateInsightNarratives } = require("./explanations");
+const { generateInsightNarratives, generatePeriodicBreathingInsight, generateFlowLimitationInsight } = require("./explanations");
 const { AnalyticsDataAccess } = require("./dataAccess");
 const crypto = require("crypto");
 
@@ -17,44 +17,44 @@ class AnalyticsOrchestrator {
 
     nightDates.sort();
 
-    const upsertDerived = this.db.prepare(`
-      INSERT INTO derived_metrics (
-        night_id, stability_score, mask_fit_score, ventilation_stability_score,
-        compliance_risk, pressure_responsiveness, residual_burden, outliers, z_scores,
-        therapy_stability_score, leak_severity_tier, leak_consistency_index,
-        pressure_variance, flow_limitation_score, event_cluster_index
-      ) VALUES (
-        @night_id, @stability, @mask_fit, @ventilation,
-        @compliance, @pri, @residual, @outliers, @z_scores,
-        @therapy_stability_score, @leak_severity_tier, @leak_consistency_index,
-        @pressure_variance, @flow_limitation_score, @event_cluster_index
-      )
-      ON CONFLICT(night_id) DO UPDATE SET
-        stability_score = excluded.stability_score,
-        mask_fit_score = excluded.mask_fit_score,
-        ventilation_stability_score = excluded.ventilation_stability_score,
-        compliance_risk = excluded.compliance_risk,
-        pressure_responsiveness = excluded.pressure_responsiveness,
-        residual_burden = excluded.residual_burden,
-        outliers = excluded.outliers,
-        z_scores = excluded.z_scores,
-        therapy_stability_score = excluded.therapy_stability_score,
-        leak_severity_tier = excluded.leak_severity_tier,
-        leak_consistency_index = excluded.leak_consistency_index,
-        pressure_variance = excluded.pressure_variance,
-        flow_limitation_score = excluded.flow_limitation_score,
-        event_cluster_index = excluded.event_cluster_index,
-        computed_at = datetime('now')
-    `);
+    try {
+      const upsertDerived = this.db.prepare(`
+        INSERT INTO derived_metrics (
+          night_id, stability_score, mask_fit_score, ventilation_stability_score,
+          compliance_risk, pressure_responsiveness, residual_burden, outliers, z_scores,
+          therapy_stability_score, leak_severity_tier, leak_consistency_index,
+          pressure_variance, flow_limitation_score, event_cluster_index
+        ) VALUES (
+          @night_id, @stability, @mask_fit, @ventilation,
+          @compliance, @pri, @residual, @outliers, @z_scores,
+          @therapy_stability_score, @leak_severity_tier, @leak_consistency_index,
+          @pressure_variance, @flow_limitation_score, @event_cluster_index
+        )
+        ON CONFLICT(night_id) DO UPDATE SET
+          stability_score = excluded.stability_score,
+          mask_fit_score = excluded.mask_fit_score,
+          ventilation_stability_score = excluded.ventilation_stability_score,
+          compliance_risk = excluded.compliance_risk,
+          pressure_responsiveness = excluded.pressure_responsiveness,
+          residual_burden = excluded.residual_burden,
+          outliers = excluded.outliers,
+          z_scores = excluded.z_scores,
+          therapy_stability_score = excluded.therapy_stability_score,
+          leak_severity_tier = excluded.leak_severity_tier,
+          leak_consistency_index = excluded.leak_consistency_index,
+          pressure_variance = excluded.pressure_variance,
+          flow_limitation_score = excluded.flow_limitation_score,
+          event_cluster_index = excluded.event_cluster_index,
+          computed_at = datetime('now')
+      `);
 
-    const upsertInsight = this.db.prepare(`
+      const upsertInsight = this.db.prepare(`
         INSERT INTO insights_explanations (id, night_id, key, title, summary, details)
         VALUES (@id, @night_id, @key, @title, @summary, @details)
-    `);
+      `);
 
-    this.dataAccess.beginTransaction();
+      this.dataAccess.beginTransaction();
 
-    try {
       for (const date of nightDates) {
         const current = this.dataAccess.getNight(deviceId, date);
         if (!current) continue;
@@ -98,6 +98,15 @@ class AnalyticsOrchestrator {
           stability_score: clinicalStability.stabilityScore, mask_fit_score: null, compliance_risk: compliance
         }, flags);
 
+        const pbInsight = generatePeriodicBreathingInsight(
+          current.pb_pct, current.pb_is_significant === 1, current.pb_episode_count
+        );
+        if (pbInsight) insights.push(pbInsight);
+
+        const nightsElevatedFL = history30.filter(h => h.flow_limitation_p95 != null && h.flow_limitation_p95 >= 0.10).length;
+        const flInsight = generateFlowLimitationInsight(current.flow_limitation_p95, current.rin_per_hr, nightsElevatedFL);
+        if (flInsight) insights.push(flInsight);
+
         for (const ins of insights) {
           upsertInsight.run({
             id: crypto.randomUUID(), night_id: current.night_id,
@@ -108,6 +117,7 @@ class AnalyticsOrchestrator {
 
       const latestNights = this.dataAccess.getLatestNightsForCorrelations(deviceId, 30);
       const corrs = analyzeCorrelations(latestNights);
+      this.db.prepare(`DELETE FROM correlations WHERE device_id = ? AND window_days = 30`).run(deviceId);
       if (corrs.length > 0) {
         this.db.prepare(`
           INSERT INTO correlations (id, device_id, window_days, results)
@@ -117,7 +127,7 @@ class AnalyticsOrchestrator {
 
       this.dataAccess.commitTransaction();
     } catch (err) {
-      this.dataAccess.rollbackTransaction();
+      try { this.dataAccess.rollbackTransaction(); } catch (_) {}
       console.error("Analytics Orchestration Failed:", err);
     }
   }

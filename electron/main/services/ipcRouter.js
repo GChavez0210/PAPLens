@@ -72,6 +72,22 @@ class IpcRouter {
             return this.cpap.dataLoader.loadSessionDetail(sessionId);
         });
 
+        ipcMain.handle("cpap:get-best-session-for-date", async (_event, date) => {
+            if (!this.cpap.dataLoader) await this.cpap.ensureSessionLoader();
+            if (!this.cpap.dataLoader) return { error: "Session detail requires original folder." };
+            // date is "YYYY-MM-DD"; CPAP stores files under the night they start, which may
+            // be the previous calendar day (e.g. session at 23:30 on May 9 = May 10 night).
+            const compact = date.replace(/-/g, "");
+            const d = new Date(date + "T12:00:00Z");
+            d.setUTCDate(d.getUTCDate() - 1);
+            const prevCompact = d.toISOString().split("T")[0].replace(/-/g, "");
+            const session = this.cpap.dataLoader.sessions.find(
+                (s) => s.date === compact || s.date === prevCompact
+            );
+            if (!session) return { error: `No session found for ${date}.` };
+            return this.cpap.dataLoader.loadSessionDetail(session.id);
+        });
+
         ipcMain.handle("cpap:refresh", async () => {
             if (!this.cpap.currentDataPath && this.profileDb) {
                 this.cpap.currentDataPath = this.cpap.getLatestImportedPath();
@@ -238,13 +254,14 @@ class IpcRouter {
 
             const { days = 30, from = null, to = null } = payload || {};
             const insightsCols = `
-                 n.night_date, n.usage_hours,
+                 n.id AS night_id, n.night_date, n.usage_hours,
                  m.ahi_total, m.obstructive_apneas_per_hr, m.central_apneas_per_hr,
                  m.unclassified_apneas_per_hr, m.hypopneas_per_hr, m.apneas_per_hr,
                  m.pressure_median, m.pressure_p95, m.leak_p50, m.leak_p95,
                  m.minute_vent_p50, m.resp_rate_p50, m.tidal_vol_p50,
                  m.flow_limitation_p95, m.rin_per_hr, m.csr_per_hr,
                  m.snore_index, m.leak_spike_count, m.pressure_histogram, m.pressure_efficiency,
+                 m.pb_episode_count, m.pb_total_seconds, m.pb_pct, m.pb_avg_cycle_sec, m.pb_is_significant,
                  d.residual_burden, d.stability_score, d.compliance_risk`;
             let trendRows;
             if (from && to) {
@@ -282,13 +299,32 @@ class IpcRouter {
         ORDER BY computed_at DESC LIMIT 1
       `).get(device.id);
 
-            const explanations = this.profileDb.db.prepare(`
-        SELECT title, summary, details, key, night_id 
-        FROM insights_explanations 
-        WHERE night_id IN (
-          SELECT id FROM nights WHERE device_id = ? AND usage_hours > 0 ORDER BY night_date DESC LIMIT 7
-        ) ORDER BY created_at DESC LIMIT 10
-      `).all(device.id);
+            const lastNightDate = this.profileDb.db.prepare(`
+          SELECT night_date FROM nights WHERE device_id = ? AND usage_hours > 0
+          ORDER BY night_date DESC LIMIT 1
+        `).get(device.id)?.night_date;
+
+            let explanations;
+            if (from && to) {
+                explanations = this.profileDb.db.prepare(`
+          SELECT title, summary, details, key, night_id
+          FROM insights_explanations
+          WHERE night_id IN (
+            SELECT id FROM nights WHERE device_id = ? AND usage_hours > 0
+            AND night_date BETWEEN ? AND ? AND night_date != ?
+          ) ORDER BY created_at DESC LIMIT 20
+        `).all(device.id, from, to, lastNightDate ?? "");
+            } else {
+                const expLimit = days === 0 ? 99999 : days;
+                explanations = this.profileDb.db.prepare(`
+          SELECT title, summary, details, key, night_id
+          FROM insights_explanations
+          WHERE night_id IN (
+            SELECT id FROM nights WHERE device_id = ? AND usage_hours > 0
+            AND night_date != ? ORDER BY night_date DESC LIMIT ?
+          ) ORDER BY created_at DESC LIMIT 20
+        `).all(device.id, lastNightDate ?? "", expLimit);
+            }
 
             return {
                 trends: trendRows,

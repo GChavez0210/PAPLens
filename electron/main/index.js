@@ -28,7 +28,11 @@ app.whenReady().then(async () => {
   if (savedProfileId) {
     const profileDb = new ProfileDatabase(app.getPath("userData"), savedProfileId);
     appContainer.register("profileDatabase", profileDb);
-    await cpapService.hydrateSummaryFromDatabase();
+    try {
+      await cpapService.hydrateSummaryFromDatabase();
+    } catch (err) {
+      console.error("[startup] hydrateSummaryFromDatabase failed:", err);
+    }
   } else {
     appContainer.register("profileDatabase", null);
   }

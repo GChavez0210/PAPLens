@@ -84,6 +84,70 @@ function titleForSingleFlag(metric, z) {
     }
 }
 
+function generatePeriodicBreathingInsight(pbPct, pbIsSignificant, episodeCount) {
+    if (pbPct == null || pbPct === 0) return null;
+    if (pbIsSignificant) {
+        return {
+            key: "periodic_breathing",
+            title: "Periodic Breathing Detected",
+            summary: `Cheyne-Stokes–like breathing pattern occupied ${pbPct.toFixed(1)}% of your recording (${episodeCount} episode${episodeCount !== 1 ? "s" : ""}). This cyclic waxing-and-waning pattern can indicate central respiratory instability and warrants discussion with your care team.`,
+            details: null
+        };
+    }
+    if (pbPct >= 2) {
+        return {
+            key: "periodic_breathing",
+            title: "Mild Periodic Breathing",
+            summary: `A low-level periodic breathing pattern was detected (${pbPct.toFixed(1)}% of recording time, ${episodeCount} episode${episodeCount !== 1 ? "s" : ""}). This is below the clinical significance threshold but worth monitoring over time.`,
+            details: null
+        };
+    }
+    return null;
+}
+
+function generateFlowLimitationInsight(flP95, rin, nightsElevated) {
+    // flP95: 0–1 index (95th percentile from FlowLim.2s signal)
+    // rin: respiratory disturbance index (events/hr)
+    // nightsElevated: count of recent nights where flP95 > 0.10
+    if (flP95 == null) return null;
+
+    const severeFL = flP95 >= 0.30;
+    const mildFL = flP95 >= 0.10;
+    const elevatedRin = rin != null && rin > 5;
+
+    if (!mildFL && !elevatedRin) return null;
+
+    if (severeFL) {
+        const rinNote = elevatedRin ? ` Combined with an RIN of ${rin.toFixed(1)} events/hr, this suggests repeated partial airway obstruction that your device may not be fully resolving.` : "";
+        const trendNote = nightsElevated >= 3 ? ` This pattern has appeared on ${nightsElevated} recent nights.` : "";
+        return {
+            key: "flow_limitation",
+            title: "Significant Flow Limitation",
+            summary: `Your flow limitation index reached ${flP95.toFixed(2)} (95th percentile), above the significant threshold of 0.30.${rinNote}${trendNote} Consider discussing pressure settings or an AutoPAP range adjustment with your care team.`,
+            details: null
+        };
+    }
+
+    if (mildFL) {
+        const rinNote = elevatedRin ? ` RIN of ${rin.toFixed(1)} events/hr also indicates flow-limited breaths that fell below the hypopnea scoring threshold.` : "";
+        const trendNote = nightsElevated >= 3 ? ` Elevated on ${nightsElevated} recent nights.` : "";
+        return {
+            key: "flow_limitation",
+            title: "Mild Flow Limitation",
+            summary: `Your flow limitation index was ${flP95.toFixed(2)} — above the mild threshold of 0.10, indicating some upper airway narrowing during therapy.${rinNote}${trendNote} Monitor for an upward trend.`,
+            details: null
+        };
+    }
+
+    // RIN elevated but FL P95 below threshold
+    return {
+        key: "flow_limitation",
+        title: "Elevated Respiratory Disturbance",
+        summary: `Your Respiratory Disturbance Index (RIN) was ${rin.toFixed(1)} events/hr, indicating flow-limited breaths that did not reach apnea or hypopnea severity. These sub-threshold events can still fragment sleep and warrant monitoring.`,
+        details: null
+    };
+}
+
 function generateInsightNarratives(nightId, derivedMetrics, lastNightFlags) {
     const insights = [];
 
@@ -161,4 +225,4 @@ function generateInsightNarratives(nightId, derivedMetrics, lastNightFlags) {
     return insights;
 }
 
-module.exports = { generateInsightNarratives, METRIC_LABELS, describeFlagInContext };
+module.exports = { generateInsightNarratives, generatePeriodicBreathingInsight, generateFlowLimitationInsight, METRIC_LABELS, describeFlagInContext };

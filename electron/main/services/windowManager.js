@@ -41,6 +41,20 @@ class WindowManager {
             this.mainWindow = null;
         });
 
+        this.mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {
+            if (level >= 2) {
+                console.error(`[renderer] ${message} (${sourceId}:${line})`);
+            }
+        });
+
+        this.mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+            console.error(`[window] failed to load ${validatedURL}: ${errorCode} ${errorDescription}`);
+        });
+
+        this.mainWindow.webContents.on("render-process-gone", (_event, details) => {
+            console.error("[window] render process gone:", details);
+        });
+
         if (process.env.VITE_DEV_SERVER_URL) {
             this.mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
         } else {

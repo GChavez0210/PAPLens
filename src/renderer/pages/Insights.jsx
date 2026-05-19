@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { filterAnalyzedDays, getCorrelationInsight } from "../utils/reportBuilder";
 import { calculatePercentile, formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
 import { AHITrendChart } from "../components/charts/AHITrendChart";
@@ -7,21 +7,16 @@ import { LeakSeverityGauge } from "../components/charts/LeakSeverityGauge";
 import { EventTypeSplitChart } from "../components/charts/EventTypeSplitChart";
 import { FlowLimitationChart } from "../components/charts/FlowLimitationChart";
 import { PressureHistogramChart } from "../components/charts/PressureHistogramChart";
-
-// ── Icon map ────────────────────────────────────────────────────────────────
-const ICONS = {
-    stability: "stability",
-    mask_fit: "mask_fit",
-    compliance: "compliance",
-    outlier: "outlier",
-    default: "default",
-};
+import { PeriodicBreathingCard } from "../components/charts/PeriodicBreathingCard";
+import { SessionGraphsModal } from "../components/SessionGraphsModal";
 
 const KEY_COLOR = {
     stability: { border: "#22D3EE", bg: "rgba(34,211,238,0.08)" },
     mask_fit: { border: "#10b981", bg: "rgba(16,185,129,0.08)" },
     compliance: { border: "#f59e0b", bg: "rgba(245,158,11,0.08)" },
     outlier: { border: "#ef4444", bg: "rgba(239,68,68,0.08)" },
+    periodic_breathing: { border: "#f59e0b", bg: "rgba(245,158,11,0.08)" },
+    flow_limitation: { border: "#f59e0b", bg: "rgba(245,158,11,0.08)" },
     default: { border: "#4F46E5", bg: "rgba(79,70,229,0.08)" },
 };
 
@@ -46,6 +41,16 @@ const INSIGHT_TOOLTIPS = {
         title: "What this means",
         what: "This night's metrics deviated significantly from your recent baseline using statistical z-score analysis. Outliers can reflect a genuine acute issue (illness, alcohol, new sleep position) or simply natural night-to-night variability.",
         action: "Review the specific metrics flagged. Isolated outliers rarely require action — watch for a pattern across multiple nights before adjusting therapy. If outliers occur frequently, discuss with your healthcare provider."
+    },
+    periodic_breathing: {
+        title: "What this means",
+        what: "Periodic breathing is a cyclic pattern where tidal volume alternates between deep and shallow breaths over a 30–120 second cycle. When accompanied by central apneas at the nadir it is called Cheyne-Stokes respiration — a pattern linked to heart failure, stroke, and altitude sickness.",
+        action: "If this is flagged repeatedly, share the finding with your cardiologist or sleep physician. Adaptive servo-ventilation (ASV) or treating the underlying cardiac condition can significantly reduce CSR events."
+    },
+    flow_limitation: {
+        title: "What this means",
+        what: "Flow limitation occurs when your upper airway narrows enough to reduce airflow without a complete collapse. Your CPAP device records a 0–1 index per breath: values above 0.10 indicate mild narrowing, above 0.30 is clinically significant. The Respiratory Disturbance Index (RIN) counts flow-limited breaths that don't reach apnea or hypopnea severity but can still fragment sleep.",
+        action: "If FL P95 is persistently above 0.30, discuss widening your pressure range or switching to an AutoPAP mode with your care team. Mild elevation (0.10–0.30) may respond to positional therapy or mask adjustments."
     },
     default: {
         title: "What this means",
@@ -101,6 +106,8 @@ function AppIcon({ type = "default", color = "var(--muted)", size = 18 }) {
         'aria-hidden': true,
     };
 
+    if (type === "periodic_breathing") return <svg {...common}><path d="M2 12c1-4 3-6 5-6s3.5 3 5 6 3 6 5 6 4-2 5-6" /></svg>;
+    if (type === "flow_limitation") return <svg {...common}><path d="M3 12h4l2-4 3 8 2-4h7" /><path d="M3 17h18" strokeDasharray="3 2" /></svg>;
     if (type === "stability") return <svg {...common}><path d="M3 12h3l2-5 4 10 2-5h7" /></svg>;
     if (type === "mask_fit") return <svg {...common}><path d="M7 4h10l1 5v4a6 6 0 0 1-12 0V9l1-5z" /><path d="M10 12h4" /></svg>;
     if (type === "compliance") return <svg {...common}><circle cx="12" cy="12" r="8" /><path d="M12 8v5l3 2" /></svg>;
@@ -162,7 +169,7 @@ function CorrelationBar({ r, pair, label }) {
 function InsightCard({ insight }) {
     const [hovered, setHovered] = useState(false);
     const theme = KEY_COLOR[insight.key] || KEY_COLOR.default;
-    const icon = ICONS[insight.key] || ICONS.default;
+    const icon = insight.key in KEY_COLOR ? insight.key : "default";
     const tooltip = INSIGHT_TOOLTIPS[insight.key] || INSIGHT_TOOLTIPS.default;
 
     return (
@@ -213,8 +220,66 @@ function InsightCard({ insight }) {
     );
 }
 
-export function Insights({ range = "30", customFrom = "", customTo = "" }) {
+const MULTI_NIGHT_TITLES = {
+    "Significant Flow Limitation": "Significant Flow Limitation Detected",
+    "Mild Flow Limitation": "Mild Flow Limitation Observed",
+    "Elevated Respiratory Disturbance": "Elevated Respiratory Disturbance Observed",
+    "Stable Night": "Generally Stable",
+    "Fluctuating Therapy": "Inconsistent Therapy Detected",
+    "Unusual Night Detected": "Unusual Nights Detected",
+    "Elevated Event Count": "Elevated Event Count Detected",
+    "Exceptionally Low AHI": "Consistently Low AHI",
+    "Reduced Therapy Usage": "Reduced Therapy Usage Detected",
+    "Extended Usage Night": "Extended Usage Observed",
+    "Elevated Mask Leak": "Elevated Mask Leak Detected",
+    "High Tidal Volume": "High Tidal Volume Observed",
+    "Low Tidal Volume": "Low Tidal Volume Observed",
+    "Elevated Breathing Volume": "Elevated Breathing Volume Observed",
+    "Reduced Breathing Volume": "Reduced Breathing Volume Observed",
+};
+
+function adaptForRange(exp) {
+    const title = MULTI_NIGHT_TITLES[exp.title] ?? exp.title;
+    const summary = (exp.summary || "")
+        .replace(/^This night stood out because/, "Some nights stood out because")
+        .replace(/^This night/, "Some nights");
+    return { ...exp, title, summary };
+}
+
+export function Insights({ range = "30", customFrom = "", customTo = "", theme = "dark", sessions = [] }) {
     const [data, setData] = useState(null);
+    const [modalSessions, setModalSessions] = useState([]);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+
+    const openSessionGraphs = useCallback((night) => {
+        // Find all filesystem sessions that belong to this night.
+        // session.date is YYYYMMDD; night.night_date is YYYY-MM-DD — strip dashes to match.
+        // Also check the previous calendar day (CPAP stores files under the night-start folder).
+        const nightDateCompact = night.night_date?.replace(/-/g, "");
+        const d = new Date(night.night_date);
+        d.setDate(d.getDate() - 1);
+        const prevCompact = d.toISOString().split("T")[0].replace(/-/g, "");
+
+        const daySessions = sessions.filter(
+            (s) => s.date === nightDateCompact || s.date === prevCompact
+        );
+
+        // Prefer sessions with recorded data (durationMinutes > 0); stub/incomplete
+        // sessions at the same timestamp are excluded from the picker to avoid duplicates.
+        const usable = daySessions.filter((s) => s.durationMinutes > 0);
+        if (usable.length > 0) {
+            setModalSessions(usable);
+        } else if (daySessions.length > 0) {
+            setModalSessions(daySessions);
+        } else {
+            // Fallback: no filesystem sessions found — pass a synthetic entry so the
+            // modal can still attempt a date-based lookup.
+            setModalSessions([{ id: null, timestamp: night.night_date, files: {} }]);
+        }
+        setIsModalOpen(true);
+    }, [sessions]);
+
+    const closeModal = useCallback(() => setIsModalOpen(false), []);
 
     const loadData = async () => {
         let payload;
@@ -250,7 +315,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
         if (seenKeys.has(exp.key)) return false;
         seenKeys.add(exp.key);
         return true;
-    });
+    }).map(adaptForRange);
 
     const sorted = [...(trends || [])].reverse();
     const analyzed = filterAnalyzedDays(sorted);
@@ -359,7 +424,9 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                             <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
                                 AHI Trend ({rangeLabel})
                             </h3>
-                            <AHITrendChart labels={labels} data={ahiData} height={220} />
+                            <div data-report-key="ahi-trend">
+                                <AHITrendChart labels={labels} data={ahiData} height={220} />
+                            </div>
                         </section>
 
                         {(() => {
@@ -448,7 +515,9 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                                 <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
                                     Event Type Breakdown ({rangeLabel})
                                 </h3>
-                                <EventTypeSplitChart trends={sorted} height={220} />
+                                <div data-report-key="event-split">
+                    <EventTypeSplitChart trends={sorted} height={220} />
+                </div>
                             </section>
                         )}
 
@@ -461,7 +530,9 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                                 <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: 14 }}>
                                     FL P95 measures airway narrowing intensity; RIN counts flow-limited breaths that didn't score as events.
                                 </div>
-                                <FlowLimitationChart trends={sorted} height={200} />
+                                <div data-report-key="flow-limit">
+                    <FlowLimitationChart trends={sorted} height={200} />
+                </div>
                             </section>
                         )}
 
@@ -513,11 +584,21 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                 );
             })()}
 
+            {/* Periodic Breathing / Cheyne-Stokes analysis */}
+            {trends && trends.some(r => r.pb_pct != null) && (
+                <section className="panel" style={{ padding: 20 }}>
+                    <h3 style={{ margin: "0 0 14px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
+                        Periodic Breathing Analysis ({rangeLabel})
+                    </h3>
+                    <PeriodicBreathingCard trends={trends} />
+                </section>
+            )}
+
             {uniqueExplanations.length > 0 && (
                 <section className="panel" style={{ padding: 20 }}>
                     <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: 1, display: "flex", alignItems: "center", gap: 8 }}>
                         <AppIcon type="default" color="var(--muted)" size={16} />
-                        Recent Findings
+                        Findings — {rangeLabel}
                     </h3>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                         {uniqueExplanations.map((exp) => <InsightCard key={`${exp.night_id}-${exp.key}`} insight={exp} />)}
@@ -540,11 +621,20 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                     </div>
                 ) : (
                     <div style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--muted)", padding: "20px 0" }}>
-                        <AppIcon type="default" color="var(--muted)" size={18} />
+                        <AppIcon type="default" color="var(--muted)" size={16} />
                         <span>Not enough data for correlations. Requires at least 2 nights of recorded sessions.</span>
                     </div>
                 )}
             </section>
+
+
+            {isModalOpen && (
+                <SessionGraphsModal
+                    sessions={modalSessions}
+                    theme={theme}
+                    onClose={closeModal}
+                />
+            )}
         </div>
     );
 }
