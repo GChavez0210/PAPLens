@@ -134,18 +134,29 @@ The **Save Data Report** button (hover for description) generates a print-ready 
 
 ## Supported Devices
 
-Support levels:
+### Support tiers
 
-- **Supported**: exercised by PAPLens' primary workflow and expected to work for normal imports.
-- **Beta**: easy parser integration is present for summary/trend data, but real-world validation coverage is still limited.
-- **Alpha**: parser family is known upstream, but PAPLens has not integrated it yet or requires deeper validation.
+| Tier | Implementation difficulty | Maturity |
+|------|--------------------------|----------|
+| **Supported** | ★★★★★ — the primary development target; every feature is built and exercised against real ResMed data | Production-grade. Incremental import, full analytics pipeline, EDF session waveform viewer, profile-local cache, and report export all work. Regression-tested on every build. |
+| **Beta** | ★★★☆☆ — medium. Adapting a GPL-licensed upstream parser (OSCAR / cpap-parser) into JavaScript required reverse-engineering the binary and key=value formats, mapping field offsets to PAPLens metrics, and writing fixtures without access to physical devices. The parsers are complete for summary-level data but have not been validated against a broad sample of real SD cards. | Summary import and trend analytics work. Session waveform viewing is not available (EDF-only feature). Real-world field reports may surface edge cases in firmware variants or SD card layout differences. |
+| **Alpha** | ★★☆☆☆ — hard. These device families have proprietary, undocumented, or encrypted formats. Implementing them correctly requires either a physical device for format reverse-engineering or porting a large upstream parser (OSCAR has 20+ loader plugins, each 500–2000 lines of C++). | Not yet integrated. The upstream parsing logic exists in OSCAR but has not been ported or validated for PAPLens. Integration is a significant engineering effort. |
 
-| Status | Device family | Current PAPLens support |
-|--------|---------------|-------------------------|
-| Supported | ResMed AirSense 10 / AirSense 11 / AirCurve EDF SD cards | Summary import, trends, analytics, report export, EDF session waveform viewer, profile-local session cache |
-| Beta | Resvent iBreezer / Hoffrichter Point 3 | Summary import, event indices, usage, pressure/leak/ventilation/tidal/respiratory-rate percentiles from available `THERAPY/RECORD` files |
-| Beta | DeVilbiss IntelliPAP DV6 | Summary import, event indices, usage, pressure/leak/tidal/respiratory-rate and flow-limitation summary fields from `DV6/S.BIN` |
-| Alpha | Philips Respironics System One / DreamStation, Fisher & Paykel SleepStyle, Lowenstein/Weinmann Prisma, Icon, M-Series, and other OSCAR loader families | Not yet integrated in PAPLens; candidates for later parser work because they require more device-specific validation and/or deeper session parsing |
+### Device support matrix
+
+| Status | Device family | What works in PAPLens |
+|--------|---------------|-----------------------|
+| **Supported** | ResMed AirSense 10 / AirSense 11 / AirCurve 10 / AirCurve 11 (EDF SD cards) | Full: summary import, all metrics and analytics, EDF session waveform viewer, profile-local session cache, PDF report export |
+| **Beta** | Resvent iBreezer / Hoffrichter Point 3 | Summary import: AHI, OAI, CAI, HI, usage hours, pressure P50/P95, leak P50/P95, minute ventilation P50/P95, tidal volume P50/P95, respiratory rate P50/P95 — derived from P-file waveform percentiles and STAT event counts in `THERAPY/RECORD/`. No session waveform viewer. |
+| **Beta** | DeVilbiss IntelliPAP DV6 | Summary import: AHI, OAI, CAI, HI, usage hours, pressure P50/P95, leak P50/P95, tidal volume, respiratory rate, flow limitation fraction — read directly from the `DV6/S.BIN` rolling-record file. No session waveform viewer. |
+| **Alpha** | Philips Respironics System One / DreamStation, Fisher & Paykel SleepStyle / ICON / ICON+, Löwenstein Medical / Weinmann Prisma, M-Series, and other OSCAR parser families | Not yet integrated. Parsing logic exists in OSCAR's GPL loader plugins but has not been ported to PAPLens. |
+
+### Known beta limitations
+
+- **No session waveform viewer** for Resvent or DeVilbiss — that feature requires EDF signal files, which these devices do not produce in a compatible format.
+- **Resvent**: pressure and leak percentiles are derived from the 2–4 Hz P-file waveform data. Devices with different firmware may write different channel names or omit P files entirely, in which case those fields will be absent (not zeroed).
+- **DeVilbiss**: the `DV6/S.BIN` rolling buffer holds a fixed number of records; on very old or very active devices older nights may be overwritten. Leak values are stored as single-byte tenths of L/min (max ~25.5 L/min); unusually high leak nights may be capped. These are hardware constraints of the DV6 format.
+- **Both**: real-world SD card validation has been limited to synthetic test fixtures derived from the upstream OSCAR and cpap-parser implementations. Firmware variants or SD card edge cases may surface parsing gaps that will be fixed as field reports come in.
 
 ## Data requirements
 

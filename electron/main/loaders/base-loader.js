@@ -35,6 +35,19 @@ class BaseLoader {
     return sortedArr[lo] + (sortedArr[hi] - sortedArr[lo]) * (idx - lo);
   }
 
+  setDayBoundary() {
+    // Day-boundary filtering is a ResMed/EDF concept; no-op for other devices.
+  }
+
+  getDailyStats() {
+    return this._summary?.dailyStats || [];
+  }
+
+  async getSummary() {
+    // Non-ResMed devices don't re-parse on boundary change; return cached result.
+    return this._summary || null;
+  }
+
   buildSummary(deviceInfo, dailyStats) {
     const normalizedDeviceInfo = {
       manufacturer: this.manufacturer,
@@ -48,7 +61,7 @@ class BaseLoader {
     const leak = avg("leak95");
     const tidalVolume = avg("tidVol50");
 
-    return {
+    this._summary = {
       deviceInfo: normalizedDeviceInfo,
       deviceCapabilities: this.getDeviceCapabilities(),
       totalDays: dailyStats.length,
@@ -65,6 +78,7 @@ class BaseLoader {
       dailyStats,
       sessions: this.sessions
     };
+    return this._summary;
   }
 
   blankDay(dateStr) {

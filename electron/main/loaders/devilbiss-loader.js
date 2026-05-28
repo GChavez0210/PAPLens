@@ -114,8 +114,8 @@ class DeVilbissLoader extends BaseLoader {
       uBuf = null;
     }
 
-    const sessions = uBuf ? this._parseUBin(uBuf) : [];
-    const dailyStats = this._parseSBin(sBuf, sessions);
+    this.sessions = uBuf ? this._parseUBin(uBuf) : [];
+    const dailyStats = this._parseSBin(sBuf);
 
     if (onProgress) onProgress({ done: dailyStats.length, total: dailyStats.length });
     return this.buildSummary(this.deviceInfo, dailyStats);
@@ -140,7 +140,8 @@ class DeVilbissLoader extends BaseLoader {
       const unixStop = (stopRaw + DV6_EPOCH) * 1000;
       const durationHours = (unixStop - unixStart) / 3_600_000;
 
-      const dateStr = new Date(unixStart).toISOString().split("T")[0];
+      const _d = new Date(unixStart);
+      const dateStr = `${_d.getFullYear()}-${String(_d.getMonth() + 1).padStart(2, "0")}-${String(_d.getDate()).padStart(2, "0")}`;
 
       const u = (o) => buf[off + o];
       const le16 = (o) => buf.readUInt16LE(off + o);
@@ -156,7 +157,7 @@ class DeVilbissLoader extends BaseLoader {
       day.cai = cai;
       day.hi = hi;
       day.ai = oai + cai; // apnea index = OA + CA
-      day.usageHours = u(12) / 10 || durationHours;
+      day.usageHours = u(12) !== 0 ? u(12) / 10 : durationHours;
       day.onDuration = day.usageHours * 60;
 
       day.pressure = u(16) / 10 || null;    // P50
@@ -169,7 +170,9 @@ class DeVilbissLoader extends BaseLoader {
       day.tidVol95 = le16(27) || null; // only one tidal vol stat available
 
       day.respRate50 = u(29) || null;
-      day.flowLimP95 = u(33) / 2 / 100 || null; // time_in_fl as fraction 0–1
+      // time_in_fl stored as half-percent units (÷2 → %, ÷100 → fraction 0–1).
+      // Use explicit null check so 0% flow limitation (a valid result) isn't lost.
+      day.flowLimP95 = u(33) !== 0 ? u(33) / 2 / 100 : 0;
 
       daily.push(day);
     }

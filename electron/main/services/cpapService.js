@@ -155,6 +155,9 @@ class CpapService {
         if (this.dataLoader) return this.dataLoader;
         if (!this.currentDataPath || !fs.existsSync(this.currentDataPath)) return null;
 
+        // Session waveform loading is ResMed/EDF-only; require STR.edf before proceeding.
+        if (!fs.existsSync(path.join(this.currentDataPath, "STR.edf"))) return null;
+
         const loader = new CPAPDataLoader(this.currentDataPath);
         await loader.loadSessionList();
         this.dataLoader = loader;

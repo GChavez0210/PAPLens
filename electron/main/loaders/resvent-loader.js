@@ -188,13 +188,14 @@ class ResventLoader extends BaseLoader {
     const prevH = day.usageHours;
     const totalH = prevH + usageHours;
 
-    // Weighted-average the per-hour rates across multiple sessions
+    // Weighted-average the per-hour event rates across multiple sessions in a day.
+    // Formula: (prevRate * prevHours + newEventCount) / totalHours
     if (totalH > 0) {
-      day.ahi = (day.ahi * prevH + (cntAHI / usageHours) * usageHours) / totalH;
-      day.oai = (day.oai * prevH + (cntOAI / usageHours) * usageHours) / totalH;
-      day.cai = (day.cai * prevH + (cntCAI / usageHours) * usageHours) / totalH;
-      day.hi = (day.hi * prevH + (cntHI / usageHours) * usageHours) / totalH;
-      day.ai = (day.ai * prevH + (cntAI / usageHours) * usageHours) / totalH;
+      day.ahi = (day.ahi * prevH + cntAHI) / totalH;
+      day.oai = (day.oai * prevH + cntOAI) / totalH;
+      day.cai = (day.cai * prevH + cntCAI) / totalH;
+      day.hi  = (day.hi  * prevH + cntHI)  / totalH;
+      day.ai  = (day.ai  * prevH + cntAI)  / totalH;
     }
     day.usageHours = totalH;
     day.onDuration += secUsed / 60;
@@ -232,14 +233,17 @@ class ResventLoader extends BaseLoader {
     const channels = [];
     for (let i = 0; i < descCount; i++) {
       const off = MAIN_HDR + i * DESC_HDR;
-      if (off + 9 > buf.length) break;
-      const name = buf.slice(off, off + 9).toString("ascii").replace(/\0/g, "").trim();
+      // Require the full 32-byte descriptor to be present so dataOffset is valid.
+      if (off + DESC_HDR > buf.length) break;
+      const name = buf.slice(off, off + 8).toString("ascii").replace(/\0/g, "").trim();
       channels.push({ name, gain: CHANNEL_GAIN[name] ?? 1.0 });
     }
 
     const dataOffset = MAIN_HDR + descCount * DESC_HDR;
     let pos = dataOffset;
-    const stride = channels.length * 2;
+    // Use descCount (from header) as the per-frame stride so the read position
+    // stays aligned even when some descriptors were unknown or unparsed.
+    const stride = descCount * 2;
 
     while (pos + stride <= buf.length) {
       for (let i = 0; i < channels.length; i++) {
@@ -265,13 +269,16 @@ class ResventLoader extends BaseLoader {
 
   _finalizeDay(day) {
     const pct = BaseLoader.percentile;
-    const sort = (arr) => arr && arr.length ? [...arr].filter(v => v > 0).sort((a, b) => a - b) : null;
+    // Pressure, tidal volume, resp rate: exclude zero (impossible during active therapy).
+    const sortPos    = (arr) => arr && arr.length ? [...arr].filter(v => v > 0).sort((a, b) => a - b) : null;
+    // Leak and minute ventilation: include zero (zero leak is valid clinical data).
+    const sortNonNeg = (arr) => arr && arr.length ? [...arr].filter(v => v >= 0).sort((a, b) => a - b) : null;
 
-    const ps = sort(day._pressureSamples);
-    const ls = sort(day._leakSamples);
-    const ms = sort(day._mvSamples);
-    const vs = sort(day._vtSamples);
-    const rs = sort(day._rrSamples);
+    const ps = sortPos(day._pressureSamples);
+    const ls = sortNonNeg(day._leakSamples);
+    const ms = sortNonNeg(day._mvSamples);
+    const vs = sortPos(day._vtSamples);
+    const rs = sortPos(day._rrSamples);
 
     if (ps) { day.pressure = pct(ps, 50); day.maxPressure = pct(ps, 95); }
     if (ls) { day.leak50 = pct(ls, 50); day.leak95 = pct(ls, 95); }
@@ -287,8 +294,10 @@ class ResventLoader extends BaseLoader {
   }
 
   _parseKV(text) {
+    // Strip UTF-8 BOM (﻿) that some firmware writers prepend.
+    const src = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
     const result = {};
-    for (const line of text.split(/\r?\n/)) {
+    for (const line of src.split(/\r?\n/)) {
       const eq = line.indexOf("=");
       if (eq <= 0) continue;
       const key = line.slice(0, eq).trim();
