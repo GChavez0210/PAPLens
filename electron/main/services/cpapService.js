@@ -4,6 +4,7 @@ const path = require("path");
 const { IncrementalImporter } = require("./incremental-import");
 const { AnalyticsOrchestrator } = require("../analytics/orchestrator");
 const { CPAPDataLoader } = require("./cpap-data-loader");
+const { detectDataFolder } = require("../loaders/loader-registry");
 const { buildLeakAndTidalSummary, toOptionalNumber } = require("./therapyMetrics");
 
 function parseJsonSafely(value) {
@@ -161,14 +162,21 @@ class CpapService {
     }
 
     async reattachSessionFolder(folderPath) {
-        if (!fs.existsSync(path.join(folderPath, "STR.edf"))) {
-            return { success: false, error: "STR.edf not found. Please select your CPAP data folder." };
+        if (!detectDataFolder(folderPath)) {
+            return { success: false, error: "No supported CPAP data found. Please select your CPAP data folder." };
         }
-        const loader = new CPAPDataLoader(folderPath);
-        await loader.loadSessionList();
-        this.dataLoader = loader;
+        // Session waveform viewing is only available for ResMed (EDF-based) devices.
+        // For other manufacturers, reattach succeeds but session list will be empty.
+        const strPath = path.join(folderPath, "STR.edf");
+        if (fs.existsSync(strPath)) {
+            const loader = new CPAPDataLoader(folderPath);
+            await loader.loadSessionList();
+            this.dataLoader = loader;
+            this.currentDataPath = folderPath;
+            return { success: true, sessionCount: loader.sessions.length };
+        }
         this.currentDataPath = folderPath;
-        return { success: true, sessionCount: loader.sessions.length };
+        return { success: true, sessionCount: 0 };
     }
 
     // Incrementally copies STR.edf, Identification files, and DATALOG session folders
@@ -318,6 +326,9 @@ class CpapService {
                 manufacturer: device.manufacturer || "Unknown",
                 machineId: device.id,
                 firmwareVersion: device.firmware || "Unknown"
+            },
+            deviceCapabilities: {
+                supportsOximetry: false
             },
             totalDays: dailyStats.length,
             recentDays: recentDays.length,

@@ -385,7 +385,7 @@ export function App() {
       },
       device: {
         model: deviceInfo.productName || "Unknown",
-        manufacturer: "ResMed",
+        manufacturer: deviceInfo.manufacturer || "Unknown",
         serialNumber: deviceInfo.serialNumber || "Unknown",
         firmware: deviceInfo.firmwareVersion || "Unknown"
       },
@@ -1100,7 +1100,6 @@ export function App() {
     </main>
   );
 }
-
 
 
 

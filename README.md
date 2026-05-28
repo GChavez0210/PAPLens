@@ -4,7 +4,7 @@
   <img src="PAPLens-logo.png" alt="PAPLens Logo" width="250">
 </p>
 
-Desktop PAP/CPAP analytics for ResMed AirSense data, running fully offline.
+Desktop PAP/CPAP analytics for supported PAP/CPAP SD-card data, running fully offline.
 
 Repository: https://github.com/GChavez0210/PAPLens
 
@@ -20,11 +20,11 @@ See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## What PAPLens does
 
-PAPLens is a fully offline desktop analytics tool for ResMed PAP therapy data. It reads your SD card, runs a clinical analytics pipeline locally, and gives you a dashboard and printable report designed to support conversations with your care team.
+PAPLens is a fully offline desktop analytics tool for PAP therapy data. It reads supported SD-card exports, runs a clinical analytics pipeline locally, and gives you a dashboard and printable report designed to support conversations with your care team.
 
-- Imports ResMed SD-card data (EDF format) incrementally into a local SQLite profile database — only new or changed nights are re-processed on subsequent imports.
+- Imports supported SD-card data incrementally into a local SQLite profile database — only new or changed nights are re-processed on subsequent imports.
 - Supports multiple isolated patient profiles, each with their own database and last-used data path.
-- Detects device model and metadata (AirSense 10 / AirSense 11) from identification files.
+- Detects device model and metadata from supported device files.
 - Runs a full analytics pipeline on import: scoring, outlier detection, correlation analysis, periodic breathing detection, and insight narrative generation — all local, no cloud.
 - Provides a dashboard with trend charts, a sleep calendar heatmap, and a last-night summary sidebar.
 - Provides an Insights page with metric trends, CMS compliance tracking, Pearson correlation analysis, periodic breathing analysis, and flow limitation tracking.
@@ -132,15 +132,34 @@ The **Save Data Report** button (hover for description) generates a print-ready 
 - Each profile has its own isolated SQLite database, session EDF cache, and last-used data path
 - Active profile is persisted securely between sessions using OS-level credential storage (Electron `safeStorage` → Windows Credential Manager)
 
+## Supported Devices
+
+Support levels:
+
+- **Supported**: exercised by PAPLens' primary workflow and expected to work for normal imports.
+- **Beta**: easy parser integration is present for summary/trend data, but real-world validation coverage is still limited.
+- **Alpha**: parser family is known upstream, but PAPLens has not integrated it yet or requires deeper validation.
+
+| Status | Device family | Current PAPLens support |
+|--------|---------------|-------------------------|
+| Supported | ResMed AirSense 10 / AirSense 11 / AirCurve EDF SD cards | Summary import, trends, analytics, report export, EDF session waveform viewer, profile-local session cache |
+| Beta | Resvent iBreezer / Hoffrichter Point 3 | Summary import, event indices, usage, pressure/leak/ventilation/tidal/respiratory-rate percentiles from available `THERAPY/RECORD` files |
+| Beta | DeVilbiss IntelliPAP DV6 | Summary import, event indices, usage, pressure/leak/tidal/respiratory-rate and flow-limitation summary fields from `DV6/S.BIN` |
+| Alpha | Philips Respironics System One / DreamStation, Fisher & Paykel SleepStyle, Lowenstein/Weinmann Prisma, Icon, M-Series, and other OSCAR loader families | Not yet integrated in PAPLens; candidates for later parser work because they require more device-specific validation and/or deeper session parsing |
+
 ## Data requirements
 
-Import a folder copied from a compatible ResMed SD card. The folder must contain:
+Import a folder copied from a compatible SD card.
+
+ResMed folders must contain:
 
 - `STR.edf` — summary statistics (required)
 - `DATALOG/` — per-session EDF signal files
 - `Identification.tgt` or `Identification.json` — device metadata
 
-Compatible devices: **ResMed AirSense 10** and **AirSense 11** series.
+Resvent folders are detected from `THERAPY/CONFIG/` plus `THERAPY/RECORD/`.
+
+DeVilbiss IntelliPAP DV6 folders are detected from `DV6/S.BIN`.
 
 ## Tech stack
 
@@ -270,6 +289,10 @@ PDF reports are generated in Electron main process using Handlebars + `report.ht
 PAPLens uses and builds upon the parsing approach from:
 
 - **CPAP Data Viewer** by Paul Solares: https://github.com/xpaulso/cpap-viewer
+- **OSCAR** loader plugins by The OSCAR Team: https://gitlab.com/pholy/OSCAR-code/-/tree/master/oscar/SleepLib/loader_plugins
+- **cpap-parser** by open-cpap: https://gitlab.com/open-cpap/cpap-parser
+
+See [NOTICES.md](NOTICES.md) for parser-specific attributions and license notes.
 
 ## Built with AI
 
@@ -281,4 +304,4 @@ PAPLens is an analytics/support tool and does not replace clinical diagnosis or 
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+GPL-3.0-only. See [LICENSE](LICENSE) and [NOTICES.md](NOTICES.md).

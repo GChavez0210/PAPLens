@@ -13,7 +13,7 @@ test("test data keeps spo2 and pulse null for unsupported devices", async () => 
     const loader = new CPAPDataLoader(path.join(process.cwd(), "Test Data"));
     await loader.loadAll();
 
-    const stats = loader.getDailyStats();
+    const stats = await loader.getDailyStats();
     assert.ok(stats.length > 0);
     assert.ok(stats.every((day) => day.spo2Avg === null));
     assert.ok(stats.every((day) => day.pulseAvg === null));

@@ -47,7 +47,7 @@
     "type": "git",
     "url": "https://github.com/GChavez0210/PAPLens.git"
   },
-  "license": "MIT",
+  "license": "GPL-3.0-only",
   "bugs": {
     "url": "https://github.com/GChavez0210/PAPLens/issues"
   },
@@ -59,6 +59,8 @@
       "electron/**/*",
       "dist/renderer/**/*",
       "package.json",
+      "LICENSE",
+      "NOTICES.md",
       "report.html",
       "src/renderer/assets/PLReportLogo.png",
       "src/renderer/assets/PLIcon.ico"

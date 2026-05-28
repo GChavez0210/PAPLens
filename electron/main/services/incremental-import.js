@@ -1,12 +1,12 @@
 const crypto = require("crypto");
-const { CPAPDataLoader } = require("./cpap-data-loader");
+const { getLoader } = require("../loaders/loader-registry");
 const { formatDebugValue, safeInfo, toOptionalNumber } = require("./therapyMetrics");
 
 class IncrementalImporter {
     constructor(db, dataPath) {
         this.db = db;
         this.dataPath = dataPath;
-        this.loader = new CPAPDataLoader(dataPath);
+        this.loader = getLoader(dataPath);
     }
 
     async runImport(onProgress) {
@@ -186,7 +186,7 @@ class IncrementalImporter {
         this.db.prepare(`
       INSERT INTO devices (id, manufacturer, model, serial_number, firmware)
       VALUES (?, ?, ?, ?, ?)
-    `).run(id, "ResMed", info.productName || "Unknown", serial, info.firmwareVersion || "");
+    `).run(id, this.loader.manufacturer || "Unknown", info.productName || "Unknown", serial, info.firmwareVersion || "");
         return id;
     }
 }

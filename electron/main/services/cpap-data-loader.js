@@ -32,6 +32,7 @@ function inferDeviceCapabilities(deviceInfo = {}) {
 class CPAPDataLoader {
   constructor(dataPath) {
     this.dataPath = dataPath;
+    this.manufacturer = "ResMed";
     this.deviceInfo = null;
     this.deviceCapabilities = inferDeviceCapabilities();
     this.dailySummary = null;
@@ -546,7 +547,10 @@ class CPAPDataLoader {
     const metricSummary = buildLeakAndTidalSummary(recentDays, console, "analytics:summary");
 
     return {
-      deviceInfo: this.deviceInfo,
+      deviceInfo: {
+        manufacturer: this.manufacturer,
+        ...(this.deviceInfo || {})
+      },
       deviceCapabilities: this.getDeviceCapabilities(),
       totalDays: stats.length,
       recentDays: recentDays.length,

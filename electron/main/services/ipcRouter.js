@@ -6,6 +6,7 @@ const { resolveHost, probeTcp, getNodeVersionFromChildProcess } = require("./dia
 const { ProfileDatabase } = require("./database");
 const { buildLeakAndTidalSummary, toOptionalNumber } = require("./therapyMetrics");
 const { computeTherapyStabilityScore } = require("../analytics/scores");
+const { detectDataFolder } = require("../loaders/loader-registry");
 
 class IpcRouter {
     constructor(appContainer) {
@@ -33,8 +34,8 @@ class IpcRouter {
                 return { success: false, error: "No directory selected" };
             }
             const selectedPath = result.filePaths[0];
-            if (!fs.existsSync(path.join(selectedPath, "STR.edf"))) {
-                return { success: false, error: "STR.edf not found in selected directory" };
+            if (!detectDataFolder(selectedPath)) {
+                return { success: false, error: "No supported CPAP data found. Supported devices: ResMed AirSense/AirCurve, Resvent iBreezer, DeVilbiss IntelliPAP." };
             }
             const summary = await this.cpap.loadDataFromPath(selectedPath);
             if (!summary || summary.error) {
@@ -44,7 +45,7 @@ class IpcRouter {
         });
 
         ipcMain.handle("cpap:load-data-folder", async (_event, folderPath) => {
-            if (!folderPath || !fs.existsSync(path.join(folderPath, "STR.edf"))) {
+            if (!folderPath || !detectDataFolder(folderPath)) {
                 return { success: false, error: "Invalid CPAP folder path" };
             }
             const summary = await this.cpap.loadDataFromPath(folderPath);
