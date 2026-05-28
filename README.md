@@ -149,12 +149,15 @@ The **Save Data Report** button (hover for description) generates a print-ready 
 | **Supported** | ResMed AirSense 10 / AirSense 11 / AirCurve 10 / AirCurve 11 (EDF SD cards) | Full: summary import, all metrics and analytics, EDF session waveform viewer, profile-local session cache, PDF report export |
 | **Beta** | Resvent iBreezer / Hoffrichter Point 3 | Summary import: AHI, OAI, CAI, HI, usage hours, pressure P50/P95, leak P50/P95, minute ventilation P50/P95, tidal volume P50/P95, respiratory rate P50/P95 — derived from P-file waveform percentiles and STAT event counts in `THERAPY/RECORD/`. No session waveform viewer. |
 | **Beta** | DeVilbiss IntelliPAP DV6 | Summary import: AHI, OAI, CAI, HI, usage hours, pressure P50/P95, leak P50/P95, tidal volume, respiratory rate, flow limitation fraction — read directly from the `DV6/S.BIN` rolling-record file. No session waveform viewer. |
-| **Alpha** | Philips Respironics System One / DreamStation, Fisher & Paykel SleepStyle / ICON / ICON+, Löwenstein Medical / Weinmann Prisma, M-Series, and other OSCAR parser families | Not yet integrated. Parsing logic exists in OSCAR's GPL loader plugins but has not been ported to PAPLens. |
+| **Beta** | Fisher & Paykel SleepStyle / ICON | Summary import: usage hours and pressure P50/P95 from `FPHCARE/ICON/<serial>/SUM*.fph`. AHI/leak/event details are not exposed by this summary path. No session waveform viewer. |
+| **Beta** | Lowenstein Medical / Weinmann `WM_DATA.TDF` devices | Summary import: AHI, OAI, CAI, HI, usage hours, pressure P50/P95, leak P50/P95, snore index, and flow limitation from `WM_DATA.TDF`. No session waveform viewer. |
+| **Alpha** | Philips Respironics System One / DreamStation, M-Series, Prisma Line `config.pcfg` / `therapy.pdat`, and other OSCAR parser families | Not yet integrated. Parsing logic exists in OSCAR's GPL loader plugins and/or open-cpap but has not been fully ported or validated for PAPLens. |
 
 ### Known beta limitations
 
 - **No session waveform viewer** for Resvent or DeVilbiss — that feature requires EDF signal files, which these devices do not produce in a compatible format.
 - **Resvent**: pressure and leak percentiles are derived from the 2–4 Hz P-file waveform data. Devices with different firmware may write different channel names or omit P files entirely, in which case those fields will be absent (not zeroed).
+- **Fisher & Paykel / Lowenstein**: these imports are summary-level ports from upstream parser layouts and are currently validated with synthetic fixtures only. Real SD cards are needed to harden firmware variants and edge cases.
 - **DeVilbiss**: the `DV6/S.BIN` rolling buffer holds a fixed number of records; on very old or very active devices older nights may be overwritten. Leak values are stored as single-byte tenths of L/min (max ~25.5 L/min); unusually high leak nights may be capped. These are hardware constraints of the DV6 format.
 - **Both**: real-world SD card validation has been limited to synthetic test fixtures derived from the upstream OSCAR and cpap-parser implementations. Firmware variants or SD card edge cases may surface parsing gaps that will be fixed as field reports come in.
 

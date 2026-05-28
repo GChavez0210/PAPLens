@@ -35,7 +35,7 @@ class IpcRouter {
             }
             const selectedPath = result.filePaths[0];
             if (!detectDataFolder(selectedPath)) {
-                return { success: false, error: "No supported CPAP data found. Supported devices: ResMed AirSense/AirCurve, Resvent iBreezer, DeVilbiss IntelliPAP." };
+                return { success: false, error: "No supported CPAP data found. Supported devices: ResMed AirSense/AirCurve, Resvent iBreezer, DeVilbiss IntelliPAP, Fisher & Paykel SleepStyle/ICON, Lowenstein/Weinmann WM_DATA." };
             }
             const summary = await this.cpap.loadDataFromPath(selectedPath);
             if (!summary || summary.error) {

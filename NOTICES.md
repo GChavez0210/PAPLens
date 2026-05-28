@@ -24,7 +24,7 @@ OSCAR is licensed under the GNU General Public License version 3. The upstream l
 
 ## open-cpap cpap-parser
 
-The DeVilbiss IntelliPAP DV6 loader in [electron/main/loaders/devilbiss-loader.js](electron/main/loaders/devilbiss-loader.js) is adapted from open-cpap's Rust parser implementation:
+The DeVilbiss IntelliPAP DV6 loader in [electron/main/loaders/devilbiss-loader.js](electron/main/loaders/devilbiss-loader.js), Fisher & Paykel SleepStyle / ICON loader in [electron/main/loaders/fisher-paykel-loader.js](electron/main/loaders/fisher-paykel-loader.js), and Lowenstein Medical / Weinmann loader in [electron/main/loaders/lowenstein-loader.js](electron/main/loaders/lowenstein-loader.js) are adapted from open-cpap's parser implementations:
 
 https://gitlab.com/open-cpap/cpap-parser
 
@@ -32,4 +32,4 @@ The cpap-parser project is licensed under GNU General Public License v3.0 or lat
 
 ## Parser Status
 
-The Resvent and DeVilbiss integrations are beta support: they provide summary-level imports for PAPLens analytics, but they do not yet provide PAPLens session waveform viewing and need broader real-device validation.
+The Resvent, DeVilbiss, Fisher & Paykel, and Lowenstein integrations are beta support: they provide summary-level imports for PAPLens analytics, but they do not yet provide PAPLens session waveform viewing and need broader real-device validation.
