@@ -82,7 +82,10 @@
       "target": [
         {
           "target": "dmg",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "public.app-category.healthcare"
@@ -92,7 +95,10 @@
       "target": [
         {
           "target": "AppImage",
-          "arch": ["x64", "arm64"]
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "category": "Science"
@@ -118,7 +124,7 @@
     "@vitejs/plugin-react": "^5.1.0",
     "concurrently": "^9.2.1",
     "cross-env": "^10.1.0",
-    "electron": "^36.5.0",
+    "electron": "^39.8.10",
     "electron-builder": "^26.0.12",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
@@ -134,9 +140,9 @@
     "wait-on": "^9.0.3"
   },
   "dependencies": {
-    "better-sqlite3": "^12.4.1",
+    "better-sqlite3": "^12.10.0",
     "chart.js": "^4.4.9",
-    "handlebars": "^4.7.8",
+    "handlebars": "^4.7.9",
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
   }

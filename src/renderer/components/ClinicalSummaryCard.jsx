@@ -1,4 +1,3 @@
-import React from "react";
 import { isNoDataDay } from "../utils/reportBuilder";
 import { formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
 

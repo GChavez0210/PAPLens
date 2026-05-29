@@ -151,13 +151,22 @@ The **Save Data Report** button (hover for description) generates a print-ready 
 | **Beta** | DeVilbiss IntelliPAP DV6 | Summary import: AHI, OAI, CAI, HI, usage hours, pressure P50/P95, leak P50/P95, tidal volume, respiratory rate, flow limitation fraction — read directly from the `DV6/S.BIN` rolling-record file. No session waveform viewer. |
 | **Beta** | Fisher & Paykel SleepStyle / ICON | Summary import: usage hours and pressure P50/P95 from `FPHCARE/ICON/<serial>/SUM*.fph`. AHI/leak/event details are not exposed by this summary path. No session waveform viewer. |
 | **Beta** | Lowenstein Medical / Weinmann `WM_DATA.TDF` devices | Summary import: AHI, OAI, CAI, HI, usage hours, pressure P50/P95, leak P50/P95, snore index, and flow limitation from `WM_DATA.TDF`. No session waveform viewer. |
-| **Alpha** | Philips Respironics System One / DreamStation, M-Series, Prisma Line `config.pcfg` / `therapy.pdat`, and other OSCAR parser families | Not yet integrated. Parsing logic exists in OSCAR's GPL loader plugins and/or open-cpap but has not been fully ported or validated for PAPLens. |
+| **Beta** | Löwenstein Prisma Line (prisma25 / Eyra) `config.pcfg` / `therapy.pdat` | Summary import: usage hours, set pressure, therapy mode, and per-day AHI/OAI/CAI/HI from the ZIP-packed `statistics_year.bin` and per-session `event_*.xml`. No session waveform viewer (the `*.wmedf` signal containers are not decoded). |
+| **Beta** | Apex Medical XT / XT Auto / iCH / Spirit | Summary import: usage hours, set/percentile pressure (P50/P95), therapy mode, per-day AHI/OAI/CAI/HI, leak P50/P95, snore index, and flow-limitation index — read from `APDATA/<YYYYMMDD>.APC` session records. No session waveform viewer. |
+| **Beta** | BMC / 3B Medical RESmart (GI / GII) | Summary import: usage hours and per-day AHI/OAI/CAI/HI reconstructed from the historic-session records in `<serial>.USR`. Pressure and leak live in undecoded waveform/settings packets and are not reported. No session waveform viewer. |
+| **Beta** | Yuwell (YH-360 / YH-450 / YH-550 / YH-680 and variants) | Summary import: usage hours, per-day AHI/OAI/CAI/HI, and average pressure across four on-card data layouts (`RunLog.bys` + `YH-*` folders, `YHSD-NEW.BYS`, and folder-only variants). Leak and percentile pressures are not exposed by these summary layouts. No session waveform viewer. |
+| **Alpha** | Philips Respironics System One / DreamStation / PRS1, M-Series | Not yet supported. OSCAR has GPL loader plugins for these families, but the proprietary format has not been ported or validated for PAPLens. |
+| **Alpha** | HDM Z1 / Z2 (React Health / Human Design Medical) | Not yet supported. The Z1/Z2 on-card format has not been ported or validated for PAPLens. |
 
 ### Known beta limitations
 
 - **No session waveform viewer** for Resvent or DeVilbiss — that feature requires EDF signal files, which these devices do not produce in a compatible format.
 - **Resvent**: pressure and leak percentiles are derived from the 2–4 Hz P-file waveform data. Devices with different firmware may write different channel names or omit P files entirely, in which case those fields will be absent (not zeroed).
 - **Fisher & Paykel / Lowenstein**: these imports are summary-level ports from upstream parser layouts and are currently validated with synthetic fixtures only. Real SD cards are needed to harden firmware variants and edge cases.
+- **Löwenstein Prisma Line**: summary-level only — daily AHI/OAI/CAI/HI are reconstructed by bucketing per-session respiratory events into their date folders and dividing by usage hours. Waveform (`*.wmedf`) decoding is not implemented, so there is no session viewer. Validated with synthetic fixtures only.
+- **Apex Medical**: summary-level only — pressure, leak, snore, and flow-limitation values come from the per-session `.APC` summary records, not from waveform data, so there is no session viewer. Validated with synthetic fixtures only.
+- **BMC / 3B RESmart**: usage and event indices (AHI/OAI/CAI/HI) only. Pressure and leak are stored in the undecoded waveform (`.000`) and settings (`.idx`) packets and are reported as absent. Validated with synthetic fixtures only.
+- **Yuwell**: usage, event indices, and average pressure only, across four distinct on-card layouts. Leak and percentile pressures are not present in these summary records. Layout auto-detection and validation are based on synthetic fixtures derived from the upstream parser; real cards are needed to harden firmware variants.
 - **DeVilbiss**: the `DV6/S.BIN` rolling buffer holds a fixed number of records; on very old or very active devices older nights may be overwritten. Leak values are stored as single-byte tenths of L/min (max ~25.5 L/min); unusually high leak nights may be capped. These are hardware constraints of the DV6 format.
 - **Both**: real-world SD card validation has been limited to synthetic test fixtures derived from the upstream OSCAR and cpap-parser implementations. Firmware variants or SD card edge cases may surface parsing gaps that will be fixed as field reports come in.
 
@@ -178,6 +187,14 @@ DeVilbiss IntelliPAP DV6 folders are detected from `DV6/S.BIN`.
 Fisher & Paykel SleepStyle / ICON folders are detected from `FPHCARE/ICON/<serial>/SUM*.fph`.
 
 Lowenstein Medical / Weinmann folders are detected from `WM_DATA.TDF` at the SD-card root.
+
+Löwenstein Prisma Line folders are detected from `config.pcfg` at the SD-card root (with daily data in `therapy.pdat`).
+
+Apex Medical folders are detected from an `APDATA/` directory containing one or more `<YYYYMMDD>.APC` session files.
+
+BMC / 3B RESmart folders are detected from a `<serial>.USR` file alongside its `<serial>.idx` and `<serial>.000` siblings.
+
+Yuwell folders are detected from a `RunLog.bys` index with `YH-*` session folders, a 64 KB `YHSD-NEW.BYS` file, or `YH-*` folders containing `.BYS` session files.
 
 ## Tech stack
 

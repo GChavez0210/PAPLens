@@ -7,6 +7,10 @@ const { ResventLoader } = require("./resvent-loader");
 const { DeVilbissLoader } = require("./devilbiss-loader");
 const { FisherPaykelLoader } = require("./fisher-paykel-loader");
 const { LowensteinLoader } = require("./lowenstein-loader");
+const { PrismaLineLoader } = require("./prisma-line-loader");
+const { ApexLoader } = require("./apex-loader");
+const { BmcLoader } = require("./bmc-loader");
+const { YuwellLoader } = require("./yuwell-loader");
 
 // Ordered list of non-ResMed loaders.  Each must implement a static detect(sdCardPath)
 // that synchronously returns true when the folder belongs to that manufacturer.
@@ -14,7 +18,11 @@ const THIRD_PARTY_LOADERS = [
   ResventLoader,
   DeVilbissLoader,
   FisherPaykelLoader,
-  LowensteinLoader
+  LowensteinLoader,
+  PrismaLineLoader,
+  ApexLoader,
+  BmcLoader,
+  YuwellLoader
 ];
 
 /**

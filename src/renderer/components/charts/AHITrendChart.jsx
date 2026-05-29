@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import Chart from "chart.js/auto";
 
 function rollingAvg(arr, window) {
@@ -10,7 +10,7 @@ function rollingAvg(arr, window) {
 
 export function AHITrendChart({ labels, data, height = 200 }) {
     const ref = useRef(null);
-    const rolling = rollingAvg(data, 7);
+    const rolling = useMemo(() => rollingAvg(data, 7), [data]);
 
     useEffect(() => {
         if (!ref.current) return;
@@ -65,7 +65,7 @@ export function AHITrendChart({ labels, data, height = 200 }) {
         });
 
         return () => chart.destroy();
-    }, [labels, data]);
+    }, [labels, data, rolling]);
 
     return (
         <div style={{ position: "relative", width: "100%", height: `${height}px` }}>

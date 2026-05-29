@@ -31,7 +31,8 @@ class WindowManager {
             webPreferences: {
                 preload: path.join(__dirname, "..", "..", "preload", "index.js"),
                 contextIsolation: true,
-                nodeIntegration: false
+                nodeIntegration: false,
+                sandbox: true
             },
             title: "PAPLens",
             icon: this.resolveAssetPath(path.join("src", "renderer", "assets", "PLIcon.ico"))
@@ -39,6 +40,14 @@ class WindowManager {
 
         this.mainWindow.on("closed", () => {
             this.mainWindow = null;
+        });
+
+        this.mainWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
+        this.mainWindow.webContents.on("will-navigate", (event, navigationUrl) => {
+            if (navigationUrl !== this.mainWindow.webContents.getURL()) {
+                event.preventDefault();
+            }
         });
 
         this.mainWindow.webContents.on("console-message", (_event, level, message, line, sourceId) => {

@@ -8,7 +8,6 @@ import { EventTypeSplitChart } from "../components/charts/EventTypeSplitChart";
 import { FlowLimitationChart } from "../components/charts/FlowLimitationChart";
 import { PressureHistogramChart } from "../components/charts/PressureHistogramChart";
 import { PeriodicBreathingCard } from "../components/charts/PeriodicBreathingCard";
-import { SessionGraphsModal } from "../components/SessionGraphsModal";
 
 const KEY_COLOR = {
     stability: { border: "#22D3EE", bg: "rgba(34,211,238,0.08)" },
@@ -246,42 +245,10 @@ function adaptForRange(exp) {
     return { ...exp, title, summary };
 }
 
-export function Insights({ range = "30", customFrom = "", customTo = "", theme = "dark", sessions = [] }) {
+export function Insights({ range = "30", customFrom = "", customTo = "" }) {
     const [data, setData] = useState(null);
-    const [modalSessions, setModalSessions] = useState([]);
-    const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const openSessionGraphs = useCallback((night) => {
-        // Find all filesystem sessions that belong to this night.
-        // session.date is YYYYMMDD; night.night_date is YYYY-MM-DD — strip dashes to match.
-        // Also check the previous calendar day (CPAP stores files under the night-start folder).
-        const nightDateCompact = night.night_date?.replace(/-/g, "");
-        const d = new Date(night.night_date);
-        d.setDate(d.getDate() - 1);
-        const prevCompact = d.toISOString().split("T")[0].replace(/-/g, "");
-
-        const daySessions = sessions.filter(
-            (s) => s.date === nightDateCompact || s.date === prevCompact
-        );
-
-        // Prefer sessions with recorded data (durationMinutes > 0); stub/incomplete
-        // sessions at the same timestamp are excluded from the picker to avoid duplicates.
-        const usable = daySessions.filter((s) => s.durationMinutes > 0);
-        if (usable.length > 0) {
-            setModalSessions(usable);
-        } else if (daySessions.length > 0) {
-            setModalSessions(daySessions);
-        } else {
-            // Fallback: no filesystem sessions found — pass a synthetic entry so the
-            // modal can still attempt a date-based lookup.
-            setModalSessions([{ id: null, timestamp: night.night_date, files: {} }]);
-        }
-        setIsModalOpen(true);
-    }, [sessions]);
-
-    const closeModal = useCallback(() => setIsModalOpen(false), []);
-
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         let payload;
         if (range === "custom") payload = { from: customFrom, to: customTo };
         else if (range === "all") payload = { days: 0 };
@@ -294,14 +261,14 @@ export function Insights({ range = "30", customFrom = "", customTo = "", theme =
             console.error("Failed to load insights", err);
             setData({});
         }
-    };
+    }, [customFrom, customTo, range]);
 
     useEffect(() => {
         setData(null);
         loadData();
         const unsub = window.cpapAPI.onDataLoaded(() => loadData());
         return () => unsub();
-    }, [range, customFrom, customTo]);
+    }, [loadData]);
 
     if (data === null) return (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#9ca3af" }}>
@@ -325,7 +292,11 @@ export function Insights({ range = "30", customFrom = "", customTo = "", theme =
     let burden = null;
     const lastWithBurden = (trends || []).find(t => t.residual_burden);
     if (lastWithBurden) {
-        try { burden = JSON.parse(lastWithBurden.residual_burden); } catch (_) { }
+        try {
+            burden = JSON.parse(lastWithBurden.residual_burden);
+        } catch {
+            burden = null;
+        }
     }
 
     const totalNights = analyzed.length;
@@ -543,7 +514,13 @@ export function Insights({ range = "30", customFrom = "", customTo = "", theme =
 
                             // Parse all available histograms
                             const parsed = histNights
-                                .map(d => { try { return JSON.parse(d.pressure_histogram); } catch (_) { return null; } })
+                                .map(d => {
+                                    try {
+                                        return JSON.parse(d.pressure_histogram);
+                                    } catch {
+                                        return null;
+                                    }
+                                })
                                 .filter(Boolean);
                             if (parsed.length === 0) return null;
 
@@ -628,13 +605,6 @@ export function Insights({ range = "30", customFrom = "", customTo = "", theme =
             </section>
 
 
-            {isModalOpen && (
-                <SessionGraphsModal
-                    sessions={modalSessions}
-                    theme={theme}
-                    onClose={closeModal}
-                />
-            )}
         </div>
     );
 }

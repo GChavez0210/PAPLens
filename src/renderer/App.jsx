@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrendChart } from "./charts/TrendChart";
 import { LastNightSidebar } from "./components/LastNightSidebar";
 import { Insights } from "./pages/Insights";
@@ -11,14 +11,6 @@ import { formatMetricValue, toMetricNumber } from "./utils/therapyMetrics";
 
 const RANGE_OPTIONS = ["7", "14", "30", "60", "90", "180", "365", "all", "custom"];
 const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN = /(airsense|aircurve|lumis|airmini)/i;
-
-function getScoreTier(score) {
-  if (score === null || score === undefined) return 0;
-  if (score >= 80) return 1;
-  if (score >= 60) return 2;
-  if (score >= 40) return 3;
-  return 4;
-}
 
 function severity(metric, value) {
   if (metric === "ahi") {
@@ -151,24 +143,7 @@ export function App() {
     });
   };
 
-  const loadCurrentProfile = async () => {
-    try {
-      const profile = await window.cpapAPI.getActiveProfile();
-      setActiveProfile(profile);
-      if (!profile) {
-        setSummary(null);
-        setStatus("Select a profile");
-        return;
-      }
-      await loadCurrent();
-    } catch (error) {
-      console.error("Failed to load active profile", error);
-      setSummary(null);
-      setStatus("Unable to load your saved data");
-    }
-  };
-
-  const loadCurrent = async () => {
+  const loadCurrent = useCallback(async () => {
     try {
       const current = await window.cpapAPI.getSummary();
       if (current) {
@@ -185,7 +160,24 @@ export function App() {
       setStatus("Unable to load your saved data");
       return false;
     }
-  };
+  }, []);
+
+  const loadCurrentProfile = useCallback(async () => {
+    try {
+      const profile = await window.cpapAPI.getActiveProfile();
+      setActiveProfile(profile);
+      if (!profile) {
+        setSummary(null);
+        setStatus("Select a profile");
+        return;
+      }
+      await loadCurrent();
+    } catch (error) {
+      console.error("Failed to load active profile", error);
+      setSummary(null);
+      setStatus("Unable to load your saved data");
+    }
+  }, [loadCurrent]);
 
   useEffect(() => {
     document.body.classList.add("app-mounted");
@@ -216,7 +208,7 @@ export function App() {
       unsubscribe();
       unsubscribeProgress();
     };
-  }, []);
+  }, [loadCurrentProfile]);
 
   const deviceInfo = summary?.deviceInfo || {};
   const supportsOximetry = useMemo(() => {
@@ -233,7 +225,7 @@ export function App() {
   const supportsLeakPercentiles = caps.supportsLeakPercentiles ?? true;
   const supportsVentilation = caps.supportsVentilation ?? true;
 
-  const stats = summary?.dailyStats || [];
+  const stats = useMemo(() => summary?.dailyStats || [], [summary?.dailyStats]);
 
   const filteredStats = useMemo(() => {
     if (!stats.length) return [];
@@ -1050,7 +1042,7 @@ export function App() {
                   )}
                 </div>
               </div>
-              <Insights range={range} customFrom={customFrom} customTo={customTo} theme={theme} sessions={summary?.sessions || []} />
+              <Insights range={range} customFrom={customFrom} customTo={customTo} />
               <div style={{ textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 }}>
                 PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
               </div>
@@ -1115,10 +1107,5 @@ export function App() {
     </main>
   );
 }
-
-
-
-
-
 
 

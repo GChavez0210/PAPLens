@@ -52,47 +52,6 @@ function describeFlagInSidebar(metric, z) {
     }
 }
 
-// ── Inline SVG sparkline (lightweight, no Chart.js) ─────────────────────────
-function AhiSparkline({ data = [] }) {
-    if (!data.length) return null;
-    const W = 220, H = 28, PAD = 3;
-    const values = data.map(d => d.ahi ?? 0);
-    const max = Math.max(...values, 5.1); // at least 5.1 so threshold is visible
-    const toY = v => PAD + (H - PAD * 2) * (1 - v / max);
-    const toX = i => PAD + (i / (values.length - 1)) * (W - PAD * 2);
-
-    const pts = values.map((v, i) => `${toX(i)},${toY(v)}`).join(" ");
-    const areaPath = `M${toX(0)},${H} ` +
-        values.map((v, i) => `L${toX(i)},${toY(v)}`).join(" ") +
-        ` L${toX(values.length - 1)},${H} Z`;
-
-    const threshY = toY(5);
-    const gradId = "sparkGrad";
-
-    return (
-        <div style={{ marginTop: 8 }}>
-            <div style={{ fontSize: '0.65rem', color: 'var(--muted)', marginBottom: 4, display: 'flex', justifyContent: 'space-between' }}>
-                <span>7-Night AHI Trend</span>
-                <span style={{ color: 'var(--warning)' }}>— AHI 5 threshold</span>
-            </div>
-            <svg width={W} height={H + PAD} style={{ display: 'block', borderRadius: 6, overflow: 'hidden' }}>
-                <defs>
-                    <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="#22d3ee" stopOpacity="0.02" />
-                    </linearGradient>
-                </defs>
-                <path d={areaPath} fill={`url(#${gradId})`} />
-                <polyline points={pts} fill="none" stroke="#22d3ee" strokeWidth={1.5} strokeLinejoin="round" />
-                {/* Threshold line at AHI = 5 */}
-                <line x1={PAD} y1={threshY} x2={W - PAD} y2={threshY} stroke="#f59e0b" strokeWidth={1} strokeDasharray="3 3" />
-                {/* Last point dot */}
-                <circle cx={toX(values.length - 1)} cy={toY(values[values.length - 1])} r={3} fill="#22d3ee" />
-            </svg>
-        </div>
-    );
-}
-
 // ── Score decomposition component ────────────────────────────────────────────
 function ScoreBar({ label, penalty, maxPenalty, color }) {
     const unavailable = penalty === null || penalty === undefined;
@@ -131,7 +90,9 @@ export function LastNightSidebar() {
     };
 
     useEffect(() => {
-        loadData();
+        queueMicrotask(() => {
+            void loadData();
+        });
         const unsub = window.cpapAPI.onDataLoaded(() => loadData());
         return () => unsub();
     }, []);

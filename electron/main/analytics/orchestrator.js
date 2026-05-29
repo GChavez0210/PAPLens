@@ -127,7 +127,11 @@ class AnalyticsOrchestrator {
 
       this.dataAccess.commitTransaction();
     } catch (err) {
-      try { this.dataAccess.rollbackTransaction(); } catch (_) {}
+      try {
+        this.dataAccess.rollbackTransaction();
+      } catch {
+        // Rollback failure should not hide the original analytics error.
+      }
       console.error("Analytics Orchestration Failed:", err);
     }
   }

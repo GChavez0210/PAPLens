@@ -7,7 +7,7 @@ function hasTherapyData(metrics) {
     return Number.isFinite(usage) && usage > 0;
 }
 
-function computeTherapyStabilityScore(currentMetrics, historyMetrics) {
+function computeTherapyStabilityScore(currentMetrics) {
     if (!hasTherapyData(currentMetrics)) {
         return {
             stabilityScore: null,
@@ -23,14 +23,13 @@ function computeTherapyStabilityScore(currentMetrics, historyMetrics) {
         };
     }
 
-    const validHistory = (historyMetrics || []).filter(hasTherapyData);
-
-    let penaltyAhi = 0;
     const ahi = Number(currentMetrics.ahi_total ?? 0);
-    if (ahi <= 1) penaltyAhi = 0;
-    else if (ahi <= 5) penaltyAhi = (ahi - 1) * 5;
-    else if (ahi <= 15) penaltyAhi = 20 + (ahi - 5) * 3;
-    else penaltyAhi = 50;
+    const penaltyAhi = (() => {
+        if (ahi <= 1) return 0;
+        if (ahi <= 5) return (ahi - 1) * 5;
+        if (ahi <= 15) return 20 + (ahi - 5) * 3;
+        return 50;
+    })();
 
     let penaltyLeak = 0;
     const leak95 = currentMetrics.leak_p95 ?? currentMetrics.leak_max ?? currentMetrics.leak_p50;
@@ -40,11 +39,12 @@ function computeTherapyStabilityScore(currentMetrics, historyMetrics) {
         else penaltyLeak = 15 + Math.min(10, (leak95 - 24) * 0.5);
     }
 
-    let penaltyUsage = 0;
     const usageStr = Number(currentMetrics.usage_hours ?? (currentMetrics.usage_minutes != null ? currentMetrics.usage_minutes / 60 : NaN));
-    if (usageStr >= 7) penaltyUsage = 0;
-    else if (usageStr >= 4) penaltyUsage = (7 - usageStr) * 3;
-    else penaltyUsage = Math.min(15, 9 + (4 - usageStr) * 3);
+    const penaltyUsage = (() => {
+        if (usageStr >= 7) return 0;
+        if (usageStr >= 4) return (7 - usageStr) * 3;
+        return Math.min(15, 9 + (4 - usageStr) * 3);
+    })();
 
     // Pressure variance: p95 − median of actual delivered mask pressure (MaskPress.50/95).
     // Both columns now store real delivery percentiles after the Phase 10 mapping fix,

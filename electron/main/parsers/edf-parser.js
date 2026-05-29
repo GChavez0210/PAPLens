@@ -122,7 +122,11 @@ class EDFParser {
   }
 
   parseAnnotationRecord(buffer) {
-    const content = buffer.toString("latin1").replace(/\x00+$/g, "");
+    let end = buffer.length;
+    while (end > 0 && buffer[end - 1] === 0) {
+      end--;
+    }
+    const content = buffer.slice(0, end).toString("latin1");
     if (!content) {
       return [];
     }

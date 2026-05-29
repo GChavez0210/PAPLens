@@ -138,8 +138,8 @@ function safeInfo(logger, message) {
 
     try {
         logger.info(message);
-    } catch (_error) {
-        // Debug logging must never interrupt imports, analytics, or UI startup.
+    } catch {
+      // Debug logging must never interrupt imports, analytics, or UI startup.
     }
 }
 

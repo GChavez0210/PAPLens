@@ -197,13 +197,10 @@ export function buildClinicalContext(filteredStats, deviceInfo) {
 
     if (minP === 999) minP = 0;
 
-    let therapyMode = "Unknown Settings";
     const modelStr = (deviceInfo?.model || "").toLowerCase();
-    if (modelStr.includes("autoset") || isAuto) {
-        therapyMode = `AutoSet / APAP (observed min ${minP.toFixed(1)} / max ${maxP.toFixed(1)} cmH2O)`;
-    } else {
-        therapyMode = `Fixed CPAP (observed ${maxP.toFixed(1)} cmH2O)`;
-    }
+    const therapyMode = modelStr.includes("autoset") || isAuto
+        ? `AutoSet / APAP (observed min ${minP.toFixed(1)} / max ${maxP.toFixed(1)} cmH2O)`
+        : `Fixed CPAP (observed ${maxP.toFixed(1)} cmH2O)`;
 
     return {
         nightsAnalyzed: validDays,

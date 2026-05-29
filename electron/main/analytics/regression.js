@@ -1,4 +1,4 @@
-const { EPSILON, mean } = require("./rolling");
+const { mean } = require("./rolling");
 
 function regressionSlope(yValues) {
     const n = yValues.length;

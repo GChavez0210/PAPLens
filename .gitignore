@@ -43,3 +43,6 @@ Test Data/
 # Claude Code — local config and worktrees (may contain local paths or session data)
 .claude/
 CLAUDE.md
+
+# Local GPL reference sources for parser porting (not distributed)
+.reference/

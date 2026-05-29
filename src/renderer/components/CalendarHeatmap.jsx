@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 
 export function CalendarHeatmap({ data }) {
     // data should be an array of night objects containing date string and therapy_stability_score

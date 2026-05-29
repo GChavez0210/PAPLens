@@ -35,7 +35,7 @@ class IpcRouter {
             }
             const selectedPath = result.filePaths[0];
             if (!detectDataFolder(selectedPath)) {
-                return { success: false, error: "No supported CPAP data found. Supported devices: ResMed AirSense/AirCurve, Resvent iBreezer, DeVilbiss IntelliPAP, Fisher & Paykel SleepStyle/ICON, Lowenstein/Weinmann WM_DATA." };
+                return { success: false, error: "No supported CPAP data found. Supported devices: ResMed AirSense/AirCurve, Resvent iBreezer, DeVilbiss IntelliPAP, Fisher & Paykel SleepStyle/ICON, Lowenstein/Weinmann WM_DATA, Löwenstein Prisma Line, Apex Medical, BMC/3B RESmart, and Yuwell." };
             }
             const summary = await this.cpap.loadDataFromPath(selectedPath);
             if (!summary || summary.error) {
@@ -177,7 +177,13 @@ class IpcRouter {
                 const tempHtmlPath = path.join(app.getPath("temp"), `paplens-report-${Date.now()}-${Math.random().toString(16).slice(2)}.html`);
                 fs.writeFileSync(tempHtmlPath, compiledHtml, "utf8");
 
-                const printWin = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true } });
+                const printWin = new BrowserWindow({ show: false, webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true } });
+                printWin.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+                printWin.webContents.on("will-navigate", (event, navigationUrl) => {
+                    if (navigationUrl !== printWin.webContents.getURL()) {
+                        event.preventDefault();
+                    }
+                });
                 try {
                     await printWin.loadFile(tempHtmlPath);
                     fs.writeFileSync(filePath, await printWin.webContents.printToPDF({

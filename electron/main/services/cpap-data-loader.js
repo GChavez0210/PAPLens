@@ -199,7 +199,7 @@ class CPAPDataLoader {
       const numDataRecords = parseInt(buffer.slice(236, 244).toString("ascii").trim(), 10) || 0;
       const dataRecordDuration = parseFloat(buffer.slice(244, 252).toString("ascii").trim()) || 0;
       return (numDataRecords * dataRecordDuration) / 60;
-    } catch (_error) {
+    } catch {
       return 0;
     }
   }

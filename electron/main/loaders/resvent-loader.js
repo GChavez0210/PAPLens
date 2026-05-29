@@ -303,7 +303,7 @@ class ResventLoader extends BaseLoader {
   }
 
   _parseKV(text) {
-    // Strip UTF-8 BOM (﻿) that some firmware writers prepend.
+    // Strip UTF-8 BOM that some firmware writers prepend.
     const src = text.charCodeAt(0) === 0xFEFF ? text.slice(1) : text;
     const result = {};
     for (const line of src.split(/\r?\n/)) {
