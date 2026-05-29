@@ -61,6 +61,15 @@ class DeVilbissLoader extends BaseLoader {
     this.manufacturer = "DeVilbiss";
   }
 
+  getDeviceCapabilities() {
+    return {
+      ...super.getDeviceCapabilities(),
+      supportsAHI: true,
+      supportsPressurePercentiles: true,
+      supportsFlowLimitation: true
+    };
+  }
+
   static detect(sdCardPath) {
     return fs.existsSync(path.join(sdCardPath, "DV6", "S.BIN"));
   }

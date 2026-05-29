@@ -226,6 +226,13 @@ export function App() {
 
     return !OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN.test(deviceInfo.productName || "");
   }, [deviceInfo.productName, summary?.deviceCapabilities?.supportsOximetry]);
+
+  // Feature flags — undefined means ResMed (full support); explicit false hides the chart.
+  const caps = summary?.deviceCapabilities || {};
+  const supportsAHI = caps.supportsAHI ?? true;
+  const supportsLeakPercentiles = caps.supportsLeakPercentiles ?? true;
+  const supportsVentilation = caps.supportsVentilation ?? true;
+
   const stats = summary?.dailyStats || [];
 
   const filteredStats = useMemo(() => {
@@ -805,6 +812,7 @@ export function App() {
                 })()}
 
                 <div className="clinical-charts-grid">
+                  {supportsAHI && (
                   <TrendChart theme={theme}
                     reportKey="ahi"
                     title="AHI (Events/hr)"
@@ -818,7 +826,9 @@ export function App() {
                       { label: "AHI = 5 Threshold", data: trendsData.ahiThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
                     ]}
                   />
+                  )}
 
+                  {supportsLeakPercentiles && (
                   <TrendChart theme={theme}
                     reportKey="leak"
                     title="Leak (L/min) & Percentiles"
@@ -829,6 +839,7 @@ export function App() {
                       { label: "24 L/min Critical Limit", data: trendsData.leakThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
                     ]}
                   />
+                  )}
 
                   <TrendChart theme={theme}
                     reportKey="pressure"
@@ -841,6 +852,7 @@ export function App() {
                     ]}
                   />
 
+                  {supportsVentilation && (
                   <TrendChart theme={theme}
                     reportKey="flow"
                     title="Respiratory Flow Limitations"
@@ -851,7 +863,9 @@ export function App() {
                       { label: "Resp Rate", data: trendsData.respRate, borderColor: "#f59e0b", yAxisID: "y1" }
                     ]}
                   />
+                  )}
 
+                  {supportsVentilation && (
                   <TrendChart theme={theme}
                     reportKey="tidal"
                     title="Tidal Volume Variances"
@@ -861,6 +875,7 @@ export function App() {
                       { label: "Median Efficacy", data: trendsData.tidVol50, borderColor: "#8b5cf6", fill: true, backgroundColor: "rgba(139, 92, 246, 0.1)" }
                     ]}
                   />
+                  )}
 
                   <TrendChart
                     theme={theme}

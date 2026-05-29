@@ -26,6 +26,16 @@ class LowensteinLoader extends BaseLoader {
     this.manufacturer = "Lowenstein Medical";
   }
 
+  getDeviceCapabilities() {
+    return {
+      ...super.getDeviceCapabilities(),
+      supportsAHI: true,
+      supportsLeakPercentiles: true,
+      supportsPressurePercentiles: true,
+      supportsFlowLimitation: true
+    };
+  }
+
   static detect(sdCardPath) {
     return fs.existsSync(path.join(sdCardPath, "WM_DATA.TDF"));
   }
@@ -126,7 +136,6 @@ function parseSessionRecord(buf, off) {
   const hi = buf.readUInt16LE(off + 21) / 10;
   const leak50 = buf[off + 23];
   const leak95 = buf[off + 24];
-  const leakAvg = buf[off + 25];
   const snoreIndex = buf[off + 26] / 10;
   const flowLimitation = buf[off + 27] / 10;
 
@@ -152,7 +161,7 @@ function parseSessionRecord(buf, off) {
     maxPressure: pressure95,
     leak50,
     leak95,
-    leakMax: leakAvg || null,
+    leakMax: null,
     flowLimP95: flowLimitation,
     snoreIndex,
     raw: { pressureMode },
@@ -172,7 +181,8 @@ function parseSessionRecord(buf, off) {
 function mergeDay(dailyMap, incoming) {
   if (!dailyMap.has(incoming.date)) {
     dailyMap.set(incoming.date, {
-      ahi: 0, ai: 0, hi: 0, oai: 0, cai: 0,
+      ahi: 0, ai: 0, hi: 0, oai: 0, cai: 0, uai: 0,
+      rin: null, csr: null, leakSpikeCount: null,
       duration: 0, patientHoursCumulative: 0,
       leakMax: null, pressure: null, maxPressure: null,
       minVent50: null, minVent95: null, tidVol50: null, tidVol95: null,

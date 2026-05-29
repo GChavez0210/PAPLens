@@ -25,6 +25,13 @@ class FisherPaykelLoader extends BaseLoader {
     this.manufacturer = "Fisher & Paykel";
   }
 
+  getDeviceCapabilities() {
+    return {
+      ...super.getDeviceCapabilities(),
+      supportsPressurePercentiles: true
+    };
+  }
+
   static detect(sdCardPath) {
     const iconPath = path.join(sdCardPath, "FPHCARE", "ICON");
     if (!fs.existsSync(iconPath)) return false;
@@ -105,6 +112,8 @@ class FisherPaykelLoader extends BaseLoader {
     const date = localDateString(new Date(session.startMs));
     if (!dailyMap.has(date)) {
       const day = this.blankDay(date);
+      day.ahi = null; day.ai = null; day.hi = null;
+      day.oai = null; day.cai = null; day.uai = null;
       day.pressure = 0;
       day.maxPressure = 0;
       dailyMap.set(date, day);

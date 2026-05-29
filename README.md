@@ -175,6 +175,10 @@ Resvent folders are detected from `THERAPY/CONFIG/` plus `THERAPY/RECORD/`.
 
 DeVilbiss IntelliPAP DV6 folders are detected from `DV6/S.BIN`.
 
+Fisher & Paykel SleepStyle / ICON folders are detected from `FPHCARE/ICON/<serial>/SUM*.fph`.
+
+Lowenstein Medical / Weinmann folders are detected from `WM_DATA.TDF` at the SD-card root.
+
 ## Tech stack
 
 | Layer | Technology |

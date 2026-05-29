@@ -23,7 +23,17 @@ class BaseLoader {
   }
 
   getDeviceCapabilities() {
-    return { supportsOximetry: false };
+    return {
+      supportsOximetry: false,
+      supportsAHI: false,
+      supportsLeakPercentiles: false,
+      supportsPressurePercentiles: false,
+      supportsVentilation: false,
+      supportsFlowLimitation: false,
+      supportsSessionWaveforms: false,
+      supportsPeriodicBreathing: false,
+      supportsPressureHistogram: false
+    };
   }
 
   static percentile(sortedArr, p) {

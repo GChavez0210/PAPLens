@@ -48,6 +48,15 @@ class ResventLoader extends BaseLoader {
     this.manufacturer = "Resvent";
   }
 
+  getDeviceCapabilities() {
+    return {
+      ...super.getDeviceCapabilities(),
+      supportsAHI: true,
+      supportsLeakPercentiles: true,
+      supportsPressurePercentiles: true
+    };
+  }
+
   static detect(sdCardPath) {
     return (
       fs.existsSync(path.join(sdCardPath, "THERAPY", "CONFIG")) &&
