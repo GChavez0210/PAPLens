@@ -244,11 +244,16 @@ class CpapService {
         }
 
         const sessionLoader = await this.ensureSessionLoader();
+        // Only run analytics for nights that are genuinely missing scores.
+        // Re-running all 90 nights on every startup was the primary cause of
+        // slow app launch even when no new data had been imported.
         const recentNightsForAnalytics = this.profileDatabase.db.prepare(`
-      SELECT night_date
-      FROM nights
-      WHERE device_id = ? AND usage_hours > 0
-      ORDER BY night_date DESC
+      SELECT n.night_date
+      FROM nights n
+      LEFT JOIN derived_metrics d ON d.night_id = n.id
+      WHERE n.device_id = ? AND n.usage_hours > 0
+        AND (d.night_id IS NULL OR d.therapy_stability_score IS NULL)
+      ORDER BY n.night_date DESC
       LIMIT 90
     `).all(device.id).map((row) => row.night_date);
 

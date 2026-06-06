@@ -66,11 +66,11 @@ class CPAPDataLoader {
     return this.deviceCapabilities;
   }
 
-  async loadAll(onProgress) {
+  async loadAll(onProgress, skipDates = new Set(), cachedSessionMetrics = new Map()) {
     await this.loadDeviceInfo();
     await this.loadDailySummary();
     await this.loadSessionList();
-    return this.getSummary(onProgress);
+    return this.getSummary(onProgress, skipDates, cachedSessionMetrics);
   }
 
   async loadDeviceInfo() {
@@ -310,12 +310,14 @@ class CPAPDataLoader {
     return detail;
   }
 
-  async buildNightlySessionMetrics(onProgress) {
+  async buildNightlySessionMetrics(onProgress, skipDates = new Set(), cachedSessionMetrics = new Map()) {
     if (this.nightlySessionMetrics) {
       return this.nightlySessionMetrics;
     }
 
     const { supportsOximetry } = this.getDeviceCapabilities();
+    // nightly holds raw sample arrays for nights that need fresh EDF parsing.
+    // cachedSessionMetrics holds already-summarized values for skipped nights.
     const nightly = new Map();
     let skippedUnsupportedSa2 = false;
     const total = this.sessions.length;
@@ -324,6 +326,14 @@ class CPAPDataLoader {
     for (const session of this.sessions) {
       const nightKey = this.getSleepNightKey(session.timestamp);
       if (!nightKey) {
+        done++;
+        if (onProgress) onProgress({ done, total });
+        continue;
+      }
+
+      // Skip EDF file I/O for nights whose session metrics are already stored
+      // and whose date folder hasn't changed (tracked by mtime in Fix 1).
+      if (skipDates.has(nightKey)) {
         done++;
         if (onProgress) onProgress({ done, total });
         continue;
@@ -389,9 +399,12 @@ class CPAPDataLoader {
       await new Promise((resolve) => setImmediate(resolve));
     }
 
-    this.nightlySessionMetrics = new Map(
-      Array.from(nightly.entries()).map(([nightKey, aggregate]) => [nightKey, summarizeNightlySessionMetrics(aggregate)])
-    );
+    // Merge: summarize freshly-parsed nights, then overlay with already-summarized
+    // cached values for nights that were skipped.
+    this.nightlySessionMetrics = new Map([
+      ...Array.from(nightly.entries()).map(([nightKey, aggregate]) => [nightKey, summarizeNightlySessionMetrics(aggregate)]),
+      ...cachedSessionMetrics
+    ]);
 
     if (skippedUnsupportedSa2) {
       safeInfo(
@@ -403,13 +416,13 @@ class CPAPDataLoader {
     return this.nightlySessionMetrics;
   }
 
-  async getDailyStats(onProgress) {
+  async getDailyStats(onProgress, skipDates = new Set(), cachedSessionMetrics = new Map()) {
     if (!this.dailySummary || !this.dailySummary.days) {
       return [];
     }
 
     const { supportsOximetry } = this.getDeviceCapabilities();
-    const nightlySessionMetrics = await this.buildNightlySessionMetrics(onProgress);
+    const nightlySessionMetrics = await this.buildNightlySessionMetrics(onProgress, skipDates, cachedSessionMetrics);
 
     const stats = this.dailySummary.days
       .map((day, index) => {
@@ -532,8 +545,8 @@ class CPAPDataLoader {
     return stats;
   }
 
-  async getSummary(onProgress) {
-    const stats = await this.getDailyStats(onProgress);
+  async getSummary(onProgress, skipDates = new Set(), cachedSessionMetrics = new Map()) {
+    const stats = await this.getDailyStats(onProgress, skipDates, cachedSessionMetrics);
     const recentDays = stats.slice(-30);
 
     const calcAvg = (field) => {

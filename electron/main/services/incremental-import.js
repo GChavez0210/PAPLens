@@ -1,4 +1,6 @@
 const crypto = require("crypto");
+const fs = require("fs");
+const path = require("path");
 const { getLoader } = require("../loaders/loader-registry");
 const { formatDebugValue, safeInfo, toOptionalNumber } = require("./therapyMetrics");
 
@@ -10,9 +12,82 @@ class IncrementalImporter {
     }
 
     async runImport(onProgress) {
+        // Build the set of night dates whose session-derived metrics are already
+        // fully stored AND whose DATALOG date folder has not changed since last import.
+        // Both conditions must be true to safely skip EDF parsing.
+        const cachedRows = this.db.prepare(`
+            SELECT n.night_date,
+                   m.leak_p50, m.leak_p95, m.tidal_vol_p50, m.tidal_vol_p95,
+                   m.minute_vent_p50, m.minute_vent_p95, m.resp_rate_p50, m.resp_rate_p95,
+                   m.flow_limitation_p95, m.spo2_avg, m.pulse_avg,
+                   m.snore_index, m.leak_spike_count, m.pressure_histogram,
+                   m.pressure_efficiency, m.event_cluster_index_source,
+                   m.pb_episode_count, m.pb_total_seconds, m.pb_pct,
+                   m.pb_avg_cycle_sec, m.pb_is_significant
+            FROM nights n
+            JOIN night_metrics m ON m.night_id = n.id
+            WHERE m.leak_p95 IS NOT NULL
+              AND m.tidal_vol_p50 IS NOT NULL
+              AND m.flow_limitation_p95 IS NOT NULL
+        `).all();
+
+        // Load stored mtimes for this data folder
+        const storedMtimes = new Map(
+            this.db.prepare(`SELECT date_dir, mtime_ms FROM datalog_folder_mtimes WHERE folder_path = ?`)
+                .all(this.dataPath)
+                .map(r => [r.date_dir, r.mtime_ms])
+        );
+
+        // Check current mtimes for DATALOG date dirs
+        const datalogPath = path.join(this.dataPath, "DATALOG");
+        const currentMtimes = new Map();
+        if (fs.existsSync(datalogPath)) {
+            for (const dateDir of fs.readdirSync(datalogPath)) {
+                if (!/^\d{8}$/.test(dateDir)) continue;
+                try {
+                    const stat = fs.statSync(path.join(datalogPath, dateDir));
+                    // Convert YYYYMMDD → YYYY-MM-DD to match night_date format
+                    const dateKey = `${dateDir.slice(0,4)}-${dateDir.slice(4,6)}-${dateDir.slice(6,8)}`;
+                    currentMtimes.set(dateKey, stat.mtimeMs);
+                } catch { /* skip unreadable dirs */ }
+            }
+        }
+
+        // A date is skippable only when metrics exist AND folder is unchanged
+        const skipDates = new Set(
+            cachedRows
+                .map(r => r.night_date)
+                .filter(date => {
+                    const stored = storedMtimes.get(date);
+                    const current = currentMtimes.get(date);
+                    // If we have no mtime record yet, don't skip (first import for this folder)
+                    return stored != null && current != null && stored === current;
+                })
+        );
+
+        safeInfo(console, `[import] mtime check: ${cachedRows.length} nights with metrics, ${skipDates.size} unchanged → skipping EDF parse`);
+        // Pre-seed loader's cached session metrics map so skipped nights still
+        // return enriched values when getDailyStats merges them.
+        const cachedSessionMetrics = new Map(cachedRows.map(r => [r.night_date, {
+            leak50: r.leak_p50, leak95: r.leak_p95, leakMax: null, leakSpikeCount: r.leak_spike_count,
+            tidVol50: r.tidal_vol_p50, tidVol95: r.tidal_vol_p95,
+            minVent50: r.minute_vent_p50, minVent95: r.minute_vent_p95,
+            respRate50: r.resp_rate_p50, respRate95: r.resp_rate_p95,
+            flowLimP95: r.flow_limitation_p95, snoreIndex: r.snore_index,
+            pressureHistogram: r.pressure_histogram ? JSON.parse(r.pressure_histogram) : null,
+            pressureEfficiency: r.pressure_efficiency,
+            eventClusterIndexSource: r.event_cluster_index_source,
+            spo2Avg: r.spo2_avg, pulseAvg: r.pulse_avg,
+            periodicBreathing: (r.pb_episode_count != null) ? {
+                episodeCount: r.pb_episode_count, totalPBSeconds: r.pb_total_seconds,
+                pbPct: r.pb_pct, avgCycleSec: r.pb_avg_cycle_sec,
+                isClinicallySignificant: r.pb_is_significant === 1
+            } : null
+        }]));
+
         this.db.exec('BEGIN TRANSACTION;');
         try {
-            const summary = await this.loader.loadAll(onProgress);
+            const summary = await this.loader.loadAll(onProgress, skipDates, cachedSessionMetrics);
             const deviceId = this.upsertDevice();
 
             let insertedCount = 0;
@@ -96,7 +171,11 @@ class IncrementalImporter {
                 if (existing) {
                     nightId = existing.id;
                     updatedCount++;
-                    runAnalyticsOn.add(day.date);
+                    // Only re-run analytics if the night's EDF data was actually re-parsed.
+                    // Skipped nights already have valid derived metrics — no need to recompute.
+                    if (!skipDates.has(day.date)) {
+                        runAnalyticsOn.add(day.date);
+                    }
                 } else {
                     insertedCount++;
                     runAnalyticsOn.add(day.date);
@@ -164,6 +243,16 @@ class IncrementalImporter {
         INSERT INTO import_log (id, device_id, folder_path, nights_inserted, nights_updated)
         VALUES (?, ?, ?, ?, ?)
       `).run(logId, deviceId, this.dataPath, insertedCount, updatedCount);
+
+            // Persist current DATALOG folder mtimes so next import can skip unchanged nights.
+            const upsertMtime = this.db.prepare(`
+        INSERT INTO datalog_folder_mtimes (folder_path, date_dir, mtime_ms)
+        VALUES (?, ?, ?)
+        ON CONFLICT(folder_path, date_dir) DO UPDATE SET mtime_ms = excluded.mtime_ms
+      `);
+            for (const [dateKey, mtimeMs] of currentMtimes.entries()) {
+                upsertMtime.run(this.dataPath, dateKey, mtimeMs);
+            }
 
             this.db.exec('COMMIT;');
 

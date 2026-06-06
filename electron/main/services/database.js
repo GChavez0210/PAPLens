@@ -201,6 +201,13 @@ class ProfileDatabase {
           nights_updated INTEGER,
           import_timestamp TEXT DEFAULT (datetime('now'))
       );
+
+      CREATE TABLE IF NOT EXISTS datalog_folder_mtimes (
+          folder_path TEXT NOT NULL,
+          date_dir   TEXT NOT NULL,
+          mtime_ms   INTEGER NOT NULL,
+          PRIMARY KEY (folder_path, date_dir)
+      );
     `;
     this.db.exec(ddl);
 
