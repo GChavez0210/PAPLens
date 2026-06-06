@@ -248,6 +248,51 @@ function eventColor(text) {
   return "#64748b";
 }
 
+/** Nearest-neighbour lookup: returns pressure Y at xMin, or null. */
+function interpolatePressureAt(pressurePoints, xMin) {
+  if (!pressurePoints || pressurePoints.length === 0) return null;
+  let best = null;
+  let bestDist = Infinity;
+  for (const pt of pressurePoints) {
+    const d = Math.abs(pt.x - xMin);
+    if (d < bestDist) { bestDist = d; best = pt.y; }
+  }
+  return best;
+}
+
+/**
+ * Builds one scatter dataset per unique event type so each type gets its own
+ * legend entry and colour on the pressure chart.
+ */
+function buildEventOverlayDatasets(events, pressurePoints) {
+  if (!events || events.length === 0) return [];
+
+  // Group events by canonical type label
+  const groups = new Map();
+  for (const ev of events) {
+    const color = eventColor(ev.text);
+    if (!groups.has(ev.text)) groups.set(ev.text, { color, points: [] });
+    const xMin = ev.onsetSeconds / 60;
+    const y = interpolatePressureAt(pressurePoints, xMin);
+    if (y !== null) {
+      groups.get(ev.text).points.push({ x: xMin, y, durationSeconds: ev.durationSeconds, label: ev.text });
+    }
+  }
+
+  return [...groups.entries()].map(([label, { color, points }]) => ({
+    type: "scatter",
+    label,
+    data: points,
+    backgroundColor: color,
+    borderColor: "#fff",
+    borderWidth: 1.5,
+    pointRadius: 6,
+    pointHoverRadius: 8,
+    pointStyle: "circle",
+    order: 0  // draw on top of line datasets
+  }));
+}
+
 function SessionChart({ title, unit, datasets, yMin, yMax, theme, yTickLabel, tooltipLabel, externalPlugins }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -451,16 +496,25 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
     const pbEpisodes = ampPoints ? detectPBFromAmplitude(ampPoints) : [];
     const pbPlugin = pbEpisodes.length > 0 ? makePBRegionPlugin(pbEpisodes) : null;
 
+    const pressureLinePoints = pressure.map((series) => buildPoints(series.values, pld));
+    const events = collectEvents(detail);
+    const eventOverlay = buildEventOverlayDatasets(events, pressureLinePoints[0] || []);
+
     return {
-      pressure: pressure.map((series, index) => ({
-        label: index === 0 ? "Mask pressure" : "EPAP/EPR pressure",
-        data: buildPoints(series.values, pld),
-        borderColor: index === 0 ? "#ef4444" : "#10b981",
-        backgroundColor: "transparent",
-        pointRadius: 0,
-        borderWidth: 1.7,
-        tension: 0.15
-      })),
+      pressure: [
+        ...pressure.map((series, index) => ({
+          type: "line",
+          label: index === 0 ? "Mask pressure" : "EPAP/EPR pressure",
+          data: pressureLinePoints[index],
+          borderColor: index === 0 ? "#ef4444" : "#10b981",
+          backgroundColor: "transparent",
+          pointRadius: 0,
+          borderWidth: 1.7,
+          tension: 0.15,
+          order: 1
+        })),
+        ...eventOverlay
+      ],
       flow: flow
         ? [{
             label: "Flow rate",
@@ -523,7 +577,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
             }
           ]
         : [],
-      events: collectEvents(detail)
+      events
     };
   }, [detail, theme]);
 
@@ -617,7 +671,20 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
         ) : (
           <div className="session-graphs-grid">
             {graphData.pressure.length > 0 ? (
-              <SessionChart title="Pressure" unit="cmH2O" datasets={graphData.pressure} theme={theme} />
+              <SessionChart
+                title="Pressure"
+                unit="cmH2O"
+                datasets={graphData.pressure}
+                theme={theme}
+                tooltipLabel={(item) => {
+                  if (item.dataset.type === "scatter") {
+                    const pt = item.raw || {};
+                    const dur = pt.durationSeconds ? ` · ${Math.round(pt.durationSeconds)}s` : "";
+                    return `${pt.label || item.dataset.label}${dur}`;
+                  }
+                  return `${item.dataset.label}: ${Number(item.parsed.y).toFixed(1)} cmH2O`;
+                }}
+              />
             ) : (
               <EmptyGraph title="Pressure" message="No pressure signal found for this session." />
             )}
@@ -640,11 +707,6 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                 externalPlugins={graphData.pbPlugin ? [graphData.pbPlugin] : []}
               />
             ) : null}
-            {graphData.events.length > 0 ? (
-              <EventsChart events={graphData.events} theme={theme} />
-            ) : (
-              <EmptyGraph title="Flagged Events" message="No flagged event annotations were recorded." />
-            )}
             {graphData.flowLimitation.length > 0 ? (
               <SessionChart title="Flow Limitation" unit="index" datasets={graphData.flowLimitation} yMin={0} yMax={1} theme={theme} />
             ) : (

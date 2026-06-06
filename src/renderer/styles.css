@@ -785,7 +785,8 @@ th {
   }
 
   .session-graph-card:nth-child(1),
-  .session-graph-card:nth-child(2) {
+  .session-graph-card:nth-child(2),
+  .session-graph-card:nth-child(3) {
     grid-column: span 2;
   }
 }
