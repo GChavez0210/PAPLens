@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Session Waveform Viewer — Event Overlay:** Flagged respiratory events (hypopnea, obstructive apnea, central apnea, RERA, leak) are now rendered as colour-coded scatter markers directly on the Pressure chart, pinned to the actual mask pressure value at each event's onset time. Tooltip shows event type and duration. The separate Flagged Events chart has been removed.
+- **Session Waveform Viewer — Layout:** Breathing Amplitude chart now spans the full grid width, matching Pressure and Flow Rate.
+- **PDF Report:** Expanded from two pages to three pages. Page 3 contains the flow limitation trend chart and the clinician interpretation panel (previously on page 2).
+
 ## [1.5.0] - 2026-05-19
 
 ### Added

@@ -29,7 +29,7 @@ PAPLens is a fully offline desktop analytics tool for PAP therapy data. It reads
 - Provides a dashboard with trend charts, a sleep calendar heatmap, and a last-night summary sidebar.
 - Provides an Insights page with metric trends, CMS compliance tracking, Pearson correlation analysis, periodic breathing analysis, and flow limitation tracking.
 - Opens per-session waveform viewers showing high-resolution EDF signals (flow, pressure, leak, SpO₂) with detected event overlays — session data is cached locally on first import so graphs remain accessible after the SD card is removed.
-- Generates print-ready two-page PDF reports intended for patient-to-clinician review.
+- Generates print-ready three-page PDF reports intended for patient-to-clinician review.
 - Exports platform-native installers: **Windows** (NSIS `.exe`), **macOS** (DMG), and **Linux** (AppImage) — each supporting `x64` and `arm64`.
 
 ## Screenshots
@@ -124,6 +124,9 @@ The **Save Data Report** button (hover for description) generates a print-ready 
 
 **Page 2 — Trend Charts & Interpretation**
 - All five trend charts rendered as images
+
+**Page 3 — Flow Limitation & Clinician Interpretation**
+- Flow limitation trend chart with mild (0.10) and significant (0.30) threshold lines
 - Clinician interpretation panel with correlation guide and Pearson r values with plain-English notes
 
 ## Multi-profile support
