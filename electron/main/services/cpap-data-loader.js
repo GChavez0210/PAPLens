@@ -531,7 +531,7 @@ class CPAPDataLoader {
           }
         };
       })
-      .filter((day) => day.duration > 0 || day.onDuration > 0);
+      .filter((day) => day.duration > 0 || day.onDuration > 0 || day.usageHours > 0);
 
     const leakStats = describeSamples(stats.map((day) => day.leak95));
     const tidalStats = describeSamples(stats.map((day) => day.tidVol50));
