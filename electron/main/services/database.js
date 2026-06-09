@@ -253,6 +253,7 @@ class ProfileDatabase {
     addColumnIfNotExists('night_metrics', 'pb_pct', 'REAL');
     addColumnIfNotExists('night_metrics', 'pb_avg_cycle_sec', 'REAL');
     addColumnIfNotExists('night_metrics', 'pb_is_significant', 'INTEGER');
+    addColumnIfNotExists('night_metrics', 'pb_leak_confounded', 'INTEGER');
   }
 
   close() {

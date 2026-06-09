@@ -30,6 +30,12 @@ const MIN_CYCLE_SEC = 30;
 const MAX_CYCLE_SEC = 120;
 const CLINICAL_SIGNIFICANCE_PCT = 5.0;
 
+// Leak-confounding detection constants
+const LEAK_CONFOUND_TROUGH_RATIO = 0.50;  // ≥50% of troughs must coincide with elevated leak
+const TROUGH_AMPLITUDE_RATIO = 0.50;      // trough = sample below 50% of episode mean
+const LEAK_ELEVATION_PERCENTILE = 0.75;   // "elevated" = above session 75th-percentile leak
+const LEAK_TROUGH_HALF_WIN = 2;           // ±4 seconds around each trough
+
 function centredMovingAverage(arr, halfWin) {
     const out = new Float64Array(arr.length);
     for (let i = 0; i < arr.length; i++) {
@@ -77,11 +83,38 @@ function mergeEpisodes(flags, maxGapSamples, minEpisodeSamples) {
     return episodes;
 }
 
+function sessionLeakThreshold(leakSamples) {
+    if (!leakSamples || leakSamples.length === 0) return null;
+    const sorted = Float64Array.from(leakSamples).sort();
+    return sorted[Math.min(Math.floor(sorted.length * LEAK_ELEVATION_PERCENTILE), sorted.length - 1)];
+}
+
+function isLeakConfoundedEpisode(smoothedSlice, leakSamples, startIdx, leakThreshold) {
+    if (!leakSamples || leakSamples.length === 0 || leakThreshold == null) return false;
+    const epMean = smoothedSlice.reduce((a, b) => a + b, 0) / smoothedSlice.length;
+    const troughThreshold = epMean * TROUGH_AMPLITUDE_RATIO;
+
+    let troughCount = 0;
+    let leakCoincidentCount = 0;
+    for (let i = 0; i < smoothedSlice.length; i++) {
+        if (smoothedSlice[i] <= troughThreshold) {
+            troughCount++;
+            const lo = Math.max(0, startIdx + i - LEAK_TROUGH_HALF_WIN);
+            const hi = Math.min(leakSamples.length - 1, startIdx + i + LEAK_TROUGH_HALF_WIN);
+            for (let j = lo; j <= hi; j++) {
+                if (leakSamples[j] > leakThreshold) { leakCoincidentCount++; break; }
+            }
+        }
+    }
+    return troughCount > 0 && leakCoincidentCount / troughCount >= LEAK_CONFOUND_TROUGH_RATIO;
+}
+
 /**
  * @param {number[]} tidalMlSamples  Normalized tidal volume in mL at 2-second intervals.
+ * @param {number[]} [leakSamples]   Leak rate samples at 2-second intervals (same alignment).
  * @returns {object|null}            Detection result, or null if insufficient data.
  */
-function detectPeriodicBreathing(tidalMlSamples) {
+function detectPeriodicBreathing(tidalMlSamples, leakSamples) {
     const N = tidalMlSamples ? tidalMlSamples.length : 0;
     const totalSec = N * SAMPLE_INTERVAL_SEC;
 
@@ -155,12 +188,20 @@ function detectPeriodicBreathing(tidalMlSamples) {
     const avgCycleSec = totalPeaks > 0 ? Math.round(weightedCycleSec / totalPeaks) : null;
     const isClinicallySignificant = pbPct >= CLINICAL_SIGNIFICANCE_PCT;
 
+    // Check if the majority of valid episodes appear leak-confounded (arousal-driven CAs).
+    const leakThreshold = sessionLeakThreshold(leakSamples);
+    const confoundedCount = validEpisodes.filter(ep =>
+        isLeakConfoundedEpisode(smoothed.slice(ep.startIdx, ep.endIdx + 1), leakSamples, ep.startIdx, leakThreshold)
+    ).length;
+    const leakConfounded = confoundedCount > validEpisodes.length / 2;
+
     return {
         episodeCount: validEpisodes.length,
         totalPBSeconds: Math.round(totalPBSec),
         pbPct: Math.round(pbPct * 10) / 10,
         avgCycleSec,
         isClinicallySignificant,
+        leakConfounded,
         _episodes: episodes   // raw merged episodes (before cycle validation) for testing
     };
 }

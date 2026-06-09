@@ -84,9 +84,17 @@ function titleForSingleFlag(metric, z) {
     }
 }
 
-function generatePeriodicBreathingInsight(pbPct, pbIsSignificant, episodeCount) {
+function generatePeriodicBreathingInsight(pbPct, pbIsSignificant, episodeCount, leakConfounded) {
     if (pbPct == null || pbPct === 0) return null;
     if (pbIsSignificant) {
+        if (leakConfounded) {
+            return {
+                key: "periodic_breathing",
+                title: "Possible Periodic Breathing",
+                summary: `A waxing-and-waning breathing pattern occupied ${pbPct.toFixed(1)}% of your recording (${episodeCount} episode${episodeCount !== 1 ? "s" : ""}), but most episodes coincided with elevated mask leak. This may reflect arousal-driven central apneas rather than true Cheyne-Stokes respiration. Mention it to your care team, especially if leak issues are recurrent.`,
+                details: null
+            };
+        }
         return {
             key: "periodic_breathing",
             title: "Periodic Breathing Detected",
@@ -97,8 +105,10 @@ function generatePeriodicBreathingInsight(pbPct, pbIsSignificant, episodeCount) 
     if (pbPct >= 2) {
         return {
             key: "periodic_breathing",
-            title: "Mild Periodic Breathing",
-            summary: `A low-level periodic breathing pattern was detected (${pbPct.toFixed(1)}% of recording time, ${episodeCount} episode${episodeCount !== 1 ? "s" : ""}). This is below the clinical significance threshold but worth monitoring over time.`,
+            title: leakConfounded ? "Possible Mild Periodic Breathing" : "Mild Periodic Breathing",
+            summary: leakConfounded
+                ? `A low-level periodic breathing pattern was detected (${pbPct.toFixed(1)}% of recording time, ${episodeCount} episode${episodeCount !== 1 ? "s" : ""}), though episodes overlapped with mask leak events. This may be related to leak-induced arousals rather than a primary breathing disorder.`
+                : `A low-level periodic breathing pattern was detected (${pbPct.toFixed(1)}% of recording time, ${episodeCount} episode${episodeCount !== 1 ? "s" : ""}). This is below the clinical significance threshold but worth monitoring over time.`,
             details: null
         };
     }

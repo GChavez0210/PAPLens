@@ -101,7 +101,7 @@ class AnalyticsOrchestrator {
         }, flags);
 
         const pbInsight = generatePeriodicBreathingInsight(
-          current.pb_pct, current.pb_is_significant === 1, current.pb_episode_count
+          current.pb_pct, current.pb_is_significant === 1, current.pb_episode_count, current.pb_leak_confounded === 1
         );
         if (pbInsight) insights.push(pbInsight);
 

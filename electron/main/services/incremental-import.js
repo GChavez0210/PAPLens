@@ -23,7 +23,7 @@ class IncrementalImporter {
                    m.snore_index, m.leak_spike_count, m.pressure_histogram,
                    m.pressure_efficiency, m.event_cluster_index_source,
                    m.pb_episode_count, m.pb_total_seconds, m.pb_pct,
-                   m.pb_avg_cycle_sec, m.pb_is_significant
+                   m.pb_avg_cycle_sec, m.pb_is_significant, m.pb_leak_confounded
             FROM nights n
             JOIN night_metrics m ON m.night_id = n.id
             WHERE m.leak_p95 IS NOT NULL
@@ -81,7 +81,8 @@ class IncrementalImporter {
             periodicBreathing: (r.pb_episode_count != null) ? {
                 episodeCount: r.pb_episode_count, totalPBSeconds: r.pb_total_seconds,
                 pbPct: r.pb_pct, avgCycleSec: r.pb_avg_cycle_sec,
-                isClinicallySignificant: r.pb_is_significant === 1
+                isClinicallySignificant: r.pb_is_significant === 1,
+                leakConfounded: r.pb_leak_confounded === 1
             } : null
         }]));
 
@@ -113,7 +114,7 @@ class IncrementalImporter {
           tidal_vol_p50, tidal_vol_p95, duration_minutes, on_duration_minutes,
           patient_hours_cumulative, spo2_avg, pulse_avg, data_quality,
           rin_per_hr, csr_per_hr, snore_index, leak_spike_count, pressure_histogram, pressure_efficiency,
-          pb_episode_count, pb_total_seconds, pb_pct, pb_avg_cycle_sec, pb_is_significant
+          pb_episode_count, pb_total_seconds, pb_pct, pb_avg_cycle_sec, pb_is_significant, pb_leak_confounded
         ) VALUES (
           @night_id, @ahi_total, @apneas_per_hr, @hypopneas_per_hr,
           @obstructive_apneas_per_hr, @central_apneas_per_hr, @unclassified_apneas_per_hr,
@@ -122,7 +123,7 @@ class IncrementalImporter {
           @tidal_vol_p50, @tidal_vol_p95, @duration_minutes, @on_duration_minutes,
           @patient_hours_cumulative, @spo2_avg, @pulse_avg, @data_quality,
           @rin_per_hr, @csr_per_hr, @snore_index, @leak_spike_count, @pressure_histogram, @pressure_efficiency,
-          @pb_episode_count, @pb_total_seconds, @pb_pct, @pb_avg_cycle_sec, @pb_is_significant
+          @pb_episode_count, @pb_total_seconds, @pb_pct, @pb_avg_cycle_sec, @pb_is_significant, @pb_leak_confounded
         )
         ON CONFLICT(night_id) DO UPDATE SET
           ahi_total = excluded.ahi_total,
@@ -159,7 +160,8 @@ class IncrementalImporter {
           pb_total_seconds = excluded.pb_total_seconds,
           pb_pct = excluded.pb_pct,
           pb_avg_cycle_sec = excluded.pb_avg_cycle_sec,
-          pb_is_significant = excluded.pb_is_significant
+          pb_is_significant = excluded.pb_is_significant,
+          pb_leak_confounded = excluded.pb_leak_confounded
       `);
 
             for (const day of summary.dailyStats || []) {
@@ -234,7 +236,8 @@ class IncrementalImporter {
                     pb_total_seconds: toOptionalNumber(day.pbTotalSeconds),
                     pb_pct: toOptionalNumber(day.pbPct),
                     pb_avg_cycle_sec: toOptionalNumber(day.pbAvgCycleSec),
-                    pb_is_significant: day.pbIsSignificant == null ? null : (day.pbIsSignificant ? 1 : 0)
+                    pb_is_significant: day.pbIsSignificant == null ? null : (day.pbIsSignificant ? 1 : 0),
+                    pb_leak_confounded: day.pbLeakConfounded == null ? null : (day.pbLeakConfounded ? 1 : 0)
                 });
             }
 
