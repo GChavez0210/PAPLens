@@ -46,16 +46,16 @@ function computeTherapyStabilityScore(currentMetrics) {
         return Math.min(15, 9 + (4 - usageStr) * 3);
     })();
 
-    // Pressure variance: p95 − median of actual delivered mask pressure (MaskPress.50/95).
-    // Both columns now store real delivery percentiles after the Phase 10 mapping fix,
-    // so the spread is always on the same cmH₂O scale as the penalty thresholds.
+    // pressureSpread = p95 − median (cmH₂O). This is a percentile spread ≈ 1.35σ for
+    // normally-distributed pressure, not a true standard deviation. Penalty thresholds
+    // (>2, >6 cmH₂O) are calibrated for this spread scale, not for σ.
     let penaltyPressureVar = null;
-    let pressureSd = null;
+    let pressureSpread = null;
     if (currentMetrics.pressure_p95 !== undefined && currentMetrics.pressure_p95 !== null &&
         currentMetrics.pressure_median !== undefined && currentMetrics.pressure_median !== null) {
-        pressureSd = currentMetrics.pressure_p95 - currentMetrics.pressure_median;
-        if (pressureSd <= 2) penaltyPressureVar = 0;
-        else if (pressureSd <= 6) penaltyPressureVar = (pressureSd - 2) * 1.25;
+        pressureSpread = currentMetrics.pressure_p95 - currentMetrics.pressure_median;
+        if (pressureSpread <= 2) penaltyPressureVar = 0;
+        else if (pressureSpread <= 6) penaltyPressureVar = (pressureSpread - 2) * 1.25;
         else penaltyPressureVar = 5;
     }
 
@@ -92,14 +92,14 @@ function computeTherapyStabilityScore(currentMetrics) {
         penaltyPressureVar: penaltyPressureVar === null ? null : Math.round(penaltyPressureVar),
         penaltyRin: penaltyRin === null ? null : Math.round(penaltyRin),
         penaltyFlowLim: roundedFlPenalty,
-        pressureVariance: pressureSd,
+        pressureVariance: pressureSpread,
         flScore: roundedFlPenalty === null ? null : roundedFlPenalty * 20,
         clusterIndex: null
     };
 }
 
 function computeComplianceRisk(recent14DaysUsage) {
-    const validUsage = (recent14DaysUsage || []).map(Number).filter(v => Number.isFinite(v) && v > 0);
+    const validUsage = (recent14DaysUsage || []).map(v => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : 0));
     if (validUsage.length === 0) return null;
 
     const last7 = validUsage.slice(0, 7);

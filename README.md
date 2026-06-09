@@ -318,6 +318,16 @@ npm run dev
 
 Opens the Vite dev server on `http://localhost:5173` and launches Electron pointing at it. Hot-reload is active for renderer changes; restart Electron for main-process changes.
 
+## Development checks
+
+```bash
+npm run lint
+npm test
+npm run check
+```
+
+`tsconfig.json` is kept as a no-emit JavaScript type-checking and IDE configuration for `src/`. Report template binding smoke checks live in `scripts/sim_compile.js`.
+
 ## PDF report generation
 
 PDF reports are generated in Electron main process using Handlebars + `report.html`, then rendered to PDF via `printToPDF`.

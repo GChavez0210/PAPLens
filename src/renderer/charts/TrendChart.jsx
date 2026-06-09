@@ -1,34 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 
 Chart.register(...registerables);
 
-export function TrendChart({ title, labels, datasets, type = "line", options = {}, theme = "dark", reportKey }) {
+function TrendChartComponent({ title, labels, datasets, type = "line", options = {}, theme = "dark", reportKey }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
-  useEffect(() => {
-    if (!isExpanded) return undefined;
-
-    const onKeyDown = (e) => {
-      if (e.key === "Escape") {
-        setIsExpanded(false);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [isExpanded]);
-
-  useEffect(() => {
-    if (!canvasRef.current) {
-      return undefined;
-    }
-    if (chartRef.current) {
-      chartRef.current.destroy();
-    }
-
+  const chartOptions = useMemo(() => {
     const textColor = theme === "light" ? "#4b5563" : "#a1a1aa";
     const gridColor = theme === "light" ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.15)";
 
@@ -79,10 +59,31 @@ export function TrendChart({ title, labels, datasets, type = "line", options = {
       if (mergedOptions.scales.y1?.ticks) mergedOptions.scales.y1.ticks.font = { size: 14 };
     }
 
+    return mergedOptions;
+  }, [isExpanded, options, theme]);
+
+  useEffect(() => {
+    if (!isExpanded) return undefined;
+
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setIsExpanded(false);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isExpanded]);
+
+  useEffect(() => {
+    if (!canvasRef.current) {
+      return undefined;
+    }
+
     chartRef.current = new Chart(canvasRef.current, {
       type,
-      data: { labels, datasets },
-      options: mergedOptions
+      data: { labels: [], datasets: [] },
+      options: {}
     });
 
     return () => {
@@ -90,7 +91,17 @@ export function TrendChart({ title, labels, datasets, type = "line", options = {
         chartRef.current.destroy();
       }
     };
-  }, [title, labels, datasets, isExpanded, theme, type, options]);
+  }, [type]);
+
+  useEffect(() => {
+    if (!chartRef.current) {
+      return;
+    }
+
+    chartRef.current.data = { labels, datasets };
+    chartRef.current.options = chartOptions;
+    chartRef.current.update();
+  }, [chartOptions, datasets, labels]);
 
   return (
     <>
@@ -111,3 +122,5 @@ export function TrendChart({ title, labels, datasets, type = "line", options = {
     </>
   );
 }
+
+export const TrendChart = memo(TrendChartComponent);

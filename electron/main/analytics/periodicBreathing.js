@@ -50,6 +50,33 @@ function countPeaks(arr) {
     return count;
 }
 
+// Merge a Uint8Array (or boolean array) of per-sample flags into episode objects.
+// Episode boundaries land on the last flagged sample (never inside a trailing gap).
+function mergeEpisodes(flags, maxGapSamples, minEpisodeSamples) {
+    const episodes = [];
+    let epStart = -1;
+    let lastFlagged = -1;
+
+    const closeEpisode = () => {
+        if (epStart !== -1 && lastFlagged - epStart + 1 >= minEpisodeSamples) {
+            episodes.push({ startIdx: epStart, endIdx: lastFlagged });
+        }
+        epStart = -1;
+        lastFlagged = -1;
+    };
+
+    for (let i = 0; i < flags.length; i++) {
+        if (flags[i]) {
+            if (epStart === -1) epStart = i;
+            lastFlagged = i;
+        } else if (epStart !== -1 && i - lastFlagged > maxGapSamples) {
+            closeEpisode();
+        }
+    }
+    closeEpisode();
+    return episodes;
+}
+
 /**
  * @param {number[]} tidalMlSamples  Normalized tidal volume in mL at 2-second intervals.
  * @returns {object|null}            Detection result, or null if insufficient data.
@@ -82,33 +109,8 @@ function detectPeriodicBreathing(tidalMlSamples) {
         }
     }
 
-    // Step 3: merge flagged runs into episodes
-    const episodes = [];
-    let epStart = -1;
-    let gapRun = 0;
-
-    for (let i = 0; i < N; i++) {
-        if (pbFlags[i]) {
-            if (epStart === -1) epStart = i;
-            gapRun = 0;
-        } else if (epStart !== -1) {
-            gapRun++;
-            if (gapRun > MAX_GAP_SAMPLES) {
-                const epEnd = i - gapRun;
-                if (epEnd - epStart >= MIN_EPISODE_SAMPLES) {
-                    episodes.push({ startIdx: epStart, endIdx: epEnd });
-                }
-                epStart = -1;
-                gapRun = 0;
-            }
-        }
-    }
-    if (epStart !== -1) {
-        const epEnd = N - 1 - gapRun;
-        if (epEnd - epStart >= MIN_EPISODE_SAMPLES) {
-            episodes.push({ startIdx: epStart, endIdx: epEnd });
-        }
-    }
+    // Step 3: merge flagged runs into episodes.
+    const episodes = mergeEpisodes(pbFlags, MAX_GAP_SAMPLES, MIN_EPISODE_SAMPLES);
 
     if (episodes.length === 0) {
         return { episodeCount: 0, totalPBSeconds: 0, pbPct: 0, avgCycleSec: null, isClinicallySignificant: false };
@@ -158,8 +160,9 @@ function detectPeriodicBreathing(tidalMlSamples) {
         totalPBSeconds: Math.round(totalPBSec),
         pbPct: Math.round(pbPct * 10) / 10,
         avgCycleSec,
-        isClinicallySignificant
+        isClinicallySignificant,
+        _episodes: episodes   // raw merged episodes (before cycle validation) for testing
     };
 }
 
-module.exports = { detectPeriodicBreathing };
+module.exports = { detectPeriodicBreathing, mergeEpisodes };

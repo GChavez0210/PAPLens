@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import Chart from "chart.js/auto";
 
 /**
@@ -6,12 +6,15 @@ import Chart from "chart.js/auto";
  * Obstructive Apneas (OAI), Central Apneas (CAI), Unclassified Apneas (UAI), Hypopneas (HI).
  * Only rendered when at least one night has non-zero event type data.
  */
-export function EventTypeSplitChart({ trends, height = 220 }) {
+function EventTypeSplitChartComponent({ trends, height = 220 }) {
     const ref = useRef(null);
 
-    const nights = (trends || []).filter(d =>
-        (d.obstructive_apneas_per_hr ?? 0) + (d.central_apneas_per_hr ?? 0) +
-        (d.unclassified_apneas_per_hr ?? 0) + (d.hypopneas_per_hr ?? 0) > 0
+    const nights = useMemo(
+        () => (trends || []).filter(d =>
+            (d.obstructive_apneas_per_hr ?? 0) + (d.central_apneas_per_hr ?? 0) +
+            (d.unclassified_apneas_per_hr ?? 0) + (d.hypopneas_per_hr ?? 0) > 0
+        ),
+        [trends]
     );
 
     useEffect(() => {
@@ -82,3 +85,5 @@ export function EventTypeSplitChart({ trends, height = 220 }) {
         </div>
     );
 }
+
+export const EventTypeSplitChart = memo(EventTypeSplitChartComponent);

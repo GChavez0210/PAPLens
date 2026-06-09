@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 
 const TOOLTIP = {
     title: "What this means",
@@ -16,13 +16,13 @@ function formatDuration(totalSeconds) {
     return `${s}s`;
 }
 
-export function PeriodicBreathingCard({ trends }) {
+function PeriodicBreathingCardComponent({ trends }) {
     const [hovered, setHovered] = useState(false);
+    const nights = useMemo(() => (trends || []).filter(r => r.pb_pct != null), [trends]);
 
     if (!trends || trends.length === 0) return null;
 
     // Aggregate PB stats across the selected date range
-    const nights = trends.filter(r => r.pb_pct != null);
     if (nights.length === 0) return null;
 
     const significantNights = nights.filter(r => r.pb_is_significant === 1);
@@ -149,6 +149,8 @@ export function PeriodicBreathingCard({ trends }) {
         </div>
     );
 }
+
+export const PeriodicBreathingCard = memo(PeriodicBreathingCardComponent);
 
 function StatCell({ label, value, accent }) {
     return (

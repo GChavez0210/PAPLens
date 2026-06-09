@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { filterAnalyzedDays, getCorrelationInsight } from "../utils/reportBuilder";
 import { calculatePercentile, formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
 import { AHITrendChart } from "../components/charts/AHITrendChart";
@@ -245,49 +245,110 @@ function adaptForRange(exp) {
     return { ...exp, title, summary };
 }
 
+function StatCard({ label, value, unit, sub, color = "#22D3EE", tooltipKey, tooltipDown = false }) {
+    const [hovered, setHovered] = useState(false);
+    const tip = tooltipKey ? STAT_TOOLTIPS[tooltipKey] : null;
+    const tipPos = tooltipDown
+        ? { top: 'calc(100% + 8px)' }
+        : { bottom: 'calc(100% + 8px)' };
+
+    return (
+        <div
+            style={{
+                background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8,
+                padding: "14px 16px", display: "flex", flexDirection: "column", gap: 4,
+                position: 'relative', cursor: tip ? 'help' : 'default'
+            }}
+            onMouseEnter={() => tip && setHovered(true)}
+            onMouseLeave={() => tip && setHovered(false)}
+        >
+            <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
+                <span style={{ fontSize: "1.8rem", fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
+                <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>{unit}</span>
+            </div>
+            {sub && <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>{sub}</div>}
+            {hovered && tip && (
+                <div style={{
+                    position: 'absolute', ...tipPos, left: 0, right: 0, zIndex: 50,
+                    background: 'var(--card)', border: `1px solid ${color}60`, borderRadius: 10,
+                    padding: '14px 16px', fontSize: '0.78rem', color: 'var(--text)', lineHeight: 1.7,
+                    boxShadow: '0 12px 40px rgba(0,0,0,0.55)', pointerEvents: 'none', minWidth: 240
+                }}>
+                    <div style={{ fontWeight: 700, color, fontSize: '0.82rem', marginBottom: 8 }}>
+                        {tip.title}
+                    </div>
+                    <div style={{ color: 'var(--muted)', marginBottom: 10 }}>{tip.what}</div>
+                    <div style={{ borderTop: `1px solid ${color}30`, paddingTop: 8 }}>
+                        <span style={{ fontWeight: 700, color, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 1 }}>
+                            Therapy impact
+                        </span>
+                        <div style={{ color: 'var(--text)', marginTop: 4 }}>{tip.impact}</div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 export function Insights({ range = "30", customFrom = "", customTo = "" }) {
     const [data, setData] = useState(null);
 
-    const loadData = useCallback(async () => {
+    const loadData = useCallback(async (isCancelled = () => false) => {
         let payload;
         if (range === "custom") payload = { from: customFrom, to: customTo };
         else if (range === "all") payload = { days: 0 };
         else payload = { days: parseInt(range, 10) };
         try {
             const res = await window.cpapAPI.getInsights(payload);
-            if (res) setData(res);
-            else setData({});
+            if (!isCancelled()) {
+                setData(res || {});
+            }
         } catch (err) {
             console.error("Failed to load insights", err);
-            setData({});
+            if (!isCancelled()) {
+                setData({});
+            }
         }
     }, [customFrom, customTo, range]);
 
     useEffect(() => {
-        setData(null);
-        loadData();
-        const unsub = window.cpapAPI.onDataLoaded(() => loadData());
-        return () => unsub();
+        let cancelled = false;
+        const isCancelled = () => cancelled;
+        loadData(isCancelled);
+        const unsub = window.cpapAPI.onDataLoaded(() => loadData(isCancelled));
+        return () => {
+            cancelled = true;
+            unsub();
+        };
     }, [loadData]);
 
-    if (data === null) return (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#9ca3af" }}>
-            <span style={{ fontSize: "1.2rem" }}>Loading insights...</span>
-        </div>
+    const { trends, correlations, explanations, complianceRate, complianceWindowNights, compliantNights } = data || {};
+    const uniqueExplanations = useMemo(() => {
+        const seenKeys = new Set();
+        return (explanations || []).filter(exp => {
+            if (seenKeys.has(exp.key)) return false;
+            seenKeys.add(exp.key);
+            return true;
+        }).map(adaptForRange);
+    }, [explanations]);
+
+    const sorted = useMemo(() => [...(trends || [])].reverse(), [trends]);
+    const analyzed = useMemo(() => filterAnalyzedDays(sorted), [sorted]);
+    const labels = useMemo(() => sorted.map(d => d.night_date?.slice(5)), [sorted]);
+    const ahiData = useMemo(() => sorted.map(d => d.ahi_total || 0), [sorted]);
+    const hasEventTypeData = useMemo(
+        () => analyzed.some(d => (d.obstructive_apneas_per_hr ?? 0) + (d.central_apneas_per_hr ?? 0) + (d.hypopneas_per_hr ?? 0) > 0),
+        [analyzed]
     );
-
-    const { trends, correlations, explanations, complianceRate, complianceWindowNights, compliantNights } = data;
-    const seenKeys = new Set();
-    const uniqueExplanations = (explanations || []).filter(exp => {
-        if (seenKeys.has(exp.key)) return false;
-        seenKeys.add(exp.key);
-        return true;
-    }).map(adaptForRange);
-
-    const sorted = [...(trends || [])].reverse();
-    const analyzed = filterAnalyzedDays(sorted);
-    const labels = sorted.map(d => d.night_date?.slice(5));
-    const ahiData = sorted.map(d => d.ahi_total || 0);
+    const hasFlowLimitationData = useMemo(
+        () => analyzed.some(d => d.flow_limitation_p95 !== null && d.flow_limitation_p95 !== undefined),
+        [analyzed]
+    );
+    const hasPeriodicBreathingData = useMemo(
+        () => (trends || []).some(r => r.pb_pct != null),
+        [trends]
+    );
 
     let burden = null;
     const lastWithBurden = (trends || []).find(t => t.residual_burden);
@@ -301,6 +362,12 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
 
     const totalNights = analyzed.length;
     const rangeLabel = range === 'all' ? 'All Time' : range === 'custom' ? 'Custom Range' : `Last ${range} Days`;
+
+    if (data === null) return (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#9ca3af" }}>
+            <span style={{ fontSize: "1.2rem" }}>Loading insights...</span>
+        </div>
+    );
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
@@ -324,52 +391,6 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                 };
                 const displayLeak95 = toMetricNumber(metricSummary.leak);
                 const displayTidal = toMetricNumber(metricSummary.tidalVolume);
-
-                const StatCard = ({ label, value, unit, sub, color = "#22D3EE", tooltipKey, tooltipDown = false }) => {
-                    const [hovered, setHovered] = useState(false);
-                    const tip = tooltipKey ? STAT_TOOLTIPS[tooltipKey] : null;
-                    const tipPos = tooltipDown
-                        ? { top: 'calc(100% + 8px)' }
-                        : { bottom: 'calc(100% + 8px)' };
-
-                    return (
-                        <div
-                            style={{
-                                background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8,
-                                padding: "14px 16px", display: "flex", flexDirection: "column", gap: 4,
-                                position: 'relative', cursor: tip ? 'help' : 'default'
-                            }}
-                            onMouseEnter={() => tip && setHovered(true)}
-                            onMouseLeave={() => tip && setHovered(false)}
-                        >
-                            <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
-                            <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-                                <span style={{ fontSize: "1.8rem", fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
-                                <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>{unit}</span>
-                            </div>
-                            {sub && <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>{sub}</div>}
-                            {hovered && tip && (
-                                <div style={{
-                                    position: 'absolute', ...tipPos, left: 0, right: 0, zIndex: 50,
-                                    background: 'var(--card)', border: `1px solid ${color}60`, borderRadius: 10,
-                                    padding: '14px 16px', fontSize: '0.78rem', color: 'var(--text)', lineHeight: 1.7,
-                                    boxShadow: '0 12px 40px rgba(0,0,0,0.55)', pointerEvents: 'none', minWidth: 240
-                                }}>
-                                    <div style={{ fontWeight: 700, color, fontSize: '0.82rem', marginBottom: 8 }}>
-                                        {tip.title}
-                                    </div>
-                                    <div style={{ color: 'var(--muted)', marginBottom: 10 }}>{tip.what}</div>
-                                    <div style={{ borderTop: `1px solid ${color}30`, paddingTop: 8 }}>
-                                        <span style={{ fontWeight: 700, color, fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: 1 }}>
-                                            Therapy impact
-                                        </span>
-                                        <div style={{ color: 'var(--text)', marginTop: 4 }}>{tip.impact}</div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    );
-                };
 
                 return (
                     <>
@@ -481,7 +502,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                         })()}
 
                         {/* Event type split */}
-                        {analyzed.some(d => (d.obstructive_apneas_per_hr ?? 0) + (d.central_apneas_per_hr ?? 0) + (d.hypopneas_per_hr ?? 0) > 0) && (
+                        {hasEventTypeData && (
                             <section className="panel" style={{ padding: 20 }}>
                                 <h3 style={{ margin: "0 0 16px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
                                     Event Type Breakdown ({rangeLabel})
@@ -493,7 +514,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                         )}
 
                         {/* Flow limitation & RIN */}
-                        {analyzed.some(d => d.flow_limitation_p95 !== null && d.flow_limitation_p95 !== undefined) && (
+                        {hasFlowLimitationData && (
                             <section className="panel" style={{ padding: 20 }}>
                                 <h3 style={{ margin: "0 0 4px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
                                     Flow Limitation & Respiratory Disturbance ({rangeLabel})
@@ -562,7 +583,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
             })()}
 
             {/* Periodic Breathing / Cheyne-Stokes analysis */}
-            {trends && trends.some(r => r.pb_pct != null) && (
+            {hasPeriodicBreathingData && (
                 <section className="panel" style={{ padding: 20 }}>
                     <h3 style={{ margin: "0 0 14px 0", fontSize: "1rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>
                         Periodic Breathing Analysis ({rangeLabel})

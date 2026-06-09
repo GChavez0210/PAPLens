@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 
 function TooltipWrap({ children, tip }) {
     const [hovered, setHovered] = useState(false);
@@ -69,7 +69,7 @@ function Ahi95Stat({ value }) {
     );
 }
 
-export function TherapyStabilityCard({ burden, totalNights, rangeLabel }) {
+function TherapyStabilityCardComponent({ burden, totalNights, rangeLabel }) {
     if (!burden || totalNights === 0) return null;
 
     const over5Tip = {
@@ -98,3 +98,5 @@ export function TherapyStabilityCard({ burden, totalNights, rangeLabel }) {
         </section>
     );
 }
+
+export const TherapyStabilityCard = memo(TherapyStabilityCardComponent);

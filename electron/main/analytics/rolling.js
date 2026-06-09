@@ -12,7 +12,8 @@ function std(values, mu) {
 }
 
 function zScore(x, mu, sigma) {
-    return (x - mu) / Math.max(sigma, EPSILON);
+    if (sigma <= EPSILON) return null;
+    return (x - mu) / sigma;
 }
 
 function cv(sigma, mu) {
