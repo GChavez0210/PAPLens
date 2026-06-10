@@ -69,7 +69,7 @@ function AHITrendChartComponent({ labels, data, height = 200 }) {
 
     return (
         <div style={{ position: "relative", width: "100%", height: `${height}px` }}>
-            <canvas ref={ref} />
+            <canvas ref={ref} role="img" aria-label="AHI Trend — nightly AHI bar chart with 7-day rolling average" />
         </div>
     );
 }

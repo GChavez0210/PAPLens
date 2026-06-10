@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Chart } from "chart.js";
 import { TrendChart } from "./charts/TrendChart";
 import { LastNightSidebar } from "./components/LastNightSidebar";
 import { ProfileSelector } from "./components/ProfileSelector";
@@ -8,30 +9,36 @@ import { SessionGraphsModal } from "./components/SessionGraphsModal";
 import { SleepCalendar } from "./components/SleepCalendar";
 import { buildClinicalContext, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
 import { formatMetricValue, toMetricNumber } from "./utils/therapyMetrics";
+import { downsampleIndices } from "./utils/downsample";
+import { AHI_MILD, AHI_MODERATE, LEAK_HIGH, LEAK_WARNING, USAGE_COMPLIANCE_HOURS, USAGE_WARNING_HOURS, SPO2_NORMAL, SPO2_WARNING } from "./constants";
+import { ThemeContext } from "./ThemeContext";
 
 const RANGE_OPTIONS = ["7", "14", "30", "60", "90", "180", "365", "all", "custom"];
+
+/** Shared style for the "PAPLens by Gabriel Chavez" footer credit line. */
+const FOOTER_CREDIT_STYLE = { textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 };
 const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN = /(airsense|aircurve|lumis|airmini)/i;
 const Insights = lazy(() => import("./pages/Insights").then((module) => ({ default: module.Insights })));
 
 function severity(metric, value) {
   if (metric === "ahi") {
-    if (value < 5) return "normal";
-    if (value <= 15) return "warning";
+    if (value < AHI_MILD) return "normal";
+    if (value <= AHI_MODERATE) return "warning";
     return "critical";
   }
   if (metric === "usageHours") {
-    if (value >= 4) return "normal";
-    if (value >= 2) return "warning";
+    if (value >= USAGE_COMPLIANCE_HOURS) return "normal";
+    if (value >= USAGE_WARNING_HOURS) return "warning";
     return "critical";
   }
   if (metric === "leak50") {
-    if (value < 24) return "normal";
-    if (value <= 36) return "warning";
+    if (value < LEAK_HIGH) return "normal";
+    if (value <= LEAK_WARNING) return "warning";
     return "critical";
   }
   if (metric === "spo2Avg") {
-    if (value >= 95) return "normal";
-    if (value >= 90) return "warning";
+    if (value >= SPO2_NORMAL) return "normal";
+    if (value >= SPO2_WARNING) return "warning";
     return "critical";
   }
   return "normal";
@@ -117,6 +124,8 @@ export function App() {
   const [showReportTip, setShowReportTip] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const hasBootstrappedRef = useRef(false);
+  const aboutCloseButtonRef = useRef(null);
+  const aboutPreviousFocusRef = useRef(null);
 
   const [theme, setTheme] = useState(() => localStorage.getItem('paplens-theme') || 'dark');
   const bootLogoSrc = theme === "light"
@@ -132,9 +141,21 @@ export function App() {
   }, [theme]);
 
   useEffect(() => {
-    const unsub = window.cpapAPI.onShowAbout(() => setShowAboutModal(true));
+    const unsub = window.cpapAPI.onShowAbout(() => {
+      aboutPreviousFocusRef.current = document.activeElement;
+      setShowAboutModal(true);
+    });
     return unsub;
   }, []);
+
+  useEffect(() => {
+    if (showAboutModal && aboutCloseButtonRef.current) {
+      aboutCloseButtonRef.current.focus();
+    } else if (!showAboutModal && aboutPreviousFocusRef.current) {
+      aboutPreviousFocusRef.current.focus();
+      aboutPreviousFocusRef.current = null;
+    }
+  }, [showAboutModal]);
 
   const toggleTheme = () => {
     setTheme(prev => {
@@ -254,13 +275,15 @@ export function App() {
   const trendsData = useMemo(() => {
     const toTrendValue = (day, selector) => (hasTherapyData(day) ? selector(day) : null);
     const ahiArr = filteredStats.map((d) => toTrendValue(d, (day) => day.ahi));
+    // Compute rolling averages BEFORE downsampling so they remain accurate
     const rolling7 = ahiArr.map((_, i) => {
       const slice = ahiArr.slice(0, i + 1).filter((value) => value != null).slice(-7);
       if (!slice.length) return null;
       return parseFloat((slice.reduce((a, b) => a + b, 0) / slice.length).toFixed(2));
     });
     const n = filteredStats.length;
-    return {
+
+    const allSeries = {
       labels: filteredStats.map((d) => d.date),
       ahi: ahiArr,
       ai: filteredStats.map((d) => toTrendValue(d, (day) => day.ai)),
@@ -283,6 +306,37 @@ export function App() {
       ahiThreshold: Array(n).fill(5),
       leakThreshold: Array(n).fill(24),
     };
+
+    // Downsample long ranges to keep chart rendering snappy
+    if (n > 400) {
+      const indices = downsampleIndices(n, 300);
+      const pick = (arr) => Array.from(indices, (i) => arr[i]);
+      return {
+        labels: pick(allSeries.labels),
+        ahi: pick(allSeries.ahi),
+        ai: pick(allSeries.ai),
+        hi: pick(allSeries.hi),
+        cai: pick(allSeries.cai),
+        usage: pick(allSeries.usage),
+        leak50: pick(allSeries.leak50),
+        leak95: pick(allSeries.leak95),
+        pressure: pick(allSeries.pressure),
+        maxPressure: pick(allSeries.maxPressure),
+        pressureVarIndex: pick(allSeries.pressureVarIndex),
+        minVent50: pick(allSeries.minVent50),
+        minVent95: pick(allSeries.minVent95),
+        tidVol50: pick(allSeries.tidVol50),
+        tidVol95: pick(allSeries.tidVol95),
+        respRate: pick(allSeries.respRate),
+        spo2: pick(allSeries.spo2),
+        pulse: pick(allSeries.pulse),
+        rolling7Ahi: pick(allSeries.rolling7Ahi),
+        ahiThreshold: pick(allSeries.ahiThreshold),
+        leakThreshold: pick(allSeries.leakThreshold),
+      };
+    }
+
+    return allSeries;
   }, [filteredStats]);
 
   const overviewChartDatasets = useMemo(() => ({
@@ -369,18 +423,46 @@ export function App() {
   };
 
   const saveReport = async () => {
+    // (a) Guard: no data in selected range
+    if (filteredStats.length === 0) {
+      setStatus("Cannot save report: no data in selected date range.");
+      return;
+    }
+
     setIsReportGenerating(true);
     setStatus("Generating PDF report...");
 
     const prevTab = activeTab;
 
+    /**
+     * (b) Poll until all canvases under [data-report-key] elements have nonzero
+     * dimensions AND a live Chart.js instance, or a 5-second cap is reached.
+     */
+    const waitForCharts = () => new Promise((resolve) => {
+      const CAP_MS = 5000;
+      const POLL_MS = 100;
+      const start = Date.now();
+      const check = () => {
+        const containers = document.querySelectorAll("[data-report-key]");
+        const ready = Array.from(containers).every((el) => {
+          const canvas = el.querySelector("canvas");
+          return canvas && canvas.width > 0 && canvas.height > 0 && Chart.getChart(canvas) != null;
+        });
+        if (ready || Date.now() - start >= CAP_MS) {
+          resolve();
+        } else {
+          setTimeout(check, POLL_MS);
+        }
+      };
+      // Single rAF before first poll so the DOM has settled
+      requestAnimationFrame(check);
+    });
+
     // Step 1: Switch to insights tab to render and capture those charts
     if (activeTab !== "insights") {
       setActiveTab("insights");
     }
-    // Wait for Insights component to mount, IPC data to load, and Chart.js to render
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    await waitForCharts();
 
     const ahiTrendUri = captureChartDataUri(getChartCanvasByKey("ahi-trend"));
     const eventSplitUri = captureChartDataUri(getChartCanvasByKey("event-split"));
@@ -388,8 +470,7 @@ export function App() {
 
     // Step 2: Switch to overview tab to capture the remaining charts
     setActiveTab("overview");
-    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    await waitForCharts();
 
     const charts = {
       ahiDataUri: ahiTrendUri,
@@ -450,14 +531,14 @@ export function App() {
 
       reportData.summary = {
         avgAhi: avgAhi.toFixed(1),
-        ahiStatusClass: avgAhi > 15 ? "bad" : avgAhi > 5 ? "warn" : "good",
-        ahiStatusLabel: avgAhi > 15 ? "Severe" : avgAhi > 5 ? "Elevated" : "Adequate",
+        ahiStatusClass: avgAhi > AHI_MODERATE ? "bad" : avgAhi > AHI_MILD ? "warn" : "good",
+        ahiStatusLabel: avgAhi > AHI_MODERATE ? "Severe" : avgAhi > AHI_MILD ? "Elevated" : "Adequate",
         avgUsage: avgUsage.toFixed(1),
-        usageStatusClass: avgUsage < 4 ? "bad" : "good",
-        usageStatusLabel: avgUsage < 4 ? "Low Usage" : "Good",
+        usageStatusClass: avgUsage < USAGE_COMPLIANCE_HOURS ? "bad" : "good",
+        usageStatusLabel: avgUsage < USAGE_COMPLIANCE_HOURS ? "Low Usage" : "Good",
         leakTypical: clinicalContext.leak95th ?? "N/A",
-        leakStatusClass: clinicalContext.leak95th !== null && parseFloat(clinicalContext.leak95th) > 24 ? "warn" : "good",
-        leakStatusLabel: clinicalContext.leak95th !== null && parseFloat(clinicalContext.leak95th) > 24 ? "Elevated" : "Normal",
+        leakStatusClass: clinicalContext.leak95th !== null && parseFloat(clinicalContext.leak95th) > LEAK_HIGH ? "warn" : "good",
+        leakStatusLabel: clinicalContext.leak95th !== null && parseFloat(clinicalContext.leak95th) > LEAK_HIGH ? "Elevated" : "Normal",
       };
     }
 
@@ -599,6 +680,7 @@ export function App() {
   }
 
   return (
+    <ThemeContext.Provider value={theme}>
     <main className="app-shell">
       {isDataLoading && (
         <div style={{
@@ -849,7 +931,7 @@ export function App() {
 
                 <div className="clinical-charts-grid">
                   {supportsAHI && (
-                  <TrendChart theme={theme}
+                  <TrendChart
                     reportKey="ahi"
                     title="AHI (Events/hr)"
                     labels={trendsData.labels}
@@ -858,7 +940,7 @@ export function App() {
                   )}
 
                   {supportsLeakPercentiles && (
-                  <TrendChart theme={theme}
+                  <TrendChart
                     reportKey="leak"
                     title="Leak (L/min) & Percentiles"
                     labels={trendsData.labels}
@@ -866,7 +948,7 @@ export function App() {
                   />
                   )}
 
-                  <TrendChart theme={theme}
+                  <TrendChart
                     reportKey="pressure"
                     title="Pressure Therapy Dynamics"
                     labels={trendsData.labels}
@@ -874,7 +956,7 @@ export function App() {
                   />
 
                   {supportsVentilation && (
-                  <TrendChart theme={theme}
+                  <TrendChart
                     reportKey="flow"
                     title="Respiratory Flow Limitations"
                     labels={trendsData.labels}
@@ -883,7 +965,7 @@ export function App() {
                   )}
 
                   {supportsVentilation && (
-                  <TrendChart theme={theme}
+                  <TrendChart
                     reportKey="tidal"
                     title="Tidal Volume Variances"
                     labels={trendsData.labels}
@@ -892,7 +974,6 @@ export function App() {
                   )}
 
                   <TrendChart
-                    theme={theme}
                     reportKey="usage"
                     title="Compliance Usage Hours"
                     labels={trendsData.labels}
@@ -901,7 +982,6 @@ export function App() {
 
                   {supportsOximetry && hasOximetryTrend && (
                     <TrendChart
-                      theme={theme}
                       reportKey="oximetry"
                       title="Oximetry Validation"
                       labels={trendsData.labels}
@@ -915,7 +995,7 @@ export function App() {
                 )}
 
               </section>
-              <div style={{ textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 }}>
+              <div style={FOOTER_CREDIT_STYLE}>
                 PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
               </div>
           </div>
@@ -1019,7 +1099,7 @@ export function App() {
                   </div>
                 )}
               </div>
-              <div style={{ textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 }}>
+              <div style={FOOTER_CREDIT_STYLE}>
                 PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
               </div>
             </section>
@@ -1062,7 +1142,7 @@ export function App() {
               <Suspense fallback={<div className="loading">Loading...</div>}>
                 <Insights range={range} customFrom={customFrom} customTo={customTo} />
               </Suspense>
-              <div style={{ textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 }}>
+              <div style={FOOTER_CREDIT_STYLE}>
                 PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
               </div>
             </section>
@@ -1074,6 +1154,7 @@ export function App() {
       {showAboutModal && (
         <div
           onClick={() => setShowAboutModal(false)}
+          onKeyDown={(e) => { if (e.key === "Escape") setShowAboutModal(false); }}
           style={{
             position: 'fixed', inset: 0, zIndex: 2000,
             backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
@@ -1082,7 +1163,7 @@ export function App() {
           }}
         >
           <div
-            role="dialog" aria-modal="true"
+            role="dialog" aria-modal="true" aria-label="About PAPLens"
             onClick={(e) => e.stopPropagation()}
             style={{
               background: 'var(--card-bg)', border: '1px solid var(--border)',
@@ -1111,6 +1192,7 @@ export function App() {
               PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
             </div>
             <button
+              ref={aboutCloseButtonRef}
               onClick={() => setShowAboutModal(false)}
               style={{
                 marginTop: 24, padding: '10px 28px',
@@ -1125,5 +1207,6 @@ export function App() {
         </div>
       )}
     </main>
+    </ThemeContext.Provider>
   );
 }

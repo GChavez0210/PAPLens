@@ -81,7 +81,7 @@ function EventTypeSplitChartComponent({ trends, height = 220 }) {
     if (nights.length === 0) return null;
     return (
         <div style={{ position: "relative", width: "100%", height: `${height}px` }}>
-            <canvas ref={ref} />
+            <canvas ref={ref} role="img" aria-label="Event Type Breakdown — stacked bar chart of obstructive, central, unclassified apneas and hypopneas per hour" />
         </div>
     );
 }

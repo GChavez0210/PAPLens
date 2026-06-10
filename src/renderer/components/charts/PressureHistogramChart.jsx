@@ -85,7 +85,7 @@ function PressureHistogramChartComponent({ histogram, height = 200 }) {
     if (!histogram || histogram.length === 0) return null;
     return (
         <div style={{ position: "relative", width: "100%", height: `${height}px` }}>
-            <canvas ref={ref} />
+            <canvas ref={ref} role="img" aria-label="Pressure Distribution Histogram — average percentage of session time at each pressure level" />
         </div>
     );
 }

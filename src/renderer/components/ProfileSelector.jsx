@@ -65,16 +65,16 @@ export function ProfileSelector({ onSelect }) {
                     <h2 style={{ textAlign: "center", marginBottom: "20px" }}>Create Profile</h2>
                     <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
                         <div>
-                            <label>Name</label>
-                            <input value={newName} onChange={(e) => setNewName(e.target.value)} required style={{ width: "100%" }} />
+                            <label htmlFor="profile-name">Name</label>
+                            <input id="profile-name" value={newName} onChange={(e) => setNewName(e.target.value)} required style={{ width: "100%" }} />
                         </div>
                         <div>
-                            <label>Age (Optional)</label>
-                            <input type="number" value={newAge} onChange={(e) => setNewAge(e.target.value)} style={{ width: "100%" }} />
+                            <label htmlFor="profile-age">Age (Optional)</label>
+                            <input id="profile-age" type="number" value={newAge} onChange={(e) => setNewAge(e.target.value)} style={{ width: "100%" }} />
                         </div>
                         <div>
-                            <label>Notes (Optional)</label>
-                            <input value={newNotes} onChange={(e) => setNewNotes(e.target.value)} style={{ width: "100%" }} />
+                            <label htmlFor="profile-notes">Notes (Optional)</label>
+                            <input id="profile-notes" value={newNotes} onChange={(e) => setNewNotes(e.target.value)} style={{ width: "100%" }} />
                         </div>
                         <div style={{ display: "flex", gap: "10px", marginTop: "10px" }}>
                             <button type="submit" className="btn-primary" style={{ flex: 1 }}>Save Profile</button>
