@@ -1,5 +1,5 @@
 const { EPSILON, mean } = require("./rolling");
-const { regressionSlope } = require("./regression");
+const { regressionSlopeValue } = require("./regression");
 const { calculatePercentile } = require("../services/therapyMetrics");
 
 function hasTherapyData(metrics) {
@@ -7,7 +7,59 @@ function hasTherapyData(metrics) {
     return Number.isFinite(usage) && usage > 0;
 }
 
-function computeTherapyStabilityScore(currentMetrics) {
+function numericMetric(metrics, keys) {
+    for (const key of keys) {
+        const value = Number(metrics?.[key]);
+        if (Number.isFinite(value)) return value;
+    }
+    return null;
+}
+
+function historyZPenalty(currentValue, history, keys, direction = 1) {
+    if (!Number.isFinite(currentValue) || !Array.isArray(history) || history.length < 7) {
+        return 0;
+    }
+
+    const values = history
+        .map((metrics) => numericMetric(metrics, keys))
+        .filter((value) => value !== null);
+    if (values.length < 7) return 0;
+
+    const mu = mean(values);
+    const variance = values.reduce((sum, value) => sum + Math.pow(value - mu, 2), 0) / (values.length - 1);
+    const sigma = Math.sqrt(variance);
+    if (sigma <= EPSILON) return 0;
+
+    const z = ((currentValue - mu) / sigma) * direction;
+    if (z <= 1) return 0;
+    return Math.min(5, (z - 1) * 2);
+}
+
+function historyPressureSpreadPenalty(currentSpread, history) {
+    if (!Number.isFinite(currentSpread) || !Array.isArray(history) || history.length < 7) {
+        return 0;
+    }
+
+    const values = history
+        .map((metrics) => {
+            const p95 = numericMetric(metrics, ["pressure_p95"]);
+            const median = numericMetric(metrics, ["pressure_median"]);
+            return p95 !== null && median !== null ? p95 - median : null;
+        })
+        .filter((value) => value !== null);
+    if (values.length < 7) return 0;
+
+    const mu = mean(values);
+    const variance = values.reduce((sum, value) => sum + Math.pow(value - mu, 2), 0) / (values.length - 1);
+    const sigma = Math.sqrt(variance);
+    if (sigma <= EPSILON) return 0;
+
+    const z = (currentSpread - mu) / sigma;
+    if (z <= 1) return 0;
+    return Math.min(5, (z - 1) * 2);
+}
+
+function computeTherapyStabilityScore(currentMetrics, history = []) {
     if (!hasTherapyData(currentMetrics)) {
         return {
             stabilityScore: null,
@@ -77,7 +129,16 @@ function computeTherapyStabilityScore(currentMetrics) {
         else penaltyFlowLim = 5;
     }
 
-    const totalPenalty = [penaltyAhi, penaltyLeak, penaltyUsage, penaltyPressureVar, penaltyRin, penaltyFlowLim]
+    const historicalPenalty = [
+        historyZPenalty(ahi, history, ["ahi_total"]),
+        historyZPenalty(leak95, history, ["leak_p95", "leak_max", "leak_p50"]),
+        historyZPenalty(usageStr, history, ["usage_hours"], -1),
+        historyPressureSpreadPenalty(pressureSpread, history),
+        historyZPenalty(rin, history, ["rin_per_hr"]),
+        historyZPenalty(flp95, history, ["flow_limitation_p95"])
+    ].reduce((sum, value) => sum + value, 0);
+
+    const totalPenalty = [penaltyAhi, penaltyLeak, penaltyUsage, penaltyPressureVar, penaltyRin, penaltyFlowLim, historicalPenalty]
         .filter((value) => value !== null)
         .reduce((sum, value) => sum + value, 0);
     const finalScore = Math.max(0, Math.min(100, 100 - totalPenalty));
@@ -92,6 +153,7 @@ function computeTherapyStabilityScore(currentMetrics) {
         penaltyPressureVar: penaltyPressureVar === null ? null : Math.round(penaltyPressureVar),
         penaltyRin: penaltyRin === null ? null : Math.round(penaltyRin),
         penaltyFlowLim: roundedFlPenalty,
+        penaltyHistoricalBaseline: Math.round(historicalPenalty),
         pressureVariance: pressureSpread,
         flScore: roundedFlPenalty === null ? null : roundedFlPenalty * 20,
         clusterIndex: null
@@ -106,7 +168,7 @@ function computeComplianceRisk(recent14DaysUsage) {
     const prev7 = validUsage.slice(7, 14);
     const avg7 = mean(last7);
     const avg14 = mean(validUsage);
-    const slope14 = regressionSlope([...validUsage].reverse());
+    const slope14 = regressionSlopeValue([...validUsage].reverse());
     const avgPrior = prev7.length > 0 ? mean(prev7) : avg7;
     const pctChange = (avg7 - avgPrior) / Math.max(avgPrior, EPSILON);
 

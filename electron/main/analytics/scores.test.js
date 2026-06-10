@@ -73,3 +73,26 @@ test("pressureVariance field reflects p95-median spread", () => {
     });
     assert.equal(result.pressureVariance, 3); // 13 - 10
 });
+
+test("history baseline changes therapy stability score when at least 7 nights are supplied", () => {
+    const current = {
+        usage_hours: 7,
+        ahi_total: 5,
+        leak_p95: 4,
+        pressure_median: 10,
+        pressure_p95: 11
+    };
+    const history = [1, 1.1, 1.2, 1.1, 1.2, 1.3, 1.1].map((ahi_total) => ({
+        usage_hours: 7,
+        ahi_total,
+        leak_p95: 4,
+        pressure_median: 10,
+        pressure_p95: 11
+    }));
+
+    const withoutHistory = computeTherapyStabilityScore(current);
+    const withHistory = computeTherapyStabilityScore(current, history);
+
+    assert.ok(withHistory.stabilityScore < withoutHistory.stabilityScore);
+    assert.ok(withHistory.penaltyHistoricalBaseline > 0);
+});

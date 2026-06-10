@@ -43,6 +43,26 @@ class AnalyticsDataAccess {
       `).get(deviceId, date);
     }
 
+    getNightsRange(deviceId, fromDate, toDate) {
+        const params = [deviceId];
+        const filters = ["n.device_id = ?"];
+        if (fromDate) {
+            filters.push("n.night_date >= ?");
+            params.push(fromDate);
+        }
+        if (toDate) {
+            filters.push("n.night_date <= ?");
+            params.push(toDate);
+        }
+
+        return this.db.prepare(`
+        SELECT n.id as night_id, n.night_date, n.usage_hours, m.*
+        FROM nights n JOIN night_metrics m ON m.night_id = n.id
+        WHERE ${filters.join(" AND ")}
+        ORDER BY n.night_date ASC
+      `).all(...params);
+    }
+
     getLatestNightsForCorrelations(deviceId, limit = 30) {
         return this.metricsRepo.getNightsWithLimit(deviceId, limit);
     }

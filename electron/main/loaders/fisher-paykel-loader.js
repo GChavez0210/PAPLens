@@ -44,7 +44,7 @@ class FisherPaykelLoader extends BaseLoader {
   }
 
   async loadAll(onProgress) {
-    const machines = findSleepStyleMachines(path.join(this.dataPath, "FPHCARE", "ICON"));
+    const machines = await findSleepStyleMachines(path.join(this.dataPath, "FPHCARE", "ICON"));
     if (!machines.length) {
       this.deviceInfo = this._defaultDeviceInfo("Unknown");
       return this.buildSummary(this.deviceInfo, []);
@@ -57,7 +57,7 @@ class FisherPaykelLoader extends BaseLoader {
 
     let sumFiles;
     try {
-      sumFiles = fs.readdirSync(machine.machinePath)
+      sumFiles = (await fs.promises.readdir(machine.machinePath))
         .filter(name => /^SUM.*\.FPH$/i.test(name))
         .sort()
         .map(name => path.join(machine.machinePath, name));
@@ -67,7 +67,7 @@ class FisherPaykelLoader extends BaseLoader {
 
     for (const filePath of sumFiles) {
       try {
-        const buf = fs.readFileSync(filePath);
+        const buf = await fs.promises.readFile(filePath);
         if (buf.length < HEADER_SIZE) continue;
         const info = parseSumHeader(buf.slice(0, HEADER_SIZE));
         if (info.productCode) modelInfo = info;
@@ -141,11 +141,11 @@ function hasSumFile(machinePath) {
   }
 }
 
-function findSleepStyleMachines(iconPath) {
+async function findSleepStyleMachines(iconPath) {
   const result = [];
   let entries;
   try {
-    entries = fs.readdirSync(iconPath, { withFileTypes: true });
+    entries = await fs.promises.readdir(iconPath, { withFileTypes: true });
   } catch {
     return result;
   }
@@ -155,13 +155,13 @@ function findSleepStyleMachines(iconPath) {
     const machinePath = path.join(iconPath, entry.name);
     let files;
     try {
-      files = fs.readdirSync(machinePath).filter(name => /^SUM.*\.FPH$/i.test(name));
+      files = (await fs.promises.readdir(machinePath)).filter(name => /^SUM.*\.FPH$/i.test(name));
     } catch {
       continue;
     }
     for (const file of files) {
       try {
-        const buf = fs.readFileSync(path.join(machinePath, file));
+        const buf = await fs.promises.readFile(path.join(machinePath, file));
         if (isSleepStyleSumFile(buf)) {
           result.push({ serial: entry.name, machinePath });
           break;

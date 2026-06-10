@@ -57,11 +57,11 @@ class ApexLoader extends BaseLoader {
   async loadAll(onProgress) {
     const apdata = path.join(this.dataPath, APDATA);
 
-    this.deviceInfo = this._readDeviceInfo(path.join(apdata, INFO_FILE));
+    this.deviceInfo = await this._readDeviceInfo(path.join(apdata, INFO_FILE));
 
     let files;
     try {
-      files = fs.readdirSync(apdata)
+      files = (await fs.promises.readdir(apdata))
         .filter(name => /\.APC$/i.test(name) && !/^INFO\.APC$/i.test(name))
         .sort();
     } catch {
@@ -73,7 +73,7 @@ class ApexLoader extends BaseLoader {
     for (const name of files) {
       let buf;
       try {
-        buf = fs.readFileSync(path.join(apdata, name));
+        buf = await fs.promises.readFile(path.join(apdata, name));
       } catch {
         continue;
       }
@@ -86,9 +86,9 @@ class ApexLoader extends BaseLoader {
     return this.buildSummary(this.deviceInfo, dailyStats);
   }
 
-  _readDeviceInfo(infoPath) {
+  async _readDeviceInfo(infoPath) {
     try {
-      return parseInfo(fs.readFileSync(infoPath));
+      return parseInfo(await fs.promises.readFile(infoPath));
     } catch {
       return {
         serialNumber: "Unknown",

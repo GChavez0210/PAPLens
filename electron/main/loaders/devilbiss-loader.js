@@ -82,7 +82,7 @@ class DeVilbissLoader extends BaseLoader {
 
     // VER.BIN: null/0xFF terminated ASCII fields [unknown, serial, model]
     try {
-      const ver = fs.readFileSync(path.join(dv6, "VER.BIN"));
+      const ver = await fs.promises.readFile(path.join(dv6, "VER.BIN"));
       const fields = this._splitNullFields(ver);
       if (fields[1]) serialNumber = fields[1];
       if (fields[2]) productName = `IntelliPAP ${fields[2]}`;
@@ -92,7 +92,7 @@ class DeVilbissLoader extends BaseLoader {
 
     // SET.BIN: byte 11 nonzero → APAP capable
     try {
-      const set = fs.readFileSync(path.join(dv6, "SET.BIN"));
+      const set = await fs.promises.readFile(path.join(dv6, "SET.BIN"));
       if (set.length > 11) isApap = set[11] !== 0;
     } catch {
       // SET.BIN is optional; default to fixed-pressure naming.
@@ -113,12 +113,12 @@ class DeVilbissLoader extends BaseLoader {
     const dv6 = path.join(this.dataPath, "DV6");
     let sBuf, uBuf;
     try {
-      sBuf = fs.readFileSync(path.join(dv6, "S.BIN"));
+      sBuf = await fs.promises.readFile(path.join(dv6, "S.BIN"));
     } catch {
       return this.buildSummary(this.deviceInfo, []);
     }
     try {
-      uBuf = fs.readFileSync(path.join(dv6, "U.BIN"));
+      uBuf = await fs.promises.readFile(path.join(dv6, "U.BIN"));
     } catch {
       uBuf = null;
     }

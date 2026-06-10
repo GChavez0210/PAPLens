@@ -55,13 +55,27 @@ class AnalyticsOrchestrator {
 
       this.dataAccess.beginTransaction();
 
+      const allNights = this.dataAccess.getNightsRange(deviceId, null, nightDates[nightDates.length - 1]);
+      const nightsByDate = new Map(allNights.map((night) => [night.night_date, night]));
+
       for (const date of nightDates) {
-        const current = this.dataAccess.getNight(deviceId, date);
+        const current = nightsByDate.get(date);
         if (!current) continue;
 
-        const history30 = this.dataAccess.getNightHistoryMatrix(deviceId, date, 30);
-        const usage14 = this.dataAccess.get14DaysUsage(deviceId, date);
-        const ahi30 = this.dataAccess.get30DaysAHI(deviceId, date);
+        const upToCurrent = allNights.filter((night) => night.night_date <= date);
+        const history30 = upToCurrent
+          .filter((night) => night.night_date < date && hasTherapyData(night))
+          .slice(-30)
+          .reverse();
+        const usage14 = upToCurrent
+          .slice(-14)
+          .reverse()
+          .map((night) => night.usage_hours);
+        const ahi30 = upToCurrent
+          .filter(hasTherapyData)
+          .slice(-30)
+          .reverse()
+          .map((night) => night.ahi_total);
 
         this.db.prepare(`DELETE FROM insights_explanations WHERE night_id = ?`).run(current.night_id);
 
@@ -75,7 +89,7 @@ class AnalyticsOrchestrator {
           continue;
         }
 
-        const clinicalStability = computeTherapyStabilityScore(current);
+        const clinicalStability = computeTherapyStabilityScore(current, history30);
         const leakForClassify = current.leak_p95 ?? current.leak_max ?? current.leak_p50;
         const leakBasis = (current.leak_p95 != null || current.leak_max != null) ? "p95" : "p50";
         const leakClass = classifyLeakSeverity(leakForClassify, current.leak_p50, current.usage_hours * 60, { basis: leakBasis });

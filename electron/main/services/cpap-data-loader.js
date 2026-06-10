@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const { parseSTRFile, parseSessionFile, parseSessionFileAsync } = require("../parsers/edf-parser");
+const { parseSTRFileAsync, parseSessionFile, parseSessionFileAsync } = require("../parsers/edf-parser");
 const {
   buildLeakAndTidalSummary,
   describeSamples,
@@ -19,6 +19,21 @@ const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERNS = [
   /^Lumis/i,
   /^AirMini/i
 ];
+
+const MAX_IPC_SIGNAL_POINTS = 2000;
+
+function downsampleSignal(values, maxPoints = MAX_IPC_SIGNAL_POINTS) {
+  if (!Array.isArray(values) || values.length <= maxPoints) {
+    return { values, downsampled: false, originalLength: values?.length ?? 0, stride: 1 };
+  }
+
+  const stride = Math.ceil(values.length / maxPoints);
+  const sampled = [];
+  for (let i = 0; i < values.length; i += stride) {
+    sampled.push(values[i]);
+  }
+  return { values: sampled, downsampled: true, originalLength: values.length, stride };
+}
 
 function inferDeviceCapabilities(deviceInfo = {}) {
   const productName = String(deviceInfo.productName || "").replace(/\s+/g, "");
@@ -40,6 +55,11 @@ class CPAPDataLoader {
     this.dayStartHour = 12;
     this.dayEndHour = 12;
     this.nightlySessionMetrics = null;
+    this.strCache = null;
+  }
+
+  setSTRCache(cache) {
+    this.strCache = cache || null;
   }
 
   pickPositiveMetric(...values) {
@@ -77,7 +97,7 @@ class CPAPDataLoader {
     const jsonPath = path.join(this.dataPath, "Identification.json");
     if (fs.existsSync(jsonPath)) {
       try {
-        const content = fs.readFileSync(jsonPath, "utf8");
+        const content = await fs.promises.readFile(jsonPath, "utf8");
         const data = JSON.parse(content);
         const product = data?.FlowGenerator?.IdentificationProfiles?.Product || {};
         const software = data?.FlowGenerator?.IdentificationProfiles?.Software || {};
@@ -104,7 +124,7 @@ class CPAPDataLoader {
       return;
     }
 
-    const content = fs.readFileSync(idPath, "utf8");
+    const content = await fs.promises.readFile(idPath, "utf8");
     const info = {};
     const lines = content.split("\n");
     for (const line of lines) {
@@ -133,7 +153,17 @@ class CPAPDataLoader {
     }
 
     try {
-      this.dailySummary = parseSTRFile(strPath);
+      const stat = await fs.promises.stat(strPath);
+      if (
+        this.strCache?.summary &&
+        Number(this.strCache.mtimeMs) === stat.mtimeMs &&
+        Number(this.strCache.size) === stat.size
+      ) {
+        this.dailySummary = this.strCache.summary;
+        return;
+      }
+
+      this.dailySummary = await parseSTRFileAsync(strPath);
     } catch (error) {
       this.dailySummary = { error: error.message };
     }
@@ -146,8 +176,7 @@ class CPAPDataLoader {
       return;
     }
 
-    const dateDirs = fs
-      .readdirSync(datalogPath)
+    const dateDirs = (await fs.promises.readdir(datalogPath))
       .filter((d) => /^\d{8}$/.test(d))
       .sort()
       .reverse();
@@ -155,7 +184,7 @@ class CPAPDataLoader {
     this.sessions = [];
     for (const dateDir of dateDirs) {
       const datePath = path.join(datalogPath, dateDir);
-      const files = fs.readdirSync(datePath);
+      const files = await fs.promises.readdir(datePath);
       const sessionMap = new Map();
 
       for (const file of files) {
@@ -182,7 +211,7 @@ class CPAPDataLoader {
 
       for (const session of sessionMap.values()) {
         if (session.files.BRP) {
-          session.durationMinutes = this.getSessionDuration(session.files.BRP);
+          session.durationMinutes = await this.getSessionDuration(session.files.BRP);
         }
       }
 
@@ -193,9 +222,9 @@ class CPAPDataLoader {
     this.nightlySessionMetrics = null;
   }
 
-  getSessionDuration(brpFilePath) {
+  async getSessionDuration(brpFilePath) {
     try {
-      const buffer = fs.readFileSync(brpFilePath);
+      const buffer = await fs.promises.readFile(brpFilePath);
       const numDataRecords = parseInt(buffer.slice(236, 244).toString("ascii").trim(), 10) || 0;
       const dataRecordDuration = parseFloat(buffer.slice(244, 252).toString("ascii").trim()) || 0;
       return (numDataRecords * dataRecordDuration) / 60;
@@ -296,11 +325,23 @@ class CPAPDataLoader {
     for (const [fileType, filePath] of Object.entries(this.getNearbySessionFiles(session))) {
       try {
         const parsed = parseSessionFile(filePath);
+        const rawData = {};
+        const signalMeta = {};
+        for (const [label, values] of Object.entries(parsed.data)) {
+          const sampled = downsampleSignal(values);
+          rawData[label] = sampled.values;
+          signalMeta[label] = {
+            downsampled: sampled.downsampled,
+            originalLength: sampled.originalLength,
+            stride: sampled.stride
+          };
+        }
         detail.data[fileType] = {
           header: parsed.header,
           signals: parsed.signals.map((s) => s.label),
           sampleCounts: Object.fromEntries(Object.entries(parsed.data).map(([k, v]) => [k, v.length])),
-          rawData: parsed.data
+          signalMeta,
+          rawData
         };
       } catch (error) {
         detail.data[fileType] = { error: error.message };
@@ -316,95 +357,91 @@ class CPAPDataLoader {
     }
 
     const { supportsOximetry } = this.getDeviceCapabilities();
-    // nightly holds raw sample arrays for nights that need fresh EDF parsing.
-    // cachedSessionMetrics holds already-summarized values for skipped nights.
-    const nightly = new Map();
+    const sessionsByNight = new Map();
+    for (const session of this.sessions) {
+      const nightKey = this.getSleepNightKey(session.timestamp);
+      if (!nightKey) continue;
+      if (!sessionsByNight.has(nightKey)) {
+        sessionsByNight.set(nightKey, []);
+      }
+      sessionsByNight.get(nightKey).push(session);
+    }
+
+    const nightlySessionMetrics = new Map(cachedSessionMetrics);
     let skippedUnsupportedSa2 = false;
     const total = this.sessions.length;
     let done = 0;
 
-    for (const session of this.sessions) {
-      const nightKey = this.getSleepNightKey(session.timestamp);
-      if (!nightKey) {
-        done++;
-        if (onProgress) onProgress({ done, total });
-        continue;
-      }
-
+    for (const [nightKey, sessions] of sessionsByNight.entries()) {
       // Skip EDF file I/O for nights whose session metrics are already stored
       // and whose date folder hasn't changed (tracked by mtime in Fix 1).
       if (skipDates.has(nightKey)) {
-        done++;
+        done += sessions.length;
         if (onProgress) onProgress({ done, total });
         continue;
       }
 
-      if (!nightly.has(nightKey)) {
-        nightly.set(nightKey, {
-          leakSamples: [],
-          tidalSamples: [],
-          minVentSamples: [],
-          respRateSamples: [],
-          flowLimSamples: [],
-          snoreSamples: [],
-          pressureSamples: [],
-          spo2Samples: [],
-          pulseSamples: [],
-          annotations: []
-        });
-      }
+      const aggregate = {
+        leakSamples: [],
+        tidalSamples: [],
+        minVentSamples: [],
+        respRateSamples: [],
+        flowLimSamples: [],
+        snoreSamples: [],
+        pressureSamples: [],
+        spo2Samples: [],
+        pulseSamples: [],
+        annotations: []
+      };
 
-      const aggregate = nightly.get(nightKey);
-
-      if (session.files.PLD) {
-        try {
-          const pld = await parseSessionFileAsync(session.files.PLD);
-          aggregate.leakSamples.push(...(pld.data["Leak.2s"] || []));
-          aggregate.tidalSamples.push(...(pld.data["TidVol.2s"] || []));
-          aggregate.minVentSamples.push(...(pld.data["MinVent.2s"] || []));
-          aggregate.respRateSamples.push(...(pld.data["RespRate.2s"] || []));
-          aggregate.flowLimSamples.push(...(pld.data["FlowLim.2s"] || []));
-          aggregate.snoreSamples.push(...(pld.data["Snore.2s"] || []));
-          // MaskPress.2s is actual delivered mask pressure — used for histogram and efficiency
-          aggregate.pressureSamples.push(...(pld.data["MaskPress.2s"] || pld.data["Press.2s"] || []));
-        } catch (error) {
-          safeInfo(console, `[session-parse] Failed PLD parse for ${session.id}: ${error.message}`);
+      for (const session of sessions) {
+        if (session.files.PLD) {
+          try {
+            const pld = await parseSessionFileAsync(session.files.PLD);
+            aggregate.leakSamples.push(...(pld.data["Leak.2s"] || []));
+            aggregate.tidalSamples.push(...(pld.data["TidVol.2s"] || []));
+            aggregate.minVentSamples.push(...(pld.data["MinVent.2s"] || []));
+            aggregate.respRateSamples.push(...(pld.data["RespRate.2s"] || []));
+            aggregate.flowLimSamples.push(...(pld.data["FlowLim.2s"] || []));
+            aggregate.snoreSamples.push(...(pld.data["Snore.2s"] || []));
+            // MaskPress.2s is actual delivered mask pressure — used for histogram and efficiency
+            aggregate.pressureSamples.push(...(pld.data["MaskPress.2s"] || pld.data["Press.2s"] || []));
+          } catch (error) {
+            safeInfo(console, `[session-parse] Failed PLD parse for ${session.id}: ${error.message}`);
+          }
         }
-      }
 
-      if (session.files.SA2 && supportsOximetry) {
-        try {
-          const sa2 = await parseSessionFileAsync(session.files.SA2);
-          aggregate.pulseSamples.push(...(sa2.data["Pulse.1s"] || []));
-          aggregate.spo2Samples.push(...(sa2.data["SpO2.1s"] || []));
-        } catch (error) {
-          safeInfo(console, `[session-parse] Failed SA2 parse for ${session.id}: ${error.message}`);
+        if (session.files.SA2 && supportsOximetry) {
+          try {
+            const sa2 = await parseSessionFileAsync(session.files.SA2);
+            aggregate.pulseSamples.push(...(sa2.data["Pulse.1s"] || []));
+            aggregate.spo2Samples.push(...(sa2.data["SpO2.1s"] || []));
+          } catch (error) {
+            safeInfo(console, `[session-parse] Failed SA2 parse for ${session.id}: ${error.message}`);
+          }
+        } else if (session.files.SA2) {
+          skippedUnsupportedSa2 = true;
         }
-      } else if (session.files.SA2) {
-        skippedUnsupportedSa2 = true;
-      }
 
-      if (session.files.EVE) {
-        try {
-          const eve = await parseSessionFileAsync(session.files.EVE);
-          aggregate.annotations.push(...(eve.data["EDF Annotations"] || []));
-        } catch (error) {
-          safeInfo(console, `[session-parse] Failed EVE parse for ${session.id}: ${error.message}`);
+        if (session.files.EVE) {
+          try {
+            const eve = await parseSessionFileAsync(session.files.EVE);
+            aggregate.annotations.push(...(eve.data["EDF Annotations"] || []));
+          } catch (error) {
+            safeInfo(console, `[session-parse] Failed EVE parse for ${session.id}: ${error.message}`);
+          }
         }
+
+        done++;
+        if (onProgress) onProgress({ done, total });
+        // Yield to the event loop so IPC and renderer remain responsive
+        await new Promise((resolve) => setImmediate(resolve));
       }
 
-      done++;
-      if (onProgress) onProgress({ done, total });
-      // Yield to the event loop so IPC and renderer remain responsive
-      await new Promise((resolve) => setImmediate(resolve));
+      nightlySessionMetrics.set(nightKey, summarizeNightlySessionMetrics(aggregate));
     }
 
-    // Merge: summarize freshly-parsed nights, then overlay with already-summarized
-    // cached values for nights that were skipped.
-    this.nightlySessionMetrics = new Map([
-      ...Array.from(nightly.entries()).map(([nightKey, aggregate]) => [nightKey, summarizeNightlySessionMetrics(aggregate)]),
-      ...cachedSessionMetrics
-    ]);
+    this.nightlySessionMetrics = nightlySessionMetrics;
 
     if (skippedUnsupportedSa2) {
       safeInfo(

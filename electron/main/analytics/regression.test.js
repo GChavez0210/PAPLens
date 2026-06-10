@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { pearsonR } = require("./regression");
+const { pearsonR, regressionSlope, regressionSlopeValue } = require("./regression");
 
 // DATA-3: pearsonR must return null for n < 3 and for zero-variance inputs
 
@@ -28,4 +28,17 @@ test("pearsonR returns ~-1 for a perfect inverse relationship", () => {
 
 test("pearsonR returns null for empty arrays", () => {
     assert.equal(pearsonR([], []), null);
+});
+
+test("regressionSlope returns fit metadata for a perfect line", () => {
+    const result = regressionSlope([2, 4, 6, 8]);
+    assert.equal(result.n, 4);
+    assert.equal(result.slope, 2);
+    assert.equal(result.intercept, 2);
+    assert.equal(result.r2, 1);
+    assert.ok(result.se !== null && result.se < 1e-9);
+});
+
+test("regressionSlopeValue preserves legacy numeric slope callers", () => {
+    assert.equal(regressionSlopeValue([2, 4, 6, 8]), 2);
 });

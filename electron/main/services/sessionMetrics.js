@@ -1,4 +1,4 @@
-const { calculatePercentile, toOptionalNumber } = require("./therapyMetrics");
+const { calculatePercentilesFromSorted, toOptionalNumber } = require("./therapyMetrics");
 const { detectPeriodicBreathing } = require("../analytics/periodicBreathing");
 
 function sanitizeSamples(values, { min = null } = {}) {
@@ -26,6 +26,10 @@ function normalizeTidalSamples(values) {
 
 function normalizeMetricSamples(values) {
     return sanitizeSamples(values, { min: 0 });
+}
+
+function sortedSamples(values) {
+    return [...values].sort((a, b) => a - b);
 }
 
 function isRespiratoryEvent(annotation) {
@@ -118,19 +122,29 @@ function summarizeNightlySessionMetrics(aggregate) {
     const spo2Samples = sanitizeSamples(aggregate.spo2Samples, { min: 1 });
     const pulseSamples = sanitizeSamples(aggregate.pulseSamples, { min: 1 });
     const pressureSamples = sanitizeSamples(aggregate.pressureSamples, { min: 0 }).filter(v => v > 0);
+    const leakSorted = sortedSamples(leakSamples);
+    const tidalSorted = sortedSamples(tidalSamples);
+    const minVentSorted = sortedSamples(minVentSamples);
+    const respRateSorted = sortedSamples(respRateSamples);
+    const flowLimSorted = sortedSamples(flowLimSamples);
+    const leakPercentiles = calculatePercentilesFromSorted(leakSorted, [0.5, 0.95]);
+    const tidalPercentiles = calculatePercentilesFromSorted(tidalSorted, [0.5, 0.95]);
+    const minVentPercentiles = calculatePercentilesFromSorted(minVentSorted, [0.5, 0.95]);
+    const respRatePercentiles = calculatePercentilesFromSorted(respRateSorted, [0.5, 0.95]);
+    const flowLimPercentiles = calculatePercentilesFromSorted(flowLimSorted, [0.95]);
 
     return {
-        leak50: calculatePercentile(leakSamples, 0.5),
-        leak95: calculatePercentile(leakSamples, 0.95),
+        leak50: leakPercentiles[0.5],
+        leak95: leakPercentiles[0.95],
         leakMax: leakSamples.length > 0 ? leakSamples.reduce((a, b) => (b > a ? b : a), -Infinity) : null,
         leakSpikeCount: countLeakSpikes(leakSamples),
-        minVent50: calculatePercentile(minVentSamples, 0.5),
-        minVent95: calculatePercentile(minVentSamples, 0.95),
-        tidVol50: calculatePercentile(tidalSamples, 0.5),
-        tidVol95: calculatePercentile(tidalSamples, 0.95),
-        respRate50: calculatePercentile(respRateSamples, 0.5),
-        respRate95: calculatePercentile(respRateSamples, 0.95),
-        flowLimP95: calculatePercentile(flowLimSamples, 0.95),
+        minVent50: minVentPercentiles[0.5],
+        minVent95: minVentPercentiles[0.95],
+        tidVol50: tidalPercentiles[0.5],
+        tidVol95: tidalPercentiles[0.95],
+        respRate50: respRatePercentiles[0.5],
+        respRate95: respRatePercentiles[0.95],
+        flowLimP95: flowLimPercentiles[0.95],
         snoreIndex: computeSnoreIndex(aggregate.snoreSamples),
         pressureHistogram: computePressureHistogram(pressureSamples),
         pressureEfficiency: computePressureEfficiency(pressureSamples),

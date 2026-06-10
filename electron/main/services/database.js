@@ -164,6 +164,7 @@ class ProfileDatabase {
           data_quality TEXT,
           FOREIGN KEY(night_id) REFERENCES nights(id) ON DELETE CASCADE
       );
+      CREATE INDEX IF NOT EXISTS idx_night_metrics_night_id ON night_metrics(night_id);
 
       CREATE TABLE IF NOT EXISTS derived_metrics (
           night_id TEXT PRIMARY KEY,
@@ -216,6 +217,14 @@ class ProfileDatabase {
           date_dir   TEXT NOT NULL,
           mtime_ms   INTEGER NOT NULL,
           PRIMARY KEY (folder_path, date_dir)
+      );
+
+      CREATE TABLE IF NOT EXISTS import_file_cache (
+          folder_path TEXT NOT NULL,
+          cache_key   TEXT NOT NULL,
+          value       TEXT NOT NULL,
+          updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (folder_path, cache_key)
       );
     `;
     this.db.exec(ddl);

@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
     buildLeakAndTidalSummary,
     calculatePercentile,
+    calculatePercentilesFromSorted,
     leakMappings,
     pickMappedValue,
     tidalMappings
@@ -10,6 +11,14 @@ const {
 
 test("calculatePercentile returns null for empty input", () => {
     assert.equal(calculatePercentile([], 0.95), null);
+});
+
+test("calculatePercentilesFromSorted agrees with calculatePercentile", () => {
+    const values = [9, 2, 5, 7, 3, 11];
+    const sorted = [...values].sort((a, b) => a - b);
+    const result = calculatePercentilesFromSorted(sorted, [0.5, 0.95]);
+    assert.equal(result[0.5], calculatePercentile(values, 0.5));
+    assert.equal(result[0.95], calculatePercentile(values, 0.95));
 });
 
 test("leak mappings preserve zero and convert liters per second to liters per minute", () => {

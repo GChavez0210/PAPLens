@@ -71,10 +71,10 @@ class ResventLoader extends BaseLoader {
     let firmwareVersion = "Unknown";
 
     try {
-      for (const file of fs.readdirSync(configDir)) {
+      for (const file of await fs.promises.readdir(configDir)) {
         const fullPath = path.join(configDir, file);
         try {
-          const buf = fs.readFileSync(fullPath);
+          const buf = await fs.promises.readFile(fullPath);
           // Try with and without the 4-byte binary header
           for (const start of [0, 4]) {
             if (buf.length <= start) continue;
@@ -110,7 +110,7 @@ class ResventLoader extends BaseLoader {
 
     let yearMonths;
     try {
-      yearMonths = fs.readdirSync(recordRoot).filter(d => /^\d{6}$/.test(d)).sort();
+      yearMonths = (await fs.promises.readdir(recordRoot)).filter(d => /^\d{6}$/.test(d)).sort();
     } catch {
       return this.buildSummary(this.deviceInfo, []);
     }
@@ -119,7 +119,7 @@ class ResventLoader extends BaseLoader {
       const ymPath = path.join(recordRoot, ym);
       let days;
       try {
-        days = fs.readdirSync(ymPath).filter(d => /^\d{2}$/.test(d)).sort();
+        days = (await fs.promises.readdir(ymPath)).filter(d => /^\d{2}$/.test(d)).sort();
       } catch {
         continue;
       }
@@ -132,7 +132,7 @@ class ResventLoader extends BaseLoader {
 
         let sessionFiles;
         try {
-          sessionFiles = fs.readdirSync(dayPath);
+          sessionFiles = await fs.promises.readdir(dayPath);
         } catch {
           continue;
         }
@@ -144,7 +144,7 @@ class ResventLoader extends BaseLoader {
 
         for (const num of statNums) {
           try {
-            this._processSession(dayPath, num, dateStr, dailyMap);
+            await this._processSession(dayPath, num, dateStr, dailyMap);
           } catch {
             // Skip malformed session files
           }
@@ -165,9 +165,9 @@ class ResventLoader extends BaseLoader {
     return this.buildSummary(this.deviceInfo, dailyStats);
   }
 
-  _processSession(dayPath, num, dateStr, dailyMap) {
+  async _processSession(dayPath, num, dateStr, dailyMap) {
     const statPath = path.join(dayPath, `STAT${num}`);
-    const buf = fs.readFileSync(statPath);
+    const buf = await fs.promises.readFile(statPath);
     // Skip 4-byte binary header if first bytes are non-printable
     const textStart = buf[0] < 32 ? 4 : 0;
     const kv = this._parseKV(buf.slice(textStart).toString("utf8"));
@@ -210,13 +210,13 @@ class ResventLoader extends BaseLoader {
     day.onDuration += secUsed / 60;
 
     // Collect waveform samples from P files for this session
-    this._collectPSamples(dayPath, num, day);
+    await this._collectPSamples(dayPath, num, day);
   }
 
-  _collectPSamples(dayPath, num, day) {
+  async _collectPSamples(dayPath, num, day) {
     let files;
     try {
-      files = fs.readdirSync(dayPath)
+      files = (await fs.promises.readdir(dayPath))
         .filter(f => new RegExp(`^P${num}_\\d+$`, "i").test(f))
         .sort();
     } catch {
@@ -225,7 +225,7 @@ class ResventLoader extends BaseLoader {
 
     for (const file of files) {
       try {
-        const buf = fs.readFileSync(path.join(dayPath, file));
+        const buf = await fs.promises.readFile(path.join(dayPath, file));
         this._parseWaveformBuffer(buf, day);
       } catch {
         // Skip unreadable chunk

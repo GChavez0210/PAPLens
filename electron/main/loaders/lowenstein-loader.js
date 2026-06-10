@@ -43,7 +43,7 @@ class LowensteinLoader extends BaseLoader {
   async loadAll(onProgress) {
     let parsed;
     try {
-      parsed = parseWmData(fs.readFileSync(path.join(this.dataPath, "WM_DATA.TDF")));
+      parsed = parseWmData(await fs.promises.readFile(path.join(this.dataPath, "WM_DATA.TDF")));
     } catch {
       this.deviceInfo = this._defaultDeviceInfo();
       return this.buildSummary(this.deviceInfo, []);

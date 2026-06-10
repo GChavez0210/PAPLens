@@ -70,7 +70,7 @@ class PrismaLineLoader extends BaseLoader {
   async loadAll(onProgress) {
     let configEntries;
     try {
-      configEntries = readZipEntries(fs.readFileSync(path.join(this.dataPath, CONFIG_FILE)));
+      configEntries = readZipEntries(await fs.promises.readFile(path.join(this.dataPath, CONFIG_FILE)));
     } catch {
       this.deviceInfo = this._defaultDeviceInfo();
       return this.buildSummary(this.deviceInfo, []);
@@ -80,7 +80,7 @@ class PrismaLineLoader extends BaseLoader {
 
     let dailyStats = [];
     try {
-      const therapyEntries = readZipEntries(fs.readFileSync(path.join(this.dataPath, THERAPY_FILE)));
+      const therapyEntries = readZipEntries(await fs.promises.readFile(path.join(this.dataPath, THERAPY_FILE)));
       dailyStats = buildDailyStats(therapyEntries, (date) => this.blankDay(date));
     } catch {
       // therapy.pdat missing or unreadable: device info only.

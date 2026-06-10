@@ -237,6 +237,10 @@ function parseEDFDate(dateStr) {
 function parseSTRFile(filePath) {
   const parser = new EDFParser();
   const result = parser.parse(filePath);
+  return buildSTRSummary(result);
+}
+
+function buildSTRSummary(result) {
   const days = [];
   const numDays = result.header.numDataRecords;
 
@@ -265,6 +269,13 @@ function parseSTRFile(filePath) {
   };
 }
 
+async function parseSTRFileAsync(filePath) {
+  const buffer = await fs.promises.readFile(filePath);
+  const parser = new EDFParser();
+  const result = parser.parseBuffer(buffer);
+  return buildSTRSummary(result);
+}
+
 function parseSessionFile(filePath) {
   const parser = new EDFParser();
   return parser.parse(filePath);
@@ -279,6 +290,7 @@ async function parseSessionFileAsync(filePath) {
 module.exports = {
   EDFParser,
   parseSTRFile,
+  parseSTRFileAsync,
   parseSessionFile,
   parseSessionFileAsync
 };

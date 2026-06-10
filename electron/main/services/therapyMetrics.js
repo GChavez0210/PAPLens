@@ -73,6 +73,36 @@ function calculatePercentile(values, percentile) {
     return sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * weight;
 }
 
+function percentileFromSorted(sortedSamples, percentile) {
+    if (!sortedSamples || sortedSamples.length === 0) {
+        return null;
+    }
+
+    if (sortedSamples.length === 1) {
+        return sortedSamples[0];
+    }
+
+    const bounded = Math.min(1, Math.max(0, percentile));
+    const index = (sortedSamples.length - 1) * bounded;
+    const lowerIndex = Math.floor(index);
+    const upperIndex = Math.ceil(index);
+
+    if (lowerIndex === upperIndex) {
+        return sortedSamples[lowerIndex];
+    }
+
+    const weight = index - lowerIndex;
+    return sortedSamples[lowerIndex] + (sortedSamples[upperIndex] - sortedSamples[lowerIndex]) * weight;
+}
+
+function calculatePercentilesFromSorted(sortedSamples, percentiles) {
+    const result = {};
+    for (const percentile of percentiles || []) {
+        result[percentile] = percentileFromSorted(sortedSamples, percentile);
+    }
+    return result;
+}
+
 function describeSamples(values) {
     const samples = sanitizeMetricSamples(values);
     if (samples.length === 0) {
@@ -180,6 +210,7 @@ const tidalMappings = {
 module.exports = {
     buildLeakAndTidalSummary,
     calculatePercentile,
+    calculatePercentilesFromSorted,
     describeSamples,
     formatDebugValue,
     isFiniteMetricValue,

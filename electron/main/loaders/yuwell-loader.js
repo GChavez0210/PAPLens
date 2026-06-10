@@ -42,10 +42,10 @@ class YuwellLoader extends BaseLoader {
   async loadAll(onProgress) {
     const root = this.dataPath;
     let result = null;
-    if (detectFormatA(root)) result = parseFormatA(root);
-    else if (isFormatB(root)) result = parseFormatB(root);
-    else if (detectFormatD(root)) result = parseFormatD(root);
-    else if (detectFormatC(root)) result = parseFormatC(root);
+    if (await detectFormatAAsync(root)) result = await parseFormatAAsync(root);
+    else if (await isFormatBAsync(root)) result = await parseFormatBAsync(root);
+    else if (await detectFormatDAsync(root)) result = await parseFormatDAsync(root);
+    else if (await detectFormatCAsync(root)) result = await parseFormatCAsync(root);
 
     if (!result) {
       this.deviceInfo = defaultDeviceInfo("Unknown");
@@ -118,9 +118,30 @@ function findYhDirs(root) {
     .filter(e => e.isDirectory() && e.name.toUpperCase().startsWith("YH"))
     .map(e => ({ name: e.name, dir: path.join(root, e.name) }));
 }
+async function findYhDirsAsync(root) {
+  let entries;
+  try {
+    entries = await fs.promises.readdir(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter(e => e.isDirectory() && e.name.toUpperCase().startsWith("YH"))
+    .map(e => ({ name: e.name, dir: path.join(root, e.name) }));
+}
 function bysFilesIn(dir) {
   try {
     return fs.readdirSync(dir)
+      .filter(name => name.toUpperCase().endsWith(".BYS"))
+      .sort()
+      .map(name => path.join(dir, name));
+  } catch {
+    return [];
+  }
+}
+async function bysFilesInAsync(dir) {
+  try {
+    return (await fs.promises.readdir(dir))
       .filter(name => name.toUpperCase().endsWith(".BYS"))
       .sort()
       .map(name => path.join(dir, name));
@@ -135,10 +156,17 @@ function hasSubdir(dir) {
     return false;
   }
 }
-function readModelSerialAt(filePath, offset) {
+async function hasSubdirAsync(dir) {
+  try {
+    return (await fs.promises.readdir(dir, { withFileTypes: true })).some(e => e.isDirectory());
+  } catch {
+    return false;
+  }
+}
+async function readModelSerialAtAsync(filePath, offset) {
   let data;
   try {
-    data = fs.readFileSync(filePath);
+    data = await fs.promises.readFile(filePath);
   } catch {
     return null;
   }
@@ -227,23 +255,27 @@ function computeUsageHours(startTs, finishTs) {
 }
 
 // ── Format A ─────────────────────────────────────────────────────────────────
-function detectFormatA(root) {
+async function detectFormatAAsync(root) {
   if (!fs.existsSync(path.join(root, "RunLog.bys"))) return false;
-  return findYhDirs(root).some(({ dir }) => {
-    const files = bysFilesIn(dir);
-    return files.length > 0 && readModelSerialAt(files[0], 0x1e) != null;
-  });
+  const yhDirs = await findYhDirsAsync(root);
+  for (const { dir } of yhDirs) {
+    const files = await bysFilesInAsync(dir);
+    if (files.length > 0 && await readModelSerialAtAsync(files[0], 0x1e) != null) {
+      return true;
+    }
+  }
+  return false;
 }
-function parseFormatA(root) {
-  const yhDirs = findYhDirs(root);
+async function parseFormatAAsync(root) {
+  const yhDirs = await findYhDirsAsync(root);
   if (!yhDirs.length) return null;
-  const files = bysFilesIn(yhDirs[0].dir);
-  const modelSerial = (files[0] && readModelSerialAt(files[0], 0x1e)) || "Unknown";
+  const files = await bysFilesInAsync(yhDirs[0].dir);
+  const modelSerial = (files[0] && await readModelSerialAtAsync(files[0], 0x1e)) || "Unknown";
 
   const sessions = [];
   for (const file of files) {
     try {
-      const session = parseFormatASession(fs.readFileSync(file));
+      const session = parseFormatASession(await fs.promises.readFile(file));
       if (session) sessions.push(session);
     } catch { /* skip malformed */ }
   }
@@ -302,13 +334,26 @@ function isFormatB(root) {
     return false;
   }
 }
-function parseFormatB(root) {
+async function isFormatBAsync(root) {
+  const p = path.join(root, "YHSD-NEW.BYS");
+  try {
+    const stat = await fs.promises.stat(p);
+    return stat.isFile() && stat.size === 0x10000;
+  } catch {
+    return false;
+  }
+}
+async function parseFormatBAsync(root) {
   let data;
   try {
-    data = fs.readFileSync(path.join(root, "YHSD-NEW.BYS"));
+    data = await fs.promises.readFile(path.join(root, "YHSD-NEW.BYS"));
   } catch {
     return null;
   }
+  return parseFormatBBuffer(data);
+}
+
+function parseFormatBBuffer(data) {
   if (data.length !== 0x10000) return null;
 
   const cur = new Cursor(data);
@@ -370,22 +415,26 @@ function parseFormatB(root) {
 }
 
 // ── Format C ─────────────────────────────────────────────────────────────────
-function detectFormatC(root) {
-  return findYhDirs(root).some(({ dir }) => {
-    const files = bysFilesIn(dir);
-    return files.length > 0 && readModelSerialAt(files[0], 0x27) != null;
-  });
+async function detectFormatCAsync(root) {
+  const yhDirs = await findYhDirsAsync(root);
+  for (const { dir } of yhDirs) {
+    const files = await bysFilesInAsync(dir);
+    if (files.length > 0 && await readModelSerialAtAsync(files[0], 0x27) != null) {
+      return true;
+    }
+  }
+  return false;
 }
-function parseFormatC(root) {
-  const yhDirs = findYhDirs(root);
+async function parseFormatCAsync(root) {
+  const yhDirs = await findYhDirsAsync(root);
   if (!yhDirs.length) return null;
-  const files = bysFilesIn(yhDirs[0].dir);
-  const modelSerial = (files[0] && readModelSerialAt(files[0], 0x27)) || "Unknown";
+  const files = await bysFilesInAsync(yhDirs[0].dir);
+  const modelSerial = (files[0] && await readModelSerialAtAsync(files[0], 0x27)) || "Unknown";
 
   const sessions = [];
   for (const file of files) {
     try {
-      const session = parseFormatCSession(fs.readFileSync(file));
+      const session = parseFormatCSession(await fs.promises.readFile(file));
       if (session) sessions.push(session);
     } catch { /* skip malformed */ }
   }
@@ -449,20 +498,24 @@ function parseFormatCSession(data) {
 }
 
 // ── Format D ─────────────────────────────────────────────────────────────────
-function detectFormatD(root) {
-  return findYhDirs(root).some(({ dir }) =>
-    fs.existsSync(path.join(dir, "RunLog.bys")) && hasSubdir(dir)
-  );
+async function detectFormatDAsync(root) {
+  const yhDirs = await findYhDirsAsync(root);
+  for (const { dir } of yhDirs) {
+    if (fs.existsSync(path.join(dir, "RunLog.bys")) && await hasSubdirAsync(dir)) {
+      return true;
+    }
+  }
+  return false;
 }
-function parseFormatD(root) {
-  const yhDirs = findYhDirs(root);
+async function parseFormatDAsync(root) {
+  const yhDirs = await findYhDirsAsync(root);
   if (!yhDirs.length) return null;
   const { name: dirName, dir: yhPath } = yhDirs[0];
   let modelSerial = dirName;
 
   let sessDirs;
   try {
-    sessDirs = fs.readdirSync(yhPath, { withFileTypes: true })
+    sessDirs = (await fs.promises.readdir(yhPath, { withFileTypes: true }))
       .filter(e => e.isDirectory())
       .map(e => path.join(yhPath, e.name))
       .sort();
@@ -472,7 +525,7 @@ function parseFormatD(root) {
 
   const sessions = [];
   for (const sessDir of sessDirs) {
-    const parsed = parseFormatDSession(sessDir);
+    const parsed = await parseFormatDSessionAsync(sessDir);
     if (parsed) {
       if (parsed.modelSerial && parsed.modelSerial !== "Unknown") modelSerial = parsed.modelSerial;
       sessions.push(parsed.session);
@@ -480,10 +533,10 @@ function parseFormatD(root) {
   }
   return { deviceInfo: defaultDeviceInfo(modelSerial), sessions };
 }
-function findFileWithSuffix(dir, suffix) {
+async function findFileWithSuffixAsync(dir, suffix) {
   let entries;
   try {
-    entries = fs.readdirSync(dir);
+    entries = await fs.promises.readdir(dir);
   } catch {
     return null;
   }
@@ -491,15 +544,49 @@ function findFileWithSuffix(dir, suffix) {
   const match = entries.find(name => name.toUpperCase().endsWith(sfx));
   return match ? path.join(dir, match) : null;
 }
-function parseFormatDSession(sessDir) {
-  const sFile = findFileWithSuffix(sessDir, "s.bys");
+async function parseFormatDSessionAsync(sessDir) {
+  const sFile = await findFileWithSuffixAsync(sessDir, "s.bys");
   if (!sFile) return null;
   let sData;
   try {
-    sData = fs.readFileSync(sFile);
+    sData = await fs.promises.readFile(sFile);
   } catch {
     return null;
   }
+  return parseFormatDSessionBufferAsyncMinute(sessDir, sData);
+}
+
+async function parseFormatDSessionBufferAsyncMinute(sessDir, sData) {
+  const parsed = parseFormatDSessionHeader(sData);
+  if (!parsed) return null;
+  const { modelSerial, startTs, finishTs, mode } = parsed;
+
+  let oa = 0, hi = 0, ca = 0, pSum = 0, minutes = 0;
+  const mFile = await findFileWithSuffixAsync(sessDir, "m.bys");
+  if (mFile) {
+    try {
+      const minuteStats = parseFormatDMinuteData(await fs.promises.readFile(mFile));
+      oa = minuteStats.oa;
+      hi = minuteStats.hi;
+      ca = minuteStats.ca;
+      pSum = minuteStats.pSum;
+      minutes = minuteStats.minutes;
+    } catch { /* per-minute optional */ }
+  }
+
+  return {
+    modelSerial,
+    session: {
+      date: dateStringUTC(startTs),
+      usageHours: computeUsageHours(startTs, finishTs),
+      oa, hi, ca,
+      avgPressure: minutes > 0 ? pSum / minutes : null,
+      mode
+    }
+  };
+}
+
+function parseFormatDSessionHeader(sData) {
   if (sData.length < 0x4d) return null;
 
   let modelSerial, startTs, finishTs, mode;
@@ -521,46 +608,33 @@ function parseFormatDSession(sessDir) {
     return null;
   }
   if (startTs == null || finishTs == null) return null;
+  return { modelSerial, startTs, finishTs, mode };
+}
 
+function parseFormatDMinuteData(mData) {
   let oa = 0, hi = 0, ca = 0, pSum = 0, minutes = 0;
-  const mFile = findFileWithSuffix(sessDir, "m.bys");
-  if (mFile) {
-    try {
-      const mData = fs.readFileSync(mFile);
-      if (mData.length >= 0x08) {
-        const mc = new Cursor(mData);
-        mc.skip(6);
-        const recordCount = mc.i16();
-        for (let i = 0; i < Math.max(0, recordCount); i++) {
-          if (mc.remaining < 19) break;
-          const pressure = mc.u8();
-          mc.skip(1);
-          oa += mc.u8();
-          ca += mc.u8();
-          hi += mc.u8();
-          mc.skip(4);
-          mc.u8(); // leakage
-          mc.skip(5);
-          mc.u8(); // spo2
-          mc.u8(); // pulse
-          mc.skip(2);
-          pSum += pressure / 10;
-          minutes += 1;
-        }
-      }
-    } catch { /* per-minute optional */ }
-  }
-
-  return {
-    modelSerial,
-    session: {
-      date: dateStringUTC(startTs),
-      usageHours: computeUsageHours(startTs, finishTs),
-      oa, hi, ca,
-      avgPressure: minutes > 0 ? pSum / minutes : null,
-      mode
+  if (mData.length >= 0x08) {
+    const mc = new Cursor(mData);
+    mc.skip(6);
+    const recordCount = mc.i16();
+    for (let i = 0; i < Math.max(0, recordCount); i++) {
+      if (mc.remaining < 19) break;
+      const pressure = mc.u8();
+      mc.skip(1);
+      oa += mc.u8();
+      ca += mc.u8();
+      hi += mc.u8();
+      mc.skip(4);
+      mc.u8(); // leakage
+      mc.skip(5);
+      mc.u8(); // spo2
+      mc.u8(); // pulse
+      mc.skip(2);
+      pSum += pressure / 10;
+      minutes += 1;
     }
-  };
+  }
+  return { oa, hi, ca, pSum, minutes };
 }
 
 module.exports = {

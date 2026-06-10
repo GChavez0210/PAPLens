@@ -53,7 +53,7 @@ class BmcLoader extends BaseLoader {
   }
 
   async loadAll(onProgress) {
-    const usrPath = findUsrFile(this.dataPath);
+    const usrPath = await findUsrFileAsync(this.dataPath);
     if (!usrPath) {
       this.deviceInfo = this._defaultDeviceInfo();
       return this.buildSummary(this.deviceInfo, []);
@@ -61,7 +61,7 @@ class BmcLoader extends BaseLoader {
 
     let buf;
     try {
-      buf = fs.readFileSync(usrPath);
+      buf = await fs.promises.readFile(usrPath);
     } catch {
       this.deviceInfo = this._defaultDeviceInfo();
       return this.buildSummary(this.deviceInfo, []);
@@ -90,6 +90,17 @@ function findUsrFile(dir) {
   let entries;
   try {
     entries = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const match = entries.find(name => /\.USR$/i.test(name));
+  return match ? path.join(dir, match) : null;
+}
+
+async function findUsrFileAsync(dir) {
+  let entries;
+  try {
+    entries = await fs.promises.readdir(dir);
   } catch {
     return null;
   }

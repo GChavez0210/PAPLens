@@ -12,6 +12,25 @@ function parseJsonSafely(value) {
     try { return JSON.parse(value); } catch { return null; }
 }
 
+function measureSummaryPayload(summary, logger = console) {
+    try {
+        const bytes = Buffer.byteLength(JSON.stringify(summary), "utf8");
+        const dailyCount = Array.isArray(summary?.dailyStats) ? summary.dailyStats.length : 0;
+        const sessionCount = Array.isArray(summary?.sessions) ? summary.sessions.length : 0;
+        const mb = bytes / (1024 * 1024);
+        const message = `[ipc] cpap:data-loaded payload=${bytes} bytes (${mb.toFixed(2)} MiB), dailyStats=${dailyCount}, sessions=${sessionCount}`;
+        if (bytes > 1024 * 1024) {
+            logger.warn(`${message}; consider staged dailyStats fetch if this is representative.`);
+        } else {
+            logger.info(message);
+        }
+        return bytes;
+    } catch (error) {
+        logger.warn(`[ipc] Failed to measure cpap:data-loaded payload: ${error.message}`);
+        return null;
+    }
+}
+
 class CpapService {
     constructor(appContainer) {
         this.appContainer = appContainer;
@@ -108,6 +127,7 @@ class CpapService {
         }
 
         if (this.mainWindow) {
+            measureSummaryPayload(summary);
             this.mainWindow.webContents.send("cpap:data-loaded", summary);
         }
 
@@ -354,4 +374,4 @@ class CpapService {
     }
 }
 
-module.exports = { CpapService };
+module.exports = { CpapService, measureSummaryPayload };

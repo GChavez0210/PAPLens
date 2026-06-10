@@ -42,10 +42,10 @@ class IncrementalImporter {
         const datalogPath = path.join(this.dataPath, "DATALOG");
         const currentMtimes = new Map();
         if (fs.existsSync(datalogPath)) {
-            for (const dateDir of fs.readdirSync(datalogPath)) {
+            for (const dateDir of await fs.promises.readdir(datalogPath)) {
                 if (!/^\d{8}$/.test(dateDir)) continue;
                 try {
-                    const stat = fs.statSync(path.join(datalogPath, dateDir));
+                    const stat = await fs.promises.stat(path.join(datalogPath, dateDir));
                     // Convert YYYYMMDD → YYYY-MM-DD to match night_date format
                     const dateKey = `${dateDir.slice(0,4)}-${dateDir.slice(4,6)}-${dateDir.slice(6,8)}`;
                     currentMtimes.set(dateKey, stat.mtimeMs);
@@ -66,6 +66,7 @@ class IncrementalImporter {
         );
 
         safeInfo(console, `[import] mtime check: ${cachedRows.length} nights with metrics, ${skipDates.size} unchanged → skipping EDF parse`);
+        this.primeSTRCache();
         // Pre-seed loader's cached session metrics map so skipped nights still
         // return enriched values when getDailyStats merges them.
         const cachedSessionMetrics = new Map(cachedRows.map(r => [r.night_date, {
@@ -257,6 +258,8 @@ class IncrementalImporter {
                 upsertMtime.run(this.dataPath, dateKey, mtimeMs);
             }
 
+            await this.persistSTRCache();
+
             this.db.exec('COMMIT;');
 
             return { success: true, summary, deviceId, insertedCount, updatedCount, runAnalyticsOn: Array.from(runAnalyticsOn) };
@@ -265,6 +268,54 @@ class IncrementalImporter {
             console.error("Incremental Import Failed", err);
             return { success: false, error: err.message };
         }
+    }
+
+    primeSTRCache() {
+        if (typeof this.loader.setSTRCache !== "function") {
+            return;
+        }
+
+        const readCache = this.db.prepare(`
+            SELECT cache_key, value FROM import_file_cache
+            WHERE folder_path = ? AND cache_key IN ('str_edf_mtime', 'str_edf_size', 'str_edf_summary')
+        `).all(this.dataPath);
+        const cache = Object.fromEntries(readCache.map((row) => [row.cache_key, row.value]));
+        if (!cache.str_edf_summary) {
+            return;
+        }
+
+        try {
+            this.loader.setSTRCache({
+                mtimeMs: Number(cache.str_edf_mtime),
+                size: Number(cache.str_edf_size),
+                summary: JSON.parse(cache.str_edf_summary)
+            });
+        } catch {
+            this.loader.setSTRCache(null);
+        }
+    }
+
+    async persistSTRCache() {
+        if (!this.loader.dailySummary || this.loader.dailySummary.error) {
+            return;
+        }
+
+        const strPath = path.join(this.dataPath, "STR.edf");
+        if (!fs.existsSync(strPath)) {
+            return;
+        }
+
+        const stat = await fs.promises.stat(strPath);
+        const upsertCache = this.db.prepare(`
+            INSERT INTO import_file_cache (folder_path, cache_key, value, updated_at)
+            VALUES (?, ?, ?, datetime('now'))
+            ON CONFLICT(folder_path, cache_key) DO UPDATE SET
+              value = excluded.value,
+              updated_at = excluded.updated_at
+        `);
+        upsertCache.run(this.dataPath, "str_edf_mtime", String(stat.mtimeMs));
+        upsertCache.run(this.dataPath, "str_edf_size", String(stat.size));
+        upsertCache.run(this.dataPath, "str_edf_summary", JSON.stringify(this.loader.dailySummary));
     }
 
     upsertDevice() {
