@@ -362,46 +362,6 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, yTickLabel, to
   );
 }
 
-function EventsChart({ events, theme }) {
-  const eventTypes = [...new Set(events.map((event) => event.text))].slice(0, 12);
-  const points = events
-    .filter((event) => eventTypes.includes(event.text))
-    .map((event) => ({
-      x: event.onsetSeconds / 60,
-      y: eventTypes.indexOf(event.text) + 1,
-      label: event.text,
-      durationSeconds: event.durationSeconds
-    }));
-
-  return (
-    <SessionChart
-      title="Flagged Events"
-      unit=""
-      theme={theme}
-      yMin={0}
-      yMax={Math.max(2, eventTypes.length + 1)}
-      datasets={[
-        {
-          type: "scatter",
-          label: "Events",
-          data: points,
-          borderColor: "#f59e0b",
-          backgroundColor: points.map((point) => eventColor(point.label)),
-          pointRadius: 5,
-          pointHoverRadius: 7,
-          showLine: false
-        }
-      ]}
-      tooltipLabel={(item) => {
-        const point = item.raw || {};
-        const duration = point.durationSeconds ? ` (${Math.round(point.durationSeconds)}s)` : "";
-        return `${point.label || "Event"}${duration}`;
-      }}
-      yTickLabel={(value) => eventTypes[Number(value) - 1] || ""}
-    />
-  );
-}
-
 function EmptyGraph({ title, message }) {
   return (
     <section className="session-graph-card session-graph-empty">

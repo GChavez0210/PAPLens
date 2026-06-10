@@ -75,8 +75,10 @@ class AnalyticsOrchestrator {
           continue;
         }
 
-        const clinicalStability = computeTherapyStabilityScore(current, history30);
-        const leakClass = classifyLeakSeverity(current.leak_p95 ?? current.leak_max ?? current.leak_p50, current.leak_p50, current.usage_hours * 60);
+        const clinicalStability = computeTherapyStabilityScore(current);
+        const leakForClassify = current.leak_p95 ?? current.leak_max ?? current.leak_p50;
+        const leakBasis = (current.leak_p95 != null || current.leak_max != null) ? "p95" : "p50";
+        const leakClass = classifyLeakSeverity(leakForClassify, current.leak_p50, current.usage_hours * 60, { basis: leakBasis });
         const compliance = computeComplianceRisk(usage14);
         const residual = processResidualBurden(ahi30);
         const { flags, z_scores } = detectOutliers(current, history30);
@@ -99,7 +101,7 @@ class AnalyticsOrchestrator {
         }, flags);
 
         const pbInsight = generatePeriodicBreathingInsight(
-          current.pb_pct, current.pb_is_significant === 1, current.pb_episode_count
+          current.pb_pct, current.pb_is_significant === 1, current.pb_episode_count, current.pb_leak_confounded === 1
         );
         if (pbInsight) insights.push(pbInsight);
 

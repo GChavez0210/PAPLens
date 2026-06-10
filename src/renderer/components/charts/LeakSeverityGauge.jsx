@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import Chart from "chart.js/auto";
 import { toMetricNumber } from "../../utils/therapyMetrics";
 
-export function LeakSeverityGauge({ leak50, leak95, height = 150 }) {
+function LeakSeverityGaugeComponent({ leak50, leak95, height = 150 }) {
     const ref = useRef(null);
     const leak50Value = toMetricNumber(leak50) ?? 0;
     const leak95Value = toMetricNumber(leak95);
@@ -60,3 +60,5 @@ export function LeakSeverityGauge({ leak50, leak95, height = 150 }) {
         </div>
     );
 }
+
+export const LeakSeverityGauge = memo(LeakSeverityGaugeComponent);

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import Chart from "chart.js/auto";
 
 /**
@@ -7,7 +7,7 @@ import Chart from "chart.js/auto";
  *
  * Displayed as columns so pressure increases left-to-right (intuitive axis direction).
  */
-export function PressureHistogramChart({ histogram, height = 200 }) {
+function PressureHistogramChartComponent({ histogram, height = 200 }) {
     const ref = useRef(null);
 
     useEffect(() => {
@@ -89,3 +89,5 @@ export function PressureHistogramChart({ histogram, height = 200 }) {
         </div>
     );
 }
+
+export const PressureHistogramChart = memo(PressureHistogramChartComponent);

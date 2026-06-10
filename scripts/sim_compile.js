@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const Handlebars = require('handlebars');
 
-const templatePath = path.join(__dirname, 'report.html');
+const templatePath = path.join(__dirname, '..', 'report.html');
 const templateStr = fs.readFileSync(templatePath, 'utf8');
 const template = Handlebars.compile(templateStr);
 

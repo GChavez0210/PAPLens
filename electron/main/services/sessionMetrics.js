@@ -137,7 +137,7 @@ function summarizeNightlySessionMetrics(aggregate) {
         spo2Avg: average(spo2Samples),
         pulseAvg: average(pulseSamples),
         eventClusterIndexSource: computeEventClusterIndex(aggregate.annotations),
-        periodicBreathing: detectPeriodicBreathing(tidalSamples),
+        periodicBreathing: detectPeriodicBreathing(tidalSamples, leakSamples),
         sessionDerived: leakSamples.length > 0 || tidalSamples.length > 0 || flowLimSamples.length > 0 || spo2Samples.length > 0 || pulseSamples.length > 0 || (aggregate.annotations || []).length > 0
     };
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import Chart from "chart.js/auto";
 
 function rollingAvg(arr, window) {
@@ -8,7 +8,7 @@ function rollingAvg(arr, window) {
     });
 }
 
-export function AHITrendChart({ labels, data, height = 200 }) {
+function AHITrendChartComponent({ labels, data, height = 200 }) {
     const ref = useRef(null);
     const rolling = useMemo(() => rollingAvg(data, 7), [data]);
 
@@ -73,3 +73,5 @@ export function AHITrendChart({ labels, data, height = 200 }) {
         </div>
     );
 }
+
+export const AHITrendChart = memo(AHITrendChartComponent);

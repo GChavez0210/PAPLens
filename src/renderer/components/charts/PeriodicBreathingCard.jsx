@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useMemo, useState } from "react";
 
 const TOOLTIP = {
     title: "What this means",
@@ -16,17 +16,19 @@ function formatDuration(totalSeconds) {
     return `${s}s`;
 }
 
-export function PeriodicBreathingCard({ trends }) {
+function PeriodicBreathingCardComponent({ trends }) {
     const [hovered, setHovered] = useState(false);
+    const nights = useMemo(() => (trends || []).filter(r => r.pb_pct != null), [trends]);
 
     if (!trends || trends.length === 0) return null;
 
     // Aggregate PB stats across the selected date range
-    const nights = trends.filter(r => r.pb_pct != null);
     if (nights.length === 0) return null;
 
     const significantNights = nights.filter(r => r.pb_is_significant === 1);
     const anySignificant = significantNights.length > 0;
+    const confoundedNights = nights.filter(r => r.pb_leak_confounded === 1);
+    const majorityConfounded = confoundedNights.length > significantNights.length / 2;
     const avgPbPct = nights.reduce((sum, r) => sum + (r.pb_pct ?? 0), 0) / nights.length;
     const totalEpisodes = nights.reduce((sum, r) => sum + (r.pb_episode_count ?? 0), 0);
     const totalPBSec = nights.reduce((sum, r) => sum + (r.pb_total_seconds ?? 0), 0);
@@ -38,11 +40,21 @@ export function PeriodicBreathingCard({ trends }) {
 
     const hasPB = avgPbPct > 0;
 
-    const borderColor = anySignificant ? "#f59e0b" : hasPB ? "#22D3EE" : "#374151";
-    const bgColor = anySignificant ? "rgba(245,158,11,0.07)" : hasPB ? "rgba(34,211,238,0.06)" : "var(--card)";
-    const badgeColor = anySignificant ? "#f59e0b" : hasPB ? "#22D3EE" : "#6b7280";
-    const badgeBg = anySignificant ? "rgba(245,158,11,0.15)" : hasPB ? "rgba(34,211,238,0.12)" : "rgba(107,114,128,0.12)";
-    const badgeLabel = anySignificant ? "⚠ Clinically Significant" : hasPB ? "Detected" : "None";
+    const borderColor = anySignificant
+        ? (majorityConfounded ? "#a78bfa" : "#f59e0b")
+        : hasPB ? "#22D3EE" : "#374151";
+    const bgColor = anySignificant
+        ? (majorityConfounded ? "rgba(167,139,250,0.07)" : "rgba(245,158,11,0.07)")
+        : hasPB ? "rgba(34,211,238,0.06)" : "var(--card)";
+    const badgeColor = anySignificant
+        ? (majorityConfounded ? "#a78bfa" : "#f59e0b")
+        : hasPB ? "#22D3EE" : "#6b7280";
+    const badgeBg = anySignificant
+        ? (majorityConfounded ? "rgba(167,139,250,0.15)" : "rgba(245,158,11,0.15)")
+        : hasPB ? "rgba(34,211,238,0.12)" : "rgba(107,114,128,0.12)";
+    const badgeLabel = anySignificant
+        ? (majorityConfounded ? "? Possibly Significant" : "⚠ Clinically Significant")
+        : hasPB ? "Detected" : "None";
 
     return (
         <div
@@ -118,11 +130,14 @@ export function PeriodicBreathingCard({ trends }) {
             {anySignificant && (
                 <div style={{
                     marginTop: 12, padding: "8px 12px", borderRadius: 6,
-                    background: "rgba(245,158,11,0.12)", border: "1px solid rgba(245,158,11,0.3)",
-                    fontSize: "0.78rem", color: "#f59e0b", lineHeight: 1.5
+                    background: majorityConfounded ? "rgba(167,139,250,0.10)" : "rgba(245,158,11,0.12)",
+                    border: `1px solid ${majorityConfounded ? "rgba(167,139,250,0.3)" : "rgba(245,158,11,0.3)"}`,
+                    fontSize: "0.78rem", color: borderColor, lineHeight: 1.5
                 }}>
-                    <strong>Clinical flag:</strong> {significantNights.length} night{significantNights.length !== 1 ? "s" : ""} met
-                    the ≥5% periodic breathing threshold. Discuss with your sleep physician or cardiologist.
+                    {majorityConfounded
+                        ? <><strong>Low confidence:</strong> {significantNights.length} night{significantNights.length !== 1 ? "s" : ""} met the ≥5% threshold, but most episodes coincided with mask leak events — these may be arousal-driven rather than true periodic breathing. Mention to your care team if leak issues are recurring.</>
+                        : <><strong>Clinical flag:</strong> {significantNights.length} night{significantNights.length !== 1 ? "s" : ""} met the ≥5% periodic breathing threshold. Discuss with your sleep physician or cardiologist.</>
+                    }
                 </div>
             )}
 
@@ -149,6 +164,8 @@ export function PeriodicBreathingCard({ trends }) {
         </div>
     );
 }
+
+export const PeriodicBreathingCard = memo(PeriodicBreathingCardComponent);
 
 function StatCell({ label, value, accent }) {
     return (

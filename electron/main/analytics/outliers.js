@@ -10,14 +10,18 @@ function detectOutliers(currentMetrics, last30MetricsList) {
     const z_scores = {};
     const validHistory = (last30MetricsList || []).filter(hasTherapyData);
 
+    if (validHistory.length < 3) return { flags: [], z_scores: {} };
+
     const processMetric = (key, val, limit = 2.5) => {
         if (val === undefined || val === null) return;
         const history = validHistory.map(m => m[key]).filter(v => v !== undefined && v !== null);
-        if (history.length === 0) return;
+        if (history.length < 3) return;
 
         const mu = mean(history);
         const sigma = std(history, mu);
         const z = zScore(val, mu, sigma);
+
+        if (z === null) return;
 
         z_scores[key] = { z, mu, sigma };
 

@@ -19,6 +19,9 @@
     "dist:linux": "npm run build && electron-builder --linux",
     "format": "prettier --write .",
     "lint": "eslint .",
+    "test": "node scripts/run-node-tests.js",
+    "check": "npm run lint && npm test",
+    "audit": "npm audit --audit-level=high",
     "test-types": "tsc --noEmit",
     "prepare": "husky"
   },
@@ -122,7 +125,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.0",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^39.8.10",
     "electron-builder": "^26.0.12",

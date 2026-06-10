@@ -511,6 +511,7 @@ class CPAPDataLoader {
           pbPct: sessionMetrics?.periodicBreathing?.pbPct ?? null,
           pbAvgCycleSec: sessionMetrics?.periodicBreathing?.avgCycleSec ?? null,
           pbIsSignificant: sessionMetrics?.periodicBreathing?.isClinicallySignificant ?? null,
+          pbLeakConfounded: sessionMetrics?.periodicBreathing?.leakConfounded ?? null,
           // Current ResMed flow generators do not provide valid onboard oximetry,
           // so PAPLens preserves null instead of probing SA2/summary sentinels.
           spo2Avg: supportsOximetry

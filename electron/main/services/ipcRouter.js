@@ -268,7 +268,7 @@ class IpcRouter {
                  m.minute_vent_p50, m.resp_rate_p50, m.tidal_vol_p50,
                  m.flow_limitation_p95, m.rin_per_hr, m.csr_per_hr,
                  m.snore_index, m.leak_spike_count, m.pressure_histogram, m.pressure_efficiency,
-                 m.pb_episode_count, m.pb_total_seconds, m.pb_pct, m.pb_avg_cycle_sec, m.pb_is_significant,
+                 m.pb_episode_count, m.pb_total_seconds, m.pb_pct, m.pb_avg_cycle_sec, m.pb_is_significant, m.pb_leak_confounded,
                  d.residual_burden, d.stability_score, d.compliance_risk`;
             let trendRows;
             if (from && to) {

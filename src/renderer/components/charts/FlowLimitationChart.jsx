@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef } from "react";
+import { memo, useEffect, useMemo, useRef } from "react";
 import Chart from "chart.js/auto";
 
 /**
  * Dual-line chart showing flow_limitation_p95 and rin_per_hr (Respiratory Disturbance Index)
  * over the selected date range.
  */
-export function FlowLimitationChart({ trends, height = 200 }) {
+function FlowLimitationChartComponent({ trends, height = 200 }) {
     const ref = useRef(null);
 
     const nights = useMemo(
@@ -107,3 +107,5 @@ export function FlowLimitationChart({ trends, height = 200 }) {
         </div>
     );
 }
+
+export const FlowLimitationChart = memo(FlowLimitationChartComponent);

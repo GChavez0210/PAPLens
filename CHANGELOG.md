@@ -6,9 +6,44 @@ All notable changes to this project are documented in this file.
 
 ### Added
 
+- **Renderer Resilience:** Added an Error Boundary around dashboard, session, insights, and modal regions so a render-time chart or page failure no longer blanks the entire app shell.
+- **Insights Lazy Loading:** The Insights page is now loaded as a separate renderer chunk, reducing the initial dashboard bundle size.
+- **Development Checks:** Added `npm test`, `npm run check`, and `npm run audit` scripts. Node tests are discovered through `scripts/run-node-tests.js` for reliable cross-platform execution.
+- **Release CI Gates:** Release builds now run lint/tests and high-severity audit checks before packaging on Windows, macOS, and Linux.
+- **Repo Scripts:** Moved the report-template Handlebars smoke check into `scripts/sim_compile.js` and documented the scripts folder.
+- **Analytics test suite expanded:** Added `regression.test.js` (Pearson edge cases), `outliers.test.js` (short-history guard), `periodicBreathing.test.js` (gap-merge boundary conditions via `mergeEpisodes`), and `clinicalInsights.test.js` (leak basis thresholds and corrupted-percentile clamp). Extended `scores.test.js` with compliance-risk zero-usage and pressure-spread cases.
 - **Session Waveform Viewer — Event Overlay:** Flagged respiratory events (hypopnea, obstructive apnea, central apnea, RERA, leak) are now rendered as colour-coded scatter markers directly on the Pressure chart, pinned to the actual mask pressure value at each event's onset time. Tooltip shows event type and duration. The separate Flagged Events chart has been removed.
 - **Session Waveform Viewer — Layout:** Breathing Amplitude chart now spans the full grid width, matching Pressure and Flow Rate.
 - **PDF Report:** Expanded from two pages to three pages. Page 3 contains the flow limitation trend chart and the clinician interpretation panel (previously on page 2).
+
+### Changed
+
+- **Chart Rendering Efficiency:** Wrapped chart components in `React.memo`, stabilized dashboard chart datasets with `useMemo`, and updated `TrendChart` so Chart.js instances update in place instead of being destroyed and recreated on every parent render.
+- **Dashboard Range Filtering:** Dashboard stats are now sorted once per range calculation, then sliced or filtered from that sorted array.
+- **Insights Efficiency:** Memoized derived Insights arrays and display booleans, hoisted the nested stat card component, and guarded asynchronous Insights IPC responses so stale range loads cannot overwrite newer data.
+- **Lint Coverage:** Enabled selected React lint rules for display names and unstable nested components while keeping the existing React Hooks rules active.
+- **Dependency Hygiene:** Updated `concurrently` to clear the critical `shell-quote` audit advisory.
+- **Release Workflow Hygiene:** Removed unnecessary `GH_TOKEN` exposure from build jobs that only package artifacts.
+
+### Fixed
+
+- **DATA-1 — Stability score history argument:** `computeTherapyStabilityScore` was called with a second `history30` argument at both call sites (`orchestrator.js`, `ipcRouter.js`) even though the function only accepts one parameter; the history data was silently dropped. Removed the spurious argument from both call sites.
+
+- **DATA-2 — Compliance risk ignored skipped nights:** `computeComplianceRisk` was filtering out zero-usage nights before computing the 7/14-day window, so a patient using the device 2 of 14 nights could appear low-risk. Zero-usage nights are now kept as `0` (the array is filtered only when entirely empty).
+
+- **DATA-3 — Spurious correlations at n < 3:** `pearsonR` returned ±1 for n = 2 (always mathematically true, clinically meaningless) and did not guard against zero-variance inputs. It now returns `null` for n < 3 or zero-variance cases. `correlations.js` skips any result where `r` is `null`, and the minimum-pairs threshold was raised from 2 to 3.
+
+- **DATA-6 — False outlier flags on first nights:** `detectOutliers` produced inflated z-scores on early nights because `std()` returned 0 for short history and division by a near-zero epsilon clamp was used as a workaround. The function now returns empty results when valid history contains fewer than 3 nights. `zScore()` in `rolling.js` returns `null` instead of clamping, and callers skip null z-scores.
+
+- **DATA-7 — Periodic-breathing episode boundary off-by-one:** The episode merge loop tracked a `gapRun` counter and computed `epEnd = i - gapRun`, placing the boundary inside the trailing gap. This inflated episode duration and allowed sub-threshold runs to pass the minimum-length check. The merge logic now tracks `lastFlagged` so boundaries always land on the last flagged sample. The merge logic was extracted into a standalone `mergeEpisodes()` function.
+
+- **DATA-8 — Misleading `pressureSd` variable name:** Renamed `pressureSd` → `pressureSpread` in `computeTherapyStabilityScore` to accurately reflect that the metric is a p95 − median percentile spread (≈ 1.35σ), not a standard deviation. Added a clarifying comment noting that penalty thresholds are calibrated for spread scale, not σ.
+
+- **DATA-9 — Leak severity under-flagged when only median is available:** `classifyLeakSeverity` always applied p95-calibrated thresholds (> 24 / > 12 / > 5 L/min) even when the orchestrator's fallback chain had substituted `leak_p50`, under-flagging severity by roughly 2×. The function now accepts a `{ basis }` option; `basis: "p50"` applies halved thresholds (> 12 / > 6 / > 2.5 L/min). The orchestrator detects which field it is passing and sets the basis. Corrupted percentile order (p95 < p50) is also clamped.
+
+- **Last-Night Score Details:** The IPC route that fetches last-night details now passes the retrieved 30-night history into `computeTherapyStabilityScore`, matching the intended scoring call shape.
+- **Session Graphs Cleanup:** Removed the unused `EventsChart` helper after event markers moved onto the Pressure chart.
+- **Audit Gate:** `npm run audit` now passes with zero reported vulnerabilities.
 
 ## [1.5.0] - 2026-05-19
 

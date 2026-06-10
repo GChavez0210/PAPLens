@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TrendChart } from "./charts/TrendChart";
 import { LastNightSidebar } from "./components/LastNightSidebar";
-import { Insights } from "./pages/Insights";
 import { ProfileSelector } from "./components/ProfileSelector";
 import { ClinicalSummaryCard } from "./components/ClinicalSummaryCard";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SessionGraphsModal } from "./components/SessionGraphsModal";
 import { SleepCalendar } from "./components/SleepCalendar";
 import { buildClinicalContext, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
@@ -11,6 +11,7 @@ import { formatMetricValue, toMetricNumber } from "./utils/therapyMetrics";
 
 const RANGE_OPTIONS = ["7", "14", "30", "60", "90", "180", "365", "all", "custom"];
 const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN = /(airsense|aircurve|lumis|airmini)/i;
+const Insights = lazy(() => import("./pages/Insights").then((module) => ({ default: module.Insights })));
 
 function severity(metric, value) {
   if (metric === "ahi") {
@@ -229,25 +230,22 @@ export function App() {
 
   const filteredStats = useMemo(() => {
     if (!stats.length) return [];
+    const sortedStats = [...stats].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     if (range === "all") {
-      return [...stats].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      return sortedStats;
     }
     if (range === "custom") {
-      if (!customFrom || !customTo) return stats;
+      if (!customFrom || !customTo) return sortedStats;
       const from = new Date(customFrom).getTime();
       const to = new Date(customTo).getTime();
-      return [...stats]
-        .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-        .filter((d) => {
+      return sortedStats.filter((d) => {
           const t = new Date(d.date).getTime();
           return t >= from && t <= to;
         });
     }
     const days = parseInt(range, 10);
-    if (Number.isNaN(days)) return stats;
-    return [...stats]
-      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      .slice(-days);
+    if (Number.isNaN(days)) return sortedStats;
+    return sortedStats.slice(-days);
   }, [stats, range, customFrom, customTo]);
 
   const analyzedStats = useMemo(() => filterAnalyzedDays(filteredStats), [filteredStats]);
@@ -286,6 +284,51 @@ export function App() {
       leakThreshold: Array(n).fill(24),
     };
   }, [filteredStats]);
+
+  const overviewChartDatasets = useMemo(() => ({
+    ahi: [
+      { label: "Total AHI", data: trendsData.ahi, borderColor: "#ef4444", fill: true, backgroundColor: "rgba(239,68,68,0.18)" },
+      { label: "Central (CAI)", data: trendsData.cai, borderColor: "#f59e0b" },
+      { label: "Obstructive (OAI/AI)", data: trendsData.ai, borderColor: "#3b82f6" },
+      { label: "Hypopnea (HI)", data: trendsData.hi, borderColor: "#8b5cf6" },
+      { label: "7-Day Avg", data: trendsData.rolling7Ahi, borderColor: "#22d3ee", borderWidth: 2, borderDash: [4, 4], pointRadius: 0 },
+      { label: "AHI = 5 Threshold", data: trendsData.ahiThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
+    ],
+    leak: [
+      { label: "Maximum Leak (95th)", data: trendsData.leak95, borderColor: "#ef4444", borderDash: [5, 5] },
+      { label: "Median Leak", data: trendsData.leak50, borderColor: "#3b82f6", fill: true, backgroundColor: "rgba(59,130,246,0.25)" },
+      { label: "24 L/min Critical Limit", data: trendsData.leakThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
+    ],
+    pressure: [
+      { label: "95th Percentile", data: trendsData.maxPressure, borderColor: "#f59e0b" },
+      { label: "Median Delivery", data: trendsData.pressure, borderColor: "#10b981", fill: true, backgroundColor: "rgba(16,185,129,0.2)" },
+      { label: "Variability Index (P95-P50)", data: trendsData.pressureVarIndex, borderColor: "#8b5cf6", borderDash: [3, 3], pointRadius: 0 },
+    ],
+    flow: [
+      { label: "Min Vent 95%", data: trendsData.minVent95, borderColor: "#8b5cf6", tension: 0.3 },
+      { label: "Min Vent 50%", data: trendsData.minVent50, borderColor: "#3b82f6", tension: 0.3 },
+      { label: "Resp Rate", data: trendsData.respRate, borderColor: "#f59e0b", yAxisID: "y1" }
+    ],
+    tidal: [
+      { label: "Upper Bound (95%)", data: trendsData.tidVol95, borderColor: "#f59e0b", borderDash: [5, 5] },
+      { label: "Median Efficacy", data: trendsData.tidVol50, borderColor: "#8b5cf6", fill: true, backgroundColor: "rgba(139, 92, 246, 0.1)" }
+    ],
+    usage: [
+      {
+        label: "Duration",
+        data: trendsData.usage,
+        borderColor: "#10b981",
+        fill: true,
+        backgroundColor: "rgba(16, 185, 129, 0.15)"
+      }
+    ],
+    oximetry: [
+      { label: "SpO2 %", data: trendsData.spo2, borderColor: "#3b82f6" },
+      { label: "Pulse", data: trendsData.pulse, borderColor: "#ef4444", yAxisID: "y1" }
+    ]
+  }), [trendsData]);
+
+  const hasOximetryTrend = useMemo(() => trendsData.spo2.some((v) => v > 0), [trendsData.spo2]);
 
   const chooseFolder = async () => {
     setIsDataLoading(true);
@@ -721,6 +764,7 @@ export function App() {
         </aside>
 
         <section className="main-content">
+          <ErrorBoundary>
           <div style={{ display: activeTab === "overview" ? "block" : "none" }}>
             <section style={{ margin: 0 }}>
                 {/* RANGE CONTROLS ROW */}
@@ -809,14 +853,7 @@ export function App() {
                     reportKey="ahi"
                     title="AHI (Events/hr)"
                     labels={trendsData.labels}
-                    datasets={[
-                      { label: "Total AHI", data: trendsData.ahi, borderColor: "#ef4444", fill: true, backgroundColor: "rgba(239,68,68,0.18)" },
-                      { label: "Central (CAI)", data: trendsData.cai, borderColor: "#f59e0b" },
-                      { label: "Obstructive (OAI/AI)", data: trendsData.ai, borderColor: "#3b82f6" },
-                      { label: "Hypopnea (HI)", data: trendsData.hi, borderColor: "#8b5cf6" },
-                      { label: "7-Day Avg", data: trendsData.rolling7Ahi, borderColor: "#22d3ee", borderWidth: 2, borderDash: [4, 4], pointRadius: 0 },
-                      { label: "AHI = 5 Threshold", data: trendsData.ahiThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
-                    ]}
+                    datasets={overviewChartDatasets.ahi}
                   />
                   )}
 
@@ -825,11 +862,7 @@ export function App() {
                     reportKey="leak"
                     title="Leak (L/min) & Percentiles"
                     labels={trendsData.labels}
-                    datasets={[
-                      { label: "Maximum Leak (95th)", data: trendsData.leak95, borderColor: "#ef4444", borderDash: [5, 5] },
-                      { label: "Median Leak", data: trendsData.leak50, borderColor: "#3b82f6", fill: true, backgroundColor: "rgba(59,130,246,0.25)" },
-                      { label: "24 L/min Critical Limit", data: trendsData.leakThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
-                    ]}
+                    datasets={overviewChartDatasets.leak}
                   />
                   )}
 
@@ -837,11 +870,7 @@ export function App() {
                     reportKey="pressure"
                     title="Pressure Therapy Dynamics"
                     labels={trendsData.labels}
-                    datasets={[
-                      { label: "95th Percentile", data: trendsData.maxPressure, borderColor: "#f59e0b" },
-                      { label: "Median Delivery", data: trendsData.pressure, borderColor: "#10b981", fill: true, backgroundColor: "rgba(16,185,129,0.2)" },
-                      { label: "Variability Index (P95−P50)", data: trendsData.pressureVarIndex, borderColor: "#8b5cf6", borderDash: [3, 3], pointRadius: 0 },
-                    ]}
+                    datasets={overviewChartDatasets.pressure}
                   />
 
                   {supportsVentilation && (
@@ -849,11 +878,7 @@ export function App() {
                     reportKey="flow"
                     title="Respiratory Flow Limitations"
                     labels={trendsData.labels}
-                    datasets={[
-                      { label: "Min Vent 95%", data: trendsData.minVent95, borderColor: "#8b5cf6", tension: 0.3 },
-                      { label: "Min Vent 50%", data: trendsData.minVent50, borderColor: "#3b82f6", tension: 0.3 },
-                      { label: "Resp Rate", data: trendsData.respRate, borderColor: "#f59e0b", yAxisID: "y1" }
-                    ]}
+                    datasets={overviewChartDatasets.flow}
                   />
                   )}
 
@@ -862,10 +887,7 @@ export function App() {
                     reportKey="tidal"
                     title="Tidal Volume Variances"
                     labels={trendsData.labels}
-                    datasets={[
-                      { label: "Upper Bound (95%)", data: trendsData.tidVol95, borderColor: "#f59e0b", borderDash: [5, 5] },
-                      { label: "Median Efficacy", data: trendsData.tidVol50, borderColor: "#8b5cf6", fill: true, backgroundColor: "rgba(139, 92, 246, 0.1)" }
-                    ]}
+                    datasets={overviewChartDatasets.tidal}
                   />
                   )}
 
@@ -874,27 +896,16 @@ export function App() {
                     reportKey="usage"
                     title="Compliance Usage Hours"
                     labels={trendsData.labels}
-                    datasets={[
-                      {
-                        label: "Duration",
-                        data: trendsData.usage,
-                        borderColor: "#10b981",
-                        fill: true,
-                        backgroundColor: "rgba(16, 185, 129, 0.15)"
-                      }
-                    ]}
+                    datasets={overviewChartDatasets.usage}
                   />
 
-                  {supportsOximetry && trendsData.spo2.some((v) => v > 0) && (
+                  {supportsOximetry && hasOximetryTrend && (
                     <TrendChart
                       theme={theme}
                       reportKey="oximetry"
                       title="Oximetry Validation"
                       labels={trendsData.labels}
-                      datasets={[
-                        { label: "SpO2 %", data: trendsData.spo2, borderColor: "#3b82f6" },
-                        { label: "Pulse", data: trendsData.pulse, borderColor: "#ef4444", yAxisID: "y1" }
-                      ]}
+                      datasets={overviewChartDatasets.oximetry}
                     />
                   )}
                 </div>
@@ -908,8 +919,10 @@ export function App() {
                 PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
               </div>
           </div>
+          </ErrorBoundary>
 
           {activeTab === "sessions" && (
+            <ErrorBoundary>
             <section className="panel flex-split" style={{ margin: 0 }}>
               <div className="split-left">
                 <div className="control-row">
@@ -1010,17 +1023,21 @@ export function App() {
                 PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
               </div>
             </section>
+            </ErrorBoundary>
           )}
 
           {isSessionModalOpen && (
+            <ErrorBoundary>
             <SessionGraphsModal
               sessions={modalSessions}
               theme={theme}
               onClose={() => setIsSessionModalOpen(false)}
             />
+            </ErrorBoundary>
           )}
 
           {activeTab === "insights" && (
+            <ErrorBoundary>
             <section style={{ margin: 0, display: "flex", flexDirection: "column", gap: 20 }}>
               {/* RANGE CONTROLS ROW */}
               <div className="control-row" style={{ marginBottom: 0 }}>
@@ -1042,11 +1059,14 @@ export function App() {
                   )}
                 </div>
               </div>
-              <Insights range={range} customFrom={customFrom} customTo={customTo} />
+              <Suspense fallback={<div className="loading">Loading...</div>}>
+                <Insights range={range} customFrom={customFrom} customTo={customTo} />
+              </Suspense>
               <div style={{ textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 }}>
                 PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
               </div>
             </section>
+            </ErrorBoundary>
           )}
         </section>
       </div>
@@ -1107,5 +1127,3 @@ export function App() {
     </main>
   );
 }
-
-

@@ -12,11 +12,12 @@ function analyzeCorrelations(metricsList) {
             .filter(m => m[keyX] !== undefined && m[keyX] !== null && m[keyY] !== undefined && m[keyY] !== null)
             .map(m => [m[keyX], m[keyY]]);
 
-        if (pairs.length < 2) return;
+        if (pairs.length < 3) return;
 
         const xVals = pairs.map(p => p[0]);
         const yVals = pairs.map(p => p[1]);
         const r = pearsonR(xVals, yVals);
+        if (r === null) return;
 
         const absR = Math.abs(r);
         let label = "weak";
@@ -49,16 +50,18 @@ function analyzeCorrelations(metricsList) {
                 lagPairs.push([pressureN, ahiNext]);
             }
         }
-        if (lagPairs.length >= 2) {
+        if (lagPairs.length >= 3) {
             const xVals = lagPairs.map(p => p[0]);
             const yVals = lagPairs.map(p => p[1]);
             const r = pearsonR(xVals, yVals);
-            const absR = Math.abs(r);
-            let label = "weak";
-            if (absR >= 0.6) label = "strong";
-            else if (absR >= 0.4) label = "moderate";
-            else if (absR >= 0.2) label = "mild";
-            results.push({ x: "Pressure (N)", y: "AHI (N+1)", r, n: lagPairs.length, label, lag: 1 });
+            if (r !== null) {
+                const absR = Math.abs(r);
+                let label = "weak";
+                if (absR >= 0.6) label = "strong";
+                else if (absR >= 0.4) label = "moderate";
+                else if (absR >= 0.2) label = "mild";
+                results.push({ x: "Pressure (N)", y: "AHI (N+1)", r, n: lagPairs.length, label, lag: 1 });
+            }
         }
     }
 

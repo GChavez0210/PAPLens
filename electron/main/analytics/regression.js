@@ -21,9 +21,11 @@ function regressionSlope(yValues) {
     return cov / var_t;
 }
 
+const PEARSON_EPSILON = 1e-10;
+
 function pearsonR(xValues, yValues) {
     const n = xValues.length;
-    if (n !== yValues.length || n <= 1) return 0;
+    if (n !== yValues.length || n < 3) return null;
 
     const mu_x = mean(xValues);
     const mu_y = mean(yValues);
@@ -41,7 +43,8 @@ function pearsonR(xValues, yValues) {
     }
 
     const denominator = Math.sqrt(var_x * var_y);
-    return denominator === 0 ? 0 : cov / denominator;
+    if (denominator < PEARSON_EPSILON) return null;
+    return cov / denominator;
 }
 
 module.exports = { regressionSlope, pearsonR };
