@@ -13,6 +13,10 @@ class AppDatabase {
     this.dbPath = path.join(dataPath, "app_meta.db");
     this.db = new Database(this.dbPath);
     this.db.pragma('foreign_keys = ON');
+    // WAL keeps readers unblocked during imports; NORMAL sync is durable enough
+    // for WAL mode and roughly halves bulk-insert time on spinning disks.
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = NORMAL');
     this.init();
   }
 
@@ -99,6 +103,11 @@ class ProfileDatabase {
     this.dbPath = path.join(profilesPath, "paplens.db");
     this.db = new Database(this.dbPath);
     this.db.pragma('foreign_keys = ON');
+    // WAL keeps readers unblocked during imports; NORMAL sync is durable enough
+    // for WAL mode. Profile deletion removes the whole profile directory, so the
+    // -wal/-shm sidecar files are cleaned up with the database.
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = NORMAL');
     this.init();
   }
 
