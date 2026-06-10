@@ -328,6 +328,12 @@ npm run check
 
 `tsconfig.json` is kept as a no-emit JavaScript type-checking and IDE configuration for `src/`. Report template binding smoke checks live in `scripts/sim_compile.js`.
 
+### Development notes
+
+- `tsconfig.json` exists for IDE IntelliSense only — `checkJs` is not enforced during normal development. `npm run test-types` is available for an explicit type-checking pass, but it is intentionally not included in `npm run check`.
+- Unit tests live next to their source files under `electron/main/**` (e.g. `electron/main/services/*.test.js`) and are run with `npm test`.
+- There are no renderer unit tests; use `npm run lint` and `npx vite build` to validate renderer changes.
+
 ## PDF report generation
 
 PDF reports are generated in Electron main process using Handlebars + `report.html`, then rendered to PDF via `printToPDF`.

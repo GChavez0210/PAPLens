@@ -111,6 +111,7 @@ export function getMaskFitTier(score) {
 export function computeScores(filteredStats) {
     const analyzedDays = filterAnalyzedDays(filteredStats);
     if (analyzedDays.length === 0) {
+        console.warn("computeScores: no analyzed days — returning null (report summaryScores section will be omitted)");
         return null;
     }
 
@@ -143,6 +144,7 @@ export function computeScores(filteredStats) {
     }
 
     if (res.stabilityScore === undefined && res.maskFitScore === null) {
+        console.warn("computeScores: no stability or maskFit score available — returning null");
         return null;
     }
 

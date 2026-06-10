@@ -114,29 +114,51 @@ function AppIcon({ type = "default", color = "var(--muted)", size = 18 }) {
     return <svg {...common}><path d="M4 19h16" /><path d="M6 15l4-4 3 3 5-6" /></svg>;
 }
 
-function CorrelationBar({ r, pair, label }) {
+function CorrelationBar({ r, rho, significant, n, pair, label }) {
     const [hovered, setHovered] = useState(false);
-    const pct = Math.abs(r) * 100;
-    const color = r > 0.4 ? "#22D3EE" : r < -0.4 ? "#ef4444" : "var(--muted)";
-    const positive = r >= 0;
+    // Prefer rho (Spearman) when available; fall back to Pearson r
+    const displayCoeff = rho != null ? rho : r;
+    const coeffLabel = rho != null ? "ρ" : "r";
+    const pct = Math.abs(displayCoeff) * 100;
+    const isNotSignificant = significant === false;
+    const color = isNotSignificant
+        ? "var(--muted)"
+        : displayCoeff > 0.4 ? "#22D3EE" : displayCoeff < -0.4 ? "#ef4444" : "var(--muted)";
+    const positive = displayCoeff >= 0;
     const tooltipText = getCorrelationInsight(pair, r);
-    const absR = Math.abs(r);
-    const strength = absR >= 0.60 ? { label: "Strong", color: "#22D3EE" }
-        : absR >= 0.40 ? { label: "Moderate", color: "#f59e0b" }
-            : absR >= 0.20 ? { label: "Mild", color: "#9ca3af" }
+    const absCoeff = Math.abs(displayCoeff);
+    const strength = absCoeff >= 0.60 ? { label: "Strong", color: "#22D3EE" }
+        : absCoeff >= 0.40 ? { label: "Moderate", color: "#f59e0b" }
+            : absCoeff >= 0.20 ? { label: "Mild", color: "#9ca3af" }
                 : { label: "Negligible", color: "#4b5563" };
+
+    const rowStyle = isNotSignificant
+        ? { background: "var(--bg)", borderRadius: "8px", padding: "14px 16px", position: 'relative', cursor: 'help', opacity: 0.55 }
+        : { background: "var(--bg)", borderRadius: "8px", padding: "14px 16px", position: 'relative', cursor: 'help' };
 
     return (
         <div
-            style={{ background: "var(--bg)", borderRadius: "8px", padding: "14px 16px", position: 'relative', cursor: 'help' }}
+            style={rowStyle}
             onMouseEnter={() => setHovered(true)}
             onMouseLeave={() => setHovered(false)}
         >
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>{pair}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>{pair}</span>
+                    {n != null && (
+                        <span style={{ fontSize: '0.65rem', color: 'var(--muted)' }}>n={n}</span>
+                    )}
+                </div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.65rem', fontWeight: 600, color: strength.color, background: `${strength.color}20`, borderRadius: 4, padding: '2px 6px' }}>{strength.label}</span>
-                    <span style={{ color, fontWeight: 700, fontSize: "0.85rem" }}>r = {Number(r).toFixed(2)}</span>
+                    {isNotSignificant && (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#6b7280', background: 'rgba(107,114,128,0.15)', borderRadius: 4, padding: '2px 6px' }}>
+                            not significant
+                        </span>
+                    )}
+                    {!isNotSignificant && (
+                        <span style={{ fontSize: '0.65rem', fontWeight: 600, color: strength.color, background: `${strength.color}20`, borderRadius: 4, padding: '2px 6px' }}>{strength.label}</span>
+                    )}
+                    <span style={{ color, fontWeight: 700, fontSize: "0.85rem" }}>{coeffLabel} = {Number(displayCoeff).toFixed(2)}</span>
                 </div>
             </div>
             <div style={{ background: "var(--card-inner)", borderRadius: 4, height: 6, position: "relative" }}>
@@ -156,7 +178,7 @@ function CorrelationBar({ r, pair, label }) {
                 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
                         <span style={{ fontWeight: 700, color: '#22D3EE', fontSize: '0.8rem' }}>Clinical Interpretation</span>
-                        <span style={{ fontSize: '0.65rem', color: 'var(--text)', fontWeight: 700 }}>r = {Number(r).toFixed(2)} — {strength.label}</span>
+                        <span style={{ fontSize: '0.65rem', color: 'var(--text)', fontWeight: 700 }}>{coeffLabel} = {Number(displayCoeff).toFixed(2)} — {strength.label}</span>
                     </div>
                     {tooltipText}
                 </div>
@@ -614,7 +636,16 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                 {correlations && correlations.length > 0 ? (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                         {correlations.map((c) => (
-                            <CorrelationBar key={`${c.x}-${c.y}`} pair={`${c.x} ↔ ${c.y}`} r={c.r} label={c.label} />
+                            <CorrelationBar
+                                key={`${c.x}-${c.y}`}
+                                pair={`${c.x} ↔ ${c.y}`}
+                                r={c.r}
+                                rho={c.rho}
+                                pValue={c.pValue}
+                                significant={c.significant}
+                                n={c.n}
+                                label={c.label}
+                            />
                         ))}
                     </div>
                 ) : (

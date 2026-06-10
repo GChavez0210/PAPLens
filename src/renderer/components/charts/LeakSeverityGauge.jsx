@@ -48,7 +48,7 @@ function LeakSeverityGaugeComponent({ leak50, leak95, height = 150 }) {
                         N/A
                     </div>
                 ) : (
-                    <canvas ref={ref} />
+                    <canvas ref={ref} role="img" aria-label={`Mask Leak Severity Gauge — median ${leak50Value.toFixed(1)} L/min, 95th percentile ${leak95Value !== null ? leak95Value.toFixed(1) : 'N/A'} L/min`} />
                 )}
             </div>
             <div style={{ position: "absolute", top: "70%", left: "50%", transform: "translate(-50%, -50%)" }}>

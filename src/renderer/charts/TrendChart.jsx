@@ -1,9 +1,11 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
+import { useTheme } from "../ThemeContext";
 
 Chart.register(...registerables);
 
-function TrendChartComponent({ title, labels, datasets, type = "line", options = {}, theme = "dark", reportKey }) {
+function TrendChartComponent({ title, labels, datasets, type = "line", options = {}, reportKey }) {
+  const theme = useTheme();
   const [isExpanded, setIsExpanded] = useState(false);
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
@@ -109,14 +111,22 @@ function TrendChartComponent({ title, labels, datasets, type = "line", options =
       <div
         className={`chart-card ${isExpanded ? "expanded" : ""}`}
         data-report-key={reportKey || undefined}
+        role="button"
+        tabIndex={0}
         onClick={() => {
           if (!isExpanded) setIsExpanded(true);
+        }}
+        onKeyDown={(e) => {
+          if (!isExpanded && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            setIsExpanded(true);
+          }
         }}
         title={isExpanded ? "Click outside chart to minimize" : "Click to expand"}
       >
         <h3 onClick={(e) => isExpanded && e.stopPropagation()}>{title}</h3>
         <div className="canvas-container" onClick={(e) => isExpanded && e.stopPropagation()}>
-          <canvas ref={canvasRef} />
+          <canvas ref={canvasRef} role="img" aria-label={title} />
         </div>
       </div>
     </>

@@ -27,8 +27,8 @@ function PeriodicBreathingCardComponent({ trends }) {
 
     const significantNights = nights.filter(r => r.pb_is_significant === 1);
     const anySignificant = significantNights.length > 0;
-    const confoundedNights = nights.filter(r => r.pb_leak_confounded === 1);
-    const majorityConfounded = confoundedNights.length > significantNights.length / 2;
+    const confoundedSignificant = significantNights.filter(r => r.pb_leak_confounded === 1);
+    const majorityConfounded = significantNights.length > 0 && confoundedSignificant.length > significantNights.length / 2;
     const avgPbPct = nights.reduce((sum, r) => sum + (r.pb_pct ?? 0), 0) / nights.length;
     const totalEpisodes = nights.reduce((sum, r) => sum + (r.pb_episode_count ?? 0), 0);
     const totalPBSec = nights.reduce((sum, r) => sum + (r.pb_total_seconds ?? 0), 0);

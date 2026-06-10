@@ -103,7 +103,7 @@ function FlowLimitationChartComponent({ trends, height = 200 }) {
     if (nights.length === 0) return null;
     return (
         <div style={{ position: "relative", width: "100%", height: `${height}px` }}>
-            <canvas ref={ref} />
+            <canvas ref={ref} role="img" aria-label="Flow Limitation & Respiratory Disturbance — Flow Limitation P95 and RIN trend over time" />
         </div>
     );
 }
