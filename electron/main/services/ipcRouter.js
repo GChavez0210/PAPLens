@@ -8,6 +8,17 @@ const { buildLeakAndTidalSummary, toOptionalNumber } = require("./therapyMetrics
 const { computeTherapyStabilityScore } = require("../analytics/scores");
 const { detectDataFolder } = require("../loaders/loader-registry");
 
+function isValidFolderPath(folderPath) {
+    if (typeof folderPath !== "string") return false;
+    const normalizedPath = path.normalize(folderPath);
+    if (!path.isAbsolute(normalizedPath)) return false;
+    try {
+        return fs.statSync(normalizedPath).isDirectory();
+    } catch {
+        return false;
+    }
+}
+
 class IpcRouter {
     constructor(appContainer) {
         this.appContainer = appContainer;
@@ -45,10 +56,14 @@ class IpcRouter {
         });
 
         ipcMain.handle("cpap:load-data-folder", async (_event, folderPath) => {
-            if (!folderPath || !detectDataFolder(folderPath)) {
+            if (!isValidFolderPath(folderPath)) {
+                return { success: false, error: "Invalid folder path" };
+            }
+            const normalizedPath = path.normalize(folderPath);
+            if (!detectDataFolder(normalizedPath)) {
                 return { success: false, error: "Invalid CPAP folder path" };
             }
-            const summary = await this.cpap.loadDataFromPath(folderPath);
+            const summary = await this.cpap.loadDataFromPath(normalizedPath);
             if (!summary || summary.error) {
                 return { success: false, error: summary?.error || "No active profile selected." };
             }
@@ -418,4 +433,4 @@ function formatReportMetric(value, digits = 1) {
     return numeric === null ? "N/A" : numeric.toFixed(digits);
 }
 
-module.exports = { IpcRouter };
+module.exports = { IpcRouter, isValidFolderPath };

@@ -1,4 +1,4 @@
-# PAPLens (v1.5.0)
+# PAPLens (v1.7.0)
 
 <p align="center">
   <img src="PAPLens-logo.png" alt="PAPLens Logo" width="250">

@@ -7,7 +7,7 @@ import { ClinicalSummaryCard } from "./components/ClinicalSummaryCard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SessionGraphsModal } from "./components/SessionGraphsModal";
 import { SleepCalendar } from "./components/SleepCalendar";
-import { buildClinicalContext, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
+import { buildClinicalContext, buildReportProfile, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
 import { formatMetricValue, toMetricNumber } from "./utils/therapyMetrics";
 import { downsampleIndices } from "./utils/downsample";
 import { AHI_MILD, AHI_MODERATE, LEAK_HIGH, LEAK_WARNING, USAGE_COMPLIANCE_HOURS, USAGE_WARNING_HOURS, SPO2_NORMAL, SPO2_WARNING } from "./constants";
@@ -501,11 +501,7 @@ export function App() {
         footerPage1: "Page 1 of 2",
         footerPage2: "Page 2 of 2"
       },
-      profile: {
-        name: activeProfile?.name || "Unknown",
-        age: activeProfile?.age || "",
-        notes: "Generated from PAPLens Desktop."
-      },
+      profile: buildReportProfile(activeProfile),
       device: {
         model: deviceInfo.productName || "Unknown",
         manufacturer: deviceInfo.manufacturer || "Unknown",

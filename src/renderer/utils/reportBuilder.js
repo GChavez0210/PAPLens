@@ -107,6 +107,15 @@ export function getMaskFitTier(score) {
     return { label: "Poor", class: "bad" };
 }
 
+export function buildReportProfile(profile, defaultNotes = "Generated from PAPLens Desktop.") {
+    // Report templates must use escaped {{ }} bindings, never triple-stash, for user-entered profile fields.
+    return {
+        name: String(profile?.name ?? "Unknown"),
+        age: String(profile?.age ?? ""),
+        notes: String(profile?.notes ?? defaultNotes)
+    };
+}
+
 // -- PDF Deterministic Scorer -------------------------------------------------
 export function computeScores(filteredStats) {
     const analyzedDays = filterAnalyzedDays(filteredStats);

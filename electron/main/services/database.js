@@ -2,6 +2,19 @@ const fs = require("fs");
 const path = require("path");
 const Database = require("better-sqlite3");
 
+const MIGRATION_IDENTIFIER = /^[a-z_][a-z0-9_]*$/i;
+const MIGRATION_COLUMN_TYPES = /^(REAL|INTEGER|TEXT)$/;
+
+function validateMigrationIdentifier(table, column, type) {
+  if (
+    !MIGRATION_IDENTIFIER.test(table) ||
+    !MIGRATION_IDENTIFIER.test(column) ||
+    !MIGRATION_COLUMN_TYPES.test(type)
+  ) {
+    throw new Error("Invalid migration identifier");
+  }
+}
+
 class AppDatabase {
   constructor(userDataPath) {
     this.userDataPath = userDataPath;
@@ -232,6 +245,7 @@ class ProfileDatabase {
     // Apply migrations for Phase 9 clinical additions securely
     const addColumnIfNotExists = (table, column, type) => {
       try {
+        validateMigrationIdentifier(table, column, type);
         const info = this.db.pragma(`table_info(${table})`);
         const hasColumn = info.some(col => col.name === column);
         if (!hasColumn) {
@@ -281,4 +295,4 @@ class ProfileDatabase {
   }
 }
 
-module.exports = { AppDatabase, ProfileDatabase };
+module.exports = { AppDatabase, ProfileDatabase, validateMigrationIdentifier };

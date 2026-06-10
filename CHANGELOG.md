@@ -36,6 +36,10 @@ All notable changes to this project are documented in this file.
 
 ### Fixed
 
+- **Security Hardening Wave 1:** Added defensive validation for SQLite migration identifiers, IPC-loaded data-folder paths, ZIP archive expansion limits, and EDF header bounds.
+- **Parser Safety Tests:** Added ZIP and EDF parser coverage for oversized declared output, entry-count and cumulative ZIP limits, impossible EDF signal counts, oversized samples, and truncated declared record data.
+- **Report Profile Escaping:** Report profile fields are now string-coerced before templating, with escaped Handlebars bindings retained for user-entered values.
+
 - **DATA-1 — Stability score history argument:** `computeTherapyStabilityScore` now accepts historical metrics and applies a bounded baseline penalty when at least seven prior therapy nights are available, so the previously ignored history argument now affects scoring.
 
 - **DATA-2 — Compliance risk ignored skipped nights:** `computeComplianceRisk` was filtering out zero-usage nights before computing the 7/14-day window, so a patient using the device 2 of 14 nights could appear low-risk. Zero-usage nights are now kept as `0` (the array is filtered only when entirely empty).

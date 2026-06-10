@@ -1,5 +1,9 @@
 const fs = require("fs");
 
+const MAX_SIGNALS = 256;
+const MAX_DATA_RECORDS = 2_000_000;
+const MAX_SAMPLES_PER_RECORD = 100_000;
+
 class EDFParser {
   constructor() {
     this.header = null;
@@ -15,6 +19,7 @@ class EDFParser {
   parseBuffer(buffer) {
     this.header = this.parseHeader(buffer);
     this.signals = this.parseSignalHeaders(buffer);
+    this.validateExpectedBufferSize(buffer);
     this.data = this.parseDataRecords(buffer);
     return {
       header: this.header,
@@ -24,12 +29,15 @@ class EDFParser {
   }
 
   parseHeader(buffer) {
+    if (buffer.length < 256) {
+      throw new Error("EDF header out of range");
+    }
     const getString = (start, length) =>
       buffer.slice(start, start + length).toString("ascii").trim();
     const getInt = (start, length) => parseInt(getString(start, length), 10) || 0;
     const getFloat = (start, length) => parseFloat(getString(start, length)) || 0;
 
-    return {
+    const header = {
       version: getString(0, 8),
       patientId: getString(8, 80),
       recordingId: getString(88, 80),
@@ -41,6 +49,17 @@ class EDFParser {
       dataRecordDuration: getFloat(244, 8),
       numSignals: getInt(252, 4)
     };
+    if (
+      header.numSignals < 1 ||
+      header.numSignals > MAX_SIGNALS ||
+      header.numDataRecords < 0 ||
+      header.numDataRecords > MAX_DATA_RECORDS ||
+      header.headerBytes !== 256 + header.numSignals * 256 ||
+      buffer.length < header.headerBytes
+    ) {
+      throw new Error("EDF header out of range");
+    }
+    return header;
   }
 
   parseSignalHeaders(buffer) {
@@ -83,9 +102,21 @@ class EDFParser {
         samplesPerRecord: parseInt(samplesPerRecord[i], 10) || 0,
         reserved: reserved[i]
       });
+      if (signals[i].samplesPerRecord < 0 || signals[i].samplesPerRecord > MAX_SAMPLES_PER_RECORD) {
+        throw new Error("EDF header out of range");
+      }
     }
 
     return signals;
+  }
+
+  validateExpectedBufferSize(buffer) {
+    const samplesPerRecord = this.signals.reduce((sum, signal) => sum + signal.samplesPerRecord, 0);
+    const recordBytes = samplesPerRecord * 2;
+    const expectedBytes = this.header.headerBytes + this.header.numDataRecords * recordBytes;
+    if (!Number.isSafeInteger(expectedBytes) || expectedBytes > buffer.length) {
+      throw new Error("EDF header out of range");
+    }
   }
 
   parseDataRecords(buffer) {

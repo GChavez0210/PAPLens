@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import Handlebars from "handlebars";
-import { computeScores } from "./reportBuilder";
+import { buildReportProfile, computeScores } from "./reportBuilder";
 
 test("computeScores returns null for empty report data", () => {
     const warn = console.warn;
@@ -40,4 +40,14 @@ test("report template escapes profile names", () => {
 
     assert.ok(html.includes("&lt;script&gt;alert(1)&lt;/script&gt;"));
     assert.equal(html.includes("<script>alert(1)</script>"), false);
+});
+
+test("buildReportProfile coerces user-entered fields to strings", () => {
+    const profile = buildReportProfile({ name: "<b>Ada</b>", age: 42, notes: null });
+
+    assert.deepEqual(profile, {
+        name: "<b>Ada</b>",
+        age: "42",
+        notes: "Generated from PAPLens Desktop."
+    });
 });

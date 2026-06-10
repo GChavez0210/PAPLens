@@ -19,6 +19,7 @@ Conventions:
 ## 1. Security
 
 ### SEC-1 (P0, S) — Harden `addColumnIfNotExists` migration helper against SQL injection
+**Status:** Done 2026-06-10.
 **File:** `electron/main/services/database.js:215-225`
 `table`, `column`, and `type` are interpolated directly into `pragma(\`table_info(${table})\`)`
 and `ALTER TABLE ${table} ADD COLUMN ${column} ${type}`. All current call sites
@@ -29,6 +30,7 @@ footgun if the helper is ever reused with dynamic input.
 Do not change any call sites; they all pass the validation.
 
 ### SEC-2 (P0, S) — Add uncompressed-size limits to the ZIP reader (zip-bomb defense)
+**Status:** Done 2026-06-10.
 **File:** `electron/main/parsers/zip-reader.js` (extraction path, ~lines 50-75)
 ZIP entries are inflated with no cap on declared uncompressed size or total entries. A
 crafted SD-card archive (10 MB → 100 GB) crashes the app.
@@ -48,6 +50,7 @@ CSP violations; adjust only the specific directive that breaks (Vite dev mode ma
 `'unsafe-inline'` for script in dev only — gate it via a template variable if so).
 
 ### SEC-4 (P1, S) — Validate `folderPath` in the `cpap:load-data-folder` IPC handler
+**Status:** Done 2026-06-10.
 **File:** `electron/main/services/ipcRouter.js:47-56`
 The renderer-supplied `folderPath` flows into filesystem operations with only an existence
 check. Defense in depth: reject malformed input at the boundary.
@@ -57,6 +60,7 @@ and `fs.statSync(folderPath).isDirectory()` (in try/catch). Mirror the validatio
 by the UUID checks in `app:delete-profile` (line ~352).
 
 ### SEC-5 (P1, S) — Bound EDF header integer fields against memory exhaustion
+**Status:** Done 2026-06-10.
 **File:** `electron/main/parsers/edf-parser.js:26-43`
 `numSignals`, `numDataRecords`, and per-signal `samplesPerRecord` come from the untrusted
 file and drive loop bounds / allocations with no sanity caps.
@@ -77,6 +81,7 @@ majors if behind (test `npm run dev` + a full import after bumping). Add
 before build steps.
 
 ### SEC-7 (P2, S) — Escape user-entered profile fields fed into the report template
+**Status:** Done 2026-06-10.
 **Files:** `src/renderer/utils/reportBuilder.js`, `report.html`
 Handlebars `{{ }}` auto-escapes, which is currently safe. Make this resilient to future
 template edits.
