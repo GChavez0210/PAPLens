@@ -19,6 +19,14 @@ function findTestFiles(dir) {
 
 const root = join(__dirname, "..");
 const testFiles = findTestFiles(join(root, "electron", "main"));
+
+// src/shared is CommonJS (consumed by both the CJS main process and the bundled
+// renderer), so its tests run directly under node --test like the main-process tests.
+const sharedTestRoot = join(root, "src", "shared");
+if (existsSync(sharedTestRoot)) {
+  testFiles.push(...findTestFiles(sharedTestRoot));
+}
+
 const rendererTestRoot = join(root, "src", "renderer");
 const rendererTestFiles = existsSync(rendererTestRoot) ? findTestFiles(rendererTestRoot) : [];
 

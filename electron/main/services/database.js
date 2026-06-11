@@ -174,6 +174,7 @@ class ProfileDatabase {
           patient_hours_cumulative REAL,
           spo2_avg REAL,
           pulse_avg REAL,
+          sample_counts TEXT,
           data_quality TEXT,
           FOREIGN KEY(night_id) REFERENCES nights(id) ON DELETE CASCADE
       );
@@ -270,6 +271,7 @@ class ProfileDatabase {
     addColumnIfNotExists('night_metrics', 'patient_hours_cumulative', 'REAL');
     addColumnIfNotExists('night_metrics', 'spo2_avg', 'REAL');
     addColumnIfNotExists('night_metrics', 'pulse_avg', 'REAL');
+    addColumnIfNotExists('night_metrics', 'sample_counts', 'TEXT');
     addColumnIfNotExists('night_metrics', 'flow_limitation_p95', 'REAL');
     addColumnIfNotExists('night_metrics', 'event_cluster_index_source', 'REAL');
     // Phase 10: richer clinical metrics

@@ -5,6 +5,7 @@
     <meta charset="utf-8" />
     <title>PAPLens - PAP Therapy Report</title>
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self';" />
     <style>
         @page {
             size: Letter;
@@ -534,7 +535,7 @@
 
         <div class="footer">
             <div>PAPLens — Printable therapy summary</div>
-            <div class="footer-page-num"></div>
+            <div>Page 1 of 3</div>
         </div>
     </section>
 
@@ -604,7 +605,7 @@
 
         <div class="footer">
             <div>PAPLens — Chart evidence for visit discussion</div>
-            <div class="footer-page-num"></div>
+            <div>Page 2 of 3</div>
         </div>
     </section>
 
@@ -672,21 +673,9 @@
 
         <div class="footer">
             <div>PAPLens — Supplementary signals &amp; correlations</div>
-            <div class="footer-page-num"></div>
+            <div>Page 3 of 3</div>
         </div>
     </section>
-
-    <script>
-        // Auto-number all footer page indicators once the DOM is ready
-        (function () {
-            var pages = document.querySelectorAll('.page');
-            var total = pages.length;
-            var nums = document.querySelectorAll('.footer-page-num');
-            for (var i = 0; i < nums.length; i++) {
-                nums[i].textContent = 'Page ' + (i + 1) + ' of ' + total;
-            }
-        })();
-    </script>
 
 </body>
 

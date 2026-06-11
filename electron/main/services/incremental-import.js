@@ -23,12 +23,13 @@ class IncrementalImporter {
                    m.snore_index, m.leak_spike_count, m.pressure_histogram,
                    m.pressure_efficiency, m.event_cluster_index_source,
                    m.pb_episode_count, m.pb_total_seconds, m.pb_pct,
-                   m.pb_avg_cycle_sec, m.pb_is_significant, m.pb_leak_confounded
+                   m.pb_avg_cycle_sec, m.pb_is_significant, m.pb_leak_confounded,
+                   m.sample_counts
             FROM nights n
             JOIN night_metrics m ON m.night_id = n.id
-            WHERE m.leak_p95 IS NOT NULL
+            WHERE (m.leak_p95 IS NOT NULL OR m.sample_counts IS NOT NULL)
               AND m.tidal_vol_p50 IS NOT NULL
-              AND m.flow_limitation_p95 IS NOT NULL
+              AND (m.flow_limitation_p95 IS NOT NULL OR m.sample_counts IS NOT NULL)
         `).all();
 
         // Load stored mtimes for this data folder
@@ -78,6 +79,7 @@ class IncrementalImporter {
             pressureHistogram: r.pressure_histogram ? JSON.parse(r.pressure_histogram) : null,
             pressureEfficiency: r.pressure_efficiency,
             eventClusterIndexSource: r.event_cluster_index_source,
+            sampleCounts: r.sample_counts ? JSON.parse(r.sample_counts) : null,
             spo2Avg: r.spo2_avg, pulseAvg: r.pulse_avg,
             periodicBreathing: (r.pb_episode_count != null) ? {
                 episodeCount: r.pb_episode_count, totalPBSeconds: r.pb_total_seconds,
@@ -114,6 +116,7 @@ class IncrementalImporter {
           minute_vent_p50, minute_vent_p95, resp_rate_p50, resp_rate_p95, flow_limitation_p95, event_cluster_index_source,
           tidal_vol_p50, tidal_vol_p95, duration_minutes, on_duration_minutes,
           patient_hours_cumulative, spo2_avg, pulse_avg, data_quality,
+          sample_counts,
           rin_per_hr, csr_per_hr, snore_index, leak_spike_count, pressure_histogram, pressure_efficiency,
           pb_episode_count, pb_total_seconds, pb_pct, pb_avg_cycle_sec, pb_is_significant, pb_leak_confounded
         ) VALUES (
@@ -123,6 +126,7 @@ class IncrementalImporter {
           @minute_vent_p50, @minute_vent_p95, @resp_rate_p50, @resp_rate_p95, @flow_limitation_p95, @event_cluster_index_source,
           @tidal_vol_p50, @tidal_vol_p95, @duration_minutes, @on_duration_minutes,
           @patient_hours_cumulative, @spo2_avg, @pulse_avg, @data_quality,
+          @sample_counts,
           @rin_per_hr, @csr_per_hr, @snore_index, @leak_spike_count, @pressure_histogram, @pressure_efficiency,
           @pb_episode_count, @pb_total_seconds, @pb_pct, @pb_avg_cycle_sec, @pb_is_significant, @pb_leak_confounded
         )
@@ -151,6 +155,7 @@ class IncrementalImporter {
           spo2_avg = excluded.spo2_avg,
           pulse_avg = excluded.pulse_avg,
           data_quality = excluded.data_quality,
+          sample_counts = excluded.sample_counts,
           rin_per_hr = excluded.rin_per_hr,
           csr_per_hr = excluded.csr_per_hr,
           snore_index = excluded.snore_index,
@@ -227,6 +232,7 @@ class IncrementalImporter {
                     spo2_avg: toOptionalNumber(day.spo2Avg),
                     pulse_avg: toOptionalNumber(day.pulseAvg),
                     data_quality: JSON.stringify(dq),
+                    sample_counts: day.sampleCounts ? JSON.stringify(day.sampleCounts) : null,
                     rin_per_hr: toOptionalNumber(day.rin),
                     csr_per_hr: toOptionalNumber(day.csr),
                     snore_index: toOptionalNumber(day.snoreIndex),

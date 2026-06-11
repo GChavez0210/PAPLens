@@ -114,6 +114,7 @@ export function App() {
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [dayStartHour, setDayStartHour] = useState(12);
+  const [sleepTimeZone, setSleepTimeZone] = useState(() => localStorage.getItem("paplens-sleep-timezone") || "");
   const [selectedDay, setSelectedDay] = useState(null);
   const [modalSessions, setModalSessions] = useState([]);
   const [isSessionModalOpen, setIsSessionModalOpen] = useState(false);
@@ -496,7 +497,7 @@ export function App() {
         windowDays: range === "all" ? 90 : range === "custom" ? 30 : parseInt(range, 10),
         startDate: range === "custom" ? customFrom : null,
         endDate: range === "custom" ? customTo : null,
-        sleepBoundaryLabel: `Noon-to-Noon (Start: ${dayStartHour}:00)`,
+        sleepBoundaryLabel: `Noon-to-Noon (Start: ${dayStartHour}:00${sleepTimeZone ? ` ${sleepTimeZone}` : ""})`,
         pageCount: 2,
         footerPage1: "Page 1 of 2",
         footerPage2: "Page 2 of 2"
@@ -625,10 +626,16 @@ export function App() {
   };
 
   const applySleepFilter = async () => {
-    const result = await window.cpapAPI.setTimeFilter(Number(dayStartHour), Number(dayStartHour));
+    const normalizedSleepTimeZone = sleepTimeZone.trim();
+    const result = await window.cpapAPI.setTimeFilter(
+      Number(dayStartHour),
+      Number(dayStartHour),
+      normalizedSleepTimeZone || null
+    );
     if (result.success) {
+      localStorage.setItem("paplens-sleep-timezone", normalizedSleepTimeZone);
       setSummary(result.summary);
-      setStatus(`Sleep boundary updated: ${dayStartHour}:00 to ${dayStartHour}:00`);
+      setStatus(`Sleep boundary updated: ${dayStartHour}:00 to ${dayStartHour}:00${normalizedSleepTimeZone ? ` ${normalizedSleepTimeZone}` : ""}`);
       return;
     }
     setStatus(result.error || "Sleep boundary update failed");
@@ -1012,6 +1019,14 @@ export function App() {
                       style={{ width: "60px" }}
                       value={dayStartHour}
                       onChange={(e) => setDayStartHour(e.target.value)}
+                    />
+                    <input
+                      type="text"
+                      placeholder="America/Denver"
+                      style={{ width: "150px" }}
+                      value={sleepTimeZone}
+                      onChange={(e) => setSleepTimeZone(e.target.value)}
+                      aria-label="Sleep boundary timezone"
                     />
                     <button className="btn-secondary" onClick={applySleepFilter}>
                       Apply

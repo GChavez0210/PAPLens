@@ -42,6 +42,14 @@ test("report template escapes profile names", () => {
     assert.equal(html.includes("<script>alert(1)</script>"), false);
 });
 
+test("report template declares CSP and contains no script tags", () => {
+    const template = fs.readFileSync(path.join(process.cwd(), "report.html"), "utf8");
+
+    assert.match(template, /Content-Security-Policy/);
+    assert.match(template, /script-src 'none'/);
+    assert.equal(/<script\b/i.test(template), false);
+});
+
 test("buildReportProfile coerces user-entered fields to strings", () => {
     const profile = buildReportProfile({ name: "<b>Ada</b>", age: 42, notes: null });
 

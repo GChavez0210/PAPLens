@@ -96,3 +96,35 @@ test("history baseline changes therapy stability score when at least 7 nights ar
     assert.ok(withHistory.stabilityScore < withoutHistory.stabilityScore);
     assert.ok(withHistory.penaltyHistoricalBaseline > 0);
 });
+
+// DATA-14: missingFields names every tracked metric absent after fallbacks.
+test("missingFields lists only the metrics that resolved to null", () => {
+    const complete = computeTherapyStabilityScore({
+        usage_hours: 7,
+        ahi_total: 1,
+        leak_p95: 4,
+        pressure_median: 10,
+        pressure_p95: 13,
+        rin_per_hr: 2,
+        flow_limitation_p95: 0.05
+    });
+    assert.deepEqual(complete.missingFields, []);
+
+    // Usage + AHI present; leak chain, pressure pair, RIN, and flow limitation absent.
+    const sparse = computeTherapyStabilityScore({ usage_hours: 7, ahi_total: 3 });
+    assert.deepEqual(
+        sparse.missingFields.sort(),
+        ["flow_limitation_p95", "leak", "pressure_spread", "rin_per_hr"].sort()
+    );
+
+    // leak_p50 satisfies the leak fallback chain, so "leak" is not reported missing.
+    const leakViaFallback = computeTherapyStabilityScore({ usage_hours: 7, ahi_total: 3, leak_p50: 8 });
+    assert.equal(leakViaFallback.missingFields.includes("leak"), false);
+
+    // A night with no therapy data at all reports every tracked field as missing.
+    const noData = computeTherapyStabilityScore({});
+    assert.deepEqual(
+        noData.missingFields.sort(),
+        ["ahi_total", "flow_limitation_p95", "leak", "pressure_spread", "rin_per_hr", "usage"].sort()
+    );
+});

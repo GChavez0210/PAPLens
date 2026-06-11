@@ -32,6 +32,20 @@ function sortedSamples(values) {
     return [...values].sort((a, b) => a - b);
 }
 
+// A tail percentile (p95) computed from a handful of 2-second epochs is not a real
+// percentile, so suppress p95-type metrics below this many samples (DATA-10). The
+// median (p50) is far more robust to small n and keeps the default minSamples.
+const P95_MIN_SAMPLES = 10;
+
+// Computes p50 (always) and p95 (only when there are >= P95_MIN_SAMPLES samples)
+// from one already-sorted array — no re-sort, preserving PERF-5.
+function medianAndGuardedP95(sorted) {
+    return {
+        ...calculatePercentilesFromSorted(sorted, [0.5]),
+        ...calculatePercentilesFromSorted(sorted, [0.95], { minSamples: P95_MIN_SAMPLES })
+    };
+}
+
 function isRespiratoryEvent(annotation) {
     const text = annotation?.text || "";
     return /(apnea|hypopnea|rera|flow limitation|clear airway|obstructive|central|unclassified)/i.test(text);
@@ -127,11 +141,11 @@ function summarizeNightlySessionMetrics(aggregate) {
     const minVentSorted = sortedSamples(minVentSamples);
     const respRateSorted = sortedSamples(respRateSamples);
     const flowLimSorted = sortedSamples(flowLimSamples);
-    const leakPercentiles = calculatePercentilesFromSorted(leakSorted, [0.5, 0.95]);
-    const tidalPercentiles = calculatePercentilesFromSorted(tidalSorted, [0.5, 0.95]);
-    const minVentPercentiles = calculatePercentilesFromSorted(minVentSorted, [0.5, 0.95]);
-    const respRatePercentiles = calculatePercentilesFromSorted(respRateSorted, [0.5, 0.95]);
-    const flowLimPercentiles = calculatePercentilesFromSorted(flowLimSorted, [0.95]);
+    const leakPercentiles = medianAndGuardedP95(leakSorted);
+    const tidalPercentiles = medianAndGuardedP95(tidalSorted);
+    const minVentPercentiles = medianAndGuardedP95(minVentSorted);
+    const respRatePercentiles = medianAndGuardedP95(respRateSorted);
+    const flowLimPercentiles = calculatePercentilesFromSorted(flowLimSorted, [0.95], { minSamples: P95_MIN_SAMPLES });
 
     return {
         leak50: leakPercentiles[0.5],
@@ -152,6 +166,18 @@ function summarizeNightlySessionMetrics(aggregate) {
         pulseAvg: average(pulseSamples),
         eventClusterIndexSource: computeEventClusterIndex(aggregate.annotations),
         periodicBreathing: detectPeriodicBreathing(tidalSamples, leakSamples),
+        // Per-metric valid-sample counts so consumers can gauge data confidence and
+        // explain why a guarded p95 came back null (DATA-10).
+        sampleCounts: {
+            leak: leakSamples.length,
+            tidal: tidalSamples.length,
+            minVent: minVentSamples.length,
+            respRate: respRateSamples.length,
+            flowLim: flowLimSamples.length,
+            spo2: spo2Samples.length,
+            pulse: pulseSamples.length,
+            pressure: pressureSamples.length
+        },
         sessionDerived: leakSamples.length > 0 || tidalSamples.length > 0 || flowLimSamples.length > 0 || spo2Samples.length > 0 || pulseSamples.length > 0 || (aggregate.annotations || []).length > 0
     };
 }

@@ -10,6 +10,12 @@ export default defineConfig(({ mode }) => {
       react()
     ],
     build: {
+      // src/shared/* are CommonJS (so the CJS main process can require them too).
+      // Rollup only runs @rollup/plugin-commonjs on node_modules by default, so opt
+      // the shared dir in to let the production build resolve its named exports.
+      commonjsOptions: {
+        include: [/node_modules/, /src[\\/]shared[\\/]/]
+      },
       outDir: "dist/renderer",
       emptyOutDir: true,
       sourcemap: !isProd, // hide source maps in prod

@@ -54,6 +54,7 @@ class CPAPDataLoader {
     this.sessions = [];
     this.dayStartHour = 12;
     this.dayEndHour = 12;
+    this.timeZone = null;
     this.nightlySessionMetrics = null;
     this.strCache = null;
   }
@@ -72,9 +73,14 @@ class CPAPDataLoader {
     return null;
   }
 
-  setDayBoundary(startHour, endHour) {
+  setDayBoundary(startHour, endHour, timeZone = this.timeZone) {
+    const normalizedTimeZone = normalizeTimeZone(timeZone);
+    if (timeZone && !normalizedTimeZone) {
+      throw new Error(`Invalid timezone: ${timeZone}`);
+    }
     this.dayStartHour = startHour;
     this.dayEndHour = endHour;
+    this.timeZone = normalizedTimeZone;
     this.sleepNightUsage = this.calculateSleepNightUsage();
     this.nightlySessionMetrics = null;
   }
@@ -250,17 +256,21 @@ class CPAPDataLoader {
     return sleepNights;
   }
 
-  getSleepNightKey(timestamp) {
+  getSleepNightKey(timestamp, { timeZone = this.timeZone } = {}) {
     const sessionDate = new Date(timestamp instanceof Date ? timestamp.getTime() : timestamp);
     if (Number.isNaN(sessionDate.getTime())) {
       return null;
     }
 
-    if (sessionDate.getHours() < this.dayStartHour) {
-      sessionDate.setDate(sessionDate.getDate() - 1);
+    const boundaryHour = clampBoundaryHour(this.dayStartHour);
+    const zoned = getZonedDateParts(sessionDate, normalizeTimeZone(timeZone));
+    let { year, month, day } = zoned;
+
+    if (zoned.hour < boundaryHour) {
+      ({ year, month, day } = addDaysToDateParts(year, month, day, -1));
     }
 
-    return sessionDate.toISOString().split("T")[0];
+    return formatDateParts(year, month, day);
   }
 
   parseSessionTimestamp(sessionId) {
@@ -549,6 +559,7 @@ class CPAPDataLoader {
           pbAvgCycleSec: sessionMetrics?.periodicBreathing?.avgCycleSec ?? null,
           pbIsSignificant: sessionMetrics?.periodicBreathing?.isClinicallySignificant ?? null,
           pbLeakConfounded: sessionMetrics?.periodicBreathing?.leakConfounded ?? null,
+          sampleCounts: sessionMetrics?.sampleCounts ?? null,
           // Current ResMed flow generators do not provide valid onboard oximetry,
           // so PAPLens preserves null instead of probing SA2/summary sentinels.
           spo2Avg: supportsOximetry
@@ -620,4 +631,70 @@ class CPAPDataLoader {
   }
 }
 
-module.exports = { CPAPDataLoader, inferDeviceCapabilities };
+function normalizeTimeZone(timeZone) {
+  if (typeof timeZone !== "string" || timeZone.trim() === "") {
+    return null;
+  }
+  const trimmed = timeZone.trim();
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: trimmed }).format(new Date());
+    return trimmed;
+  } catch {
+    return null;
+  }
+}
+
+function clampBoundaryHour(hour) {
+  const numeric = Number(hour);
+  if (!Number.isFinite(numeric)) {
+    return 12;
+  }
+  return Math.max(0, Math.min(23, Math.trunc(numeric)));
+}
+
+function getZonedDateParts(date, timeZone) {
+  if (!timeZone) {
+    return {
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+      hour: date.getHours()
+    };
+  }
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return {
+    year: Number(byType.year),
+    month: Number(byType.month),
+    day: Number(byType.day),
+    hour: Number(byType.hour)
+  };
+}
+
+function addDaysToDateParts(year, month, day, deltaDays) {
+  const shifted = new Date(Date.UTC(year, month - 1, day + deltaDays, 12, 0, 0));
+  return {
+    year: shifted.getUTCFullYear(),
+    month: shifted.getUTCMonth() + 1,
+    day: shifted.getUTCDate()
+  };
+}
+
+function formatDateParts(year, month, day) {
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+module.exports = {
+  CPAPDataLoader,
+  inferDeviceCapabilities,
+  normalizeTimeZone,
+  getZonedDateParts
+};

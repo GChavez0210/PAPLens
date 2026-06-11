@@ -1,11 +1,12 @@
-function toOptionalNumber(value) {
-    if (value === null || value === undefined || value === "") {
-        return null;
-    }
-
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : null;
-}
+// Pure percentile/number helpers are shared with the renderer — see
+// src/shared/metrics.js. Main-process-only logic (vendor field mappings, debug
+// logging, leak/tidal summarization) stays here.
+const {
+    toOptionalNumber,
+    sanitizeMetricSamples,
+    calculatePercentilesFromSorted,
+    calculatePercentile
+} = require("../../../src/shared/metrics");
 
 function isFiniteMetricValue(value) {
     return toOptionalNumber(value) !== null;
@@ -39,68 +40,6 @@ function pickMappedValue(record, mappings) {
     }
 
     return { value: null, field: null, rawValue: null, unit: null };
-}
-
-function sanitizeMetricSamples(values) {
-    return (values || [])
-        .map((value) => toOptionalNumber(value))
-        .filter((value) => value !== null);
-}
-
-// Deterministic percentile calculation using linear interpolation between
-// sorted samples. Empty input stays null so missing data is never masked as 0.
-function calculatePercentile(values, percentile) {
-    const samples = sanitizeMetricSamples(values);
-    if (samples.length === 0) {
-        return null;
-    }
-
-    if (samples.length === 1) {
-        return samples[0];
-    }
-
-    const bounded = Math.min(1, Math.max(0, percentile));
-    const sorted = [...samples].sort((a, b) => a - b);
-    const index = (sorted.length - 1) * bounded;
-    const lowerIndex = Math.floor(index);
-    const upperIndex = Math.ceil(index);
-
-    if (lowerIndex === upperIndex) {
-        return sorted[lowerIndex];
-    }
-
-    const weight = index - lowerIndex;
-    return sorted[lowerIndex] + (sorted[upperIndex] - sorted[lowerIndex]) * weight;
-}
-
-function percentileFromSorted(sortedSamples, percentile) {
-    if (!sortedSamples || sortedSamples.length === 0) {
-        return null;
-    }
-
-    if (sortedSamples.length === 1) {
-        return sortedSamples[0];
-    }
-
-    const bounded = Math.min(1, Math.max(0, percentile));
-    const index = (sortedSamples.length - 1) * bounded;
-    const lowerIndex = Math.floor(index);
-    const upperIndex = Math.ceil(index);
-
-    if (lowerIndex === upperIndex) {
-        return sortedSamples[lowerIndex];
-    }
-
-    const weight = index - lowerIndex;
-    return sortedSamples[lowerIndex] + (sortedSamples[upperIndex] - sortedSamples[lowerIndex]) * weight;
-}
-
-function calculatePercentilesFromSorted(sortedSamples, percentiles) {
-    const result = {};
-    for (const percentile of percentiles || []) {
-        result[percentile] = percentileFromSorted(sortedSamples, percentile);
-    }
-    return result;
 }
 
 function describeSamples(values) {

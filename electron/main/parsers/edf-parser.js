@@ -1,4 +1,5 @@
 const fs = require("fs");
+const { Worker, isMainThread, parentPort, workerData } = require("worker_threads");
 
 const MAX_SIGNALS = 256;
 const MAX_DATA_RECORDS = 2_000_000;
@@ -301,9 +302,7 @@ function buildSTRSummary(result) {
 }
 
 async function parseSTRFileAsync(filePath) {
-  const buffer = await fs.promises.readFile(filePath);
-  const parser = new EDFParser();
-  const result = parser.parseBuffer(buffer);
+  const result = await parseEDFFileInWorker(filePath);
   return buildSTRSummary(result);
 }
 
@@ -313,9 +312,42 @@ function parseSessionFile(filePath) {
 }
 
 async function parseSessionFileAsync(filePath) {
-  const buffer = await fs.promises.readFile(filePath);
-  const parser = new EDFParser();
-  return parser.parseBuffer(buffer);
+  return parseEDFFileInWorker(filePath);
+}
+
+function parseEDFFileInWorker(filePath) {
+  if (!isMainThread) {
+    const parser = new EDFParser();
+    return Promise.resolve(parser.parse(filePath));
+  }
+
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(__filename, {
+      workerData: { paplensEdfParserWorker: true, filePath }
+    });
+    worker.once("message", (message) => {
+      if (message && message.error) {
+        reject(new Error(message.error));
+        return;
+      }
+      resolve(message.result);
+    });
+    worker.once("error", reject);
+    worker.once("exit", (code) => {
+      if (code !== 0) {
+        reject(new Error(`EDF parser worker exited with code ${code}`));
+      }
+    });
+  });
+}
+
+if (!isMainThread && workerData?.paplensEdfParserWorker) {
+  try {
+    const parser = new EDFParser();
+    parentPort.postMessage({ result: parser.parse(workerData.filePath) });
+  } catch (error) {
+    parentPort.postMessage({ error: error.message });
+  }
 }
 
 module.exports = {
@@ -323,5 +355,6 @@ module.exports = {
   parseSTRFile,
   parseSTRFileAsync,
   parseSessionFile,
-  parseSessionFileAsync
+  parseSessionFileAsync,
+  parseEDFFileInWorker
 };

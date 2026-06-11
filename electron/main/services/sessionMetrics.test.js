@@ -23,7 +23,28 @@ test("summarizeNightlySessionMetrics converts PLD samples into nightly aggregate
     assert.equal(result.spo2Avg, 96);
     assert.equal(result.pulseAvg, 62);
     assert.equal(result.eventClusterIndexSource, 3);
-    assert.ok(result.flowLimP95 > 0.35);
+    // p50 stays available on small n, but p95 is suppressed below 10 samples (DATA-10).
+    assert.equal(result.flowLimP95, null);
+    assert.equal(result.leak95, null);
+    assert.equal(result.sampleCounts.flowLim, 3);
+    assert.equal(result.sampleCounts.spo2, 3);
+});
+
+test("summarizeNightlySessionMetrics reports p95 once enough samples exist", () => {
+    const flowLimSamples = Array.from({ length: 20 }, (_, i) => i / 100); // 0.00 .. 0.19
+    const result = summarizeNightlySessionMetrics({
+        leakSamples: [],
+        tidalSamples: [],
+        minVentSamples: [],
+        respRateSamples: [],
+        flowLimSamples,
+        spo2Samples: [],
+        pulseSamples: [],
+        annotations: []
+    });
+
+    assert.ok(result.flowLimP95 > 0.18 && result.flowLimP95 <= 0.19);
+    assert.equal(result.sampleCounts.flowLim, 20);
 });
 
 test("summarizeNightlySessionMetrics drops invalid oximetry sentinel values", () => {

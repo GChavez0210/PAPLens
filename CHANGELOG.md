@@ -15,12 +15,15 @@ All notable changes to this project are documented in this file.
 - **Import Payload Measurement:** Added `cpap:data-loaded` payload measurement that logs byte size, MiB, daily-stat count, and session count, with a warning when representative payloads exceed roughly 1 MiB.
 - **Analytics test suite expanded:** Added `regression.test.js` (Pearson edge cases), `outliers.test.js` (short-history guard), `periodicBreathing.test.js` (gap-merge boundary conditions via `mergeEpisodes`), and `clinicalInsights.test.js` (leak basis thresholds and corrupted-percentile clamp). Extended `scores.test.js` with compliance-risk zero-usage and pressure-spread cases.
 - **Correlation Significance Tests:** Added coverage for correlation p-values and significance metadata.
+- **Spearman Correlations:** Correlation payloads now include Spearman `rho`, retained Pearson `pearsonR`, and a `method` marker, with Spearman reported as the headline value for skew-sensitive therapy metric pairs.
+- **Sleep Boundary Timezone:** The sleep-boundary control accepts an optional IANA timezone so ResMed night assignment is explicit around noon and DST boundaries.
 - **Session Waveform Viewer — Event Overlay:** Flagged respiratory events (hypopnea, obstructive apnea, central apnea, RERA, leak) are now rendered as colour-coded scatter markers directly on the Pressure chart, pinned to the actual mask pressure value at each event's onset time. Tooltip shows event type and duration. The separate Flagged Events chart has been removed.
 - **Session Waveform Viewer — Layout:** Breathing Amplitude chart now spans the full grid width, matching Pressure and Flow Rate.
 - **PDF Report:** Expanded from two pages to three pages. Page 3 contains the flow limitation trend chart and the clinician interpretation panel (previously on page 2).
 
 ### Changed
 
+- **Dependency Audit:** Checked Electron, `better-sqlite3`, and `handlebars` currency. Electron remains on the packageable `39.8.10` line after the current `42.4.0` line failed the `better-sqlite3` native rebuild during packaging.
 - **Chart Rendering Efficiency:** Wrapped chart components in `React.memo`, stabilized dashboard chart datasets with `useMemo`, and updated `TrendChart` so Chart.js instances update in place instead of being destroyed and recreated on every parent render.
 - **Dashboard Range Filtering:** Dashboard stats are now sorted once per range calculation, then sliced or filtered from that sorted array.
 - **Insights Efficiency:** Memoized derived Insights arrays and display booleans, hoisted the nested stat card component, and guarded asynchronous Insights IPC responses so stale range loads cannot overwrite newer data.
@@ -30,12 +33,15 @@ All notable changes to this project are documented in this file.
 - **Analytics Query Efficiency:** Nightly analytics now fetch an ordered range once and derive trailing history/usage/AHI windows in memory instead of issuing repeated per-night query batches.
 - **Percentile Calculation:** Nightly metric summarization now sorts each metric once and computes all needed percentiles from the sorted samples.
 - **STR.edf Refreshes:** STR summary parsing now runs asynchronously and reuses a profile-local cache when file size and modified time are unchanged.
+- **EDF Parser Worker Offload:** Async EDF parsing now runs file read and parse work in a worker thread, reducing main-process CPU blocking during ResMed imports.
+- **Nightly Sample Counts:** Per-night valid sample counts are persisted in `night_metrics.sample_counts`, reused by cached imports, and hydrated back into summary objects.
 - **Lint Coverage:** Enabled selected React lint rules for display names and unstable nested components while keeping the existing React Hooks rules active.
 - **Dependency Hygiene:** Updated `concurrently` to clear the critical `shell-quote` audit advisory.
 - **Release Workflow Hygiene:** Removed unnecessary `GH_TOKEN` exposure from build jobs that only package artifacts.
 
 ### Fixed
 
+- **CSP Hardening:** Added Content Security Policy meta tags to the app and report HTML entry points, removed the report's inline footer script, and dropped the remote Google Fonts import so the renderer stays local/offline-friendly.
 - **Security Hardening Wave 1:** Added defensive validation for SQLite migration identifiers, IPC-loaded data-folder paths, ZIP archive expansion limits, and EDF header bounds.
 - **Parser Safety Tests:** Added ZIP and EDF parser coverage for oversized declared output, entry-count and cumulative ZIP limits, impossible EDF signal counts, oversized samples, and truncated declared record data.
 - **Report Profile Escaping:** Report profile fields are now string-coerced before templating, with escaped Handlebars bindings retained for user-entered values.

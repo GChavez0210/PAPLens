@@ -2,7 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("fs");
 const path = require("path");
-const { EDFParser, parseSessionFile } = require("./edf-parser");
+const { EDFParser, parseSessionFile, parseSessionFileAsync } = require("./edf-parser");
 
 // "Test Data/" holds a real SD-card dump and is gitignored, so this test only
 // runs on machines that have it (CI checkouts skip it).
@@ -77,4 +77,16 @@ test("EDFParser rejects declared data records that exceed the buffer", () => {
     const buffer = createEdfBuffer({ numDataRecords: 2, samplesPerRecord: [1], includeData: false });
 
     assert.throws(() => new EDFParser().parseBuffer(buffer), /EDF header out of range/);
+});
+
+test("parseSessionFileAsync parses EDF files in the worker-backed async path", async (t) => {
+    const tmpDir = fs.mkdtempSync(path.join(process.cwd(), ".tmp-edf-"));
+    t.after(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
+    const filePath = path.join(tmpDir, "sample.edf");
+    fs.writeFileSync(filePath, createEdfBuffer({ samplesPerRecord: [2] }));
+
+    const parsed = await parseSessionFileAsync(filePath);
+    assert.equal(parsed.header.numSignals, 1);
+    assert.deepEqual(parsed.signals.map((signal) => signal.label), ["Flow"]);
+    assert.equal(parsed.data.Flow.length, 2);
 });

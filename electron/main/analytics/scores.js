@@ -59,6 +59,10 @@ function historyPressureSpreadPenalty(currentSpread, history) {
     return Math.min(5, (z - 1) * 2);
 }
 
+// Metrics whose absence computeTherapyStabilityScore reports via `missingFields`.
+// Used by diagnostics.js to spot systematic parser/device gaps (DATA-14).
+const STABILITY_TRACKED_FIELDS = ["ahi_total", "leak", "usage", "pressure_spread", "rin_per_hr", "flow_limitation_p95"];
+
 function computeTherapyStabilityScore(currentMetrics, history = []) {
     if (!hasTherapyData(currentMetrics)) {
         return {
@@ -71,7 +75,8 @@ function computeTherapyStabilityScore(currentMetrics, history = []) {
             penaltyFlowLim: null,
             pressureVariance: null,
             flScore: null,
-            clusterIndex: null
+            clusterIndex: null,
+            missingFields: [...STABILITY_TRACKED_FIELDS]
         };
     }
 
@@ -129,6 +134,17 @@ function computeTherapyStabilityScore(currentMetrics, history = []) {
         else penaltyFlowLim = 5;
     }
 
+    // Name every tracked metric that resolved to null after its fallback chain, so a
+    // systematic parser failure (e.g. leak_p95 never populated for a device) is visible
+    // rather than silently absorbed by the `??` chains above (DATA-14).
+    const missingFields = [];
+    if (currentMetrics.ahi_total === undefined || currentMetrics.ahi_total === null) missingFields.push("ahi_total");
+    if (leak95 === undefined || leak95 === null) missingFields.push("leak");
+    if (!Number.isFinite(usageStr)) missingFields.push("usage");
+    if (pressureSpread === null) missingFields.push("pressure_spread");
+    if (rin === undefined || rin === null) missingFields.push("rin_per_hr");
+    if (flp95 === undefined || flp95 === null) missingFields.push("flow_limitation_p95");
+
     const historicalPenalty = [
         historyZPenalty(ahi, history, ["ahi_total"]),
         historyZPenalty(leak95, history, ["leak_p95", "leak_max", "leak_p50"]),
@@ -156,7 +172,8 @@ function computeTherapyStabilityScore(currentMetrics, history = []) {
         penaltyHistoricalBaseline: Math.round(historicalPenalty),
         pressureVariance: pressureSpread,
         flScore: roundedFlPenalty === null ? null : roundedFlPenalty * 20,
-        clusterIndex: null
+        clusterIndex: null,
+        missingFields
     };
 }
 

@@ -306,6 +306,7 @@ class CpapService {
         m.resp_rate_p50 AS respRate50,
         m.spo2_avg AS spo2Avg,
         m.pulse_avg AS pulseAvg,
+        m.sample_counts AS sampleCountsJson,
         d.stability_score,
         d.therapy_stability_score,
         d.mask_fit_score,
@@ -329,10 +330,11 @@ class CpapService {
             leak50: row.leak50, leak95: row.leak95, pressure: row.pressure, maxPressure: row.maxPressure,
             minVent50: row.minVent50, minVent95: row.minVent95, tidVol50: row.tidVol50, tidVol95: row.tidVol95,
             respRate50: row.respRate50, spo2Avg: row.spo2Avg, pulseAvg: row.pulseAvg,
+            sampleCounts: parseJsonSafely(row.sampleCountsJson),
             stability_score: row.stability_score, therapy_stability_score: row.therapy_stability_score,
             mask_fit_score: row.mask_fit_score, leak_severity_tier: row.leak_severity_tier, leak_consistency_index: row.leak_consistency_index,
             pressure_variance: row.pressure_variance, flow_limitation_score: row.flow_limitation_score, event_cluster_index: row.event_cluster_index,
-            raw: { dataQuality: parseJsonSafely(row.data_quality), pressure_median: row.pressure }
+            raw: { dataQuality: parseJsonSafely(row.data_quality), sampleCounts: parseJsonSafely(row.sampleCountsJson), pressure_median: row.pressure }
         }));
 
         const recentDays = dailyStats.slice(-30);

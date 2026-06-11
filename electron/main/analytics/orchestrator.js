@@ -3,6 +3,7 @@ const { computeTherapyStabilityScore, computeComplianceRisk, processResidualBurd
 const { detectOutliers } = require("./outliers");
 const { analyzeCorrelations } = require("./correlations");
 const { generateInsightNarratives, generatePeriodicBreathingInsight, generateFlowLimitationInsight } = require("./explanations");
+const { detectChronicMissingFields } = require("./diagnostics");
 const { AnalyticsDataAccess } = require("./dataAccess");
 const crypto = require("crypto");
 
@@ -130,6 +131,17 @@ class AnalyticsOrchestrator {
           });
         }
       }
+
+      // Warn (once per run) about metrics missing for >10 consecutive stored therapy
+      // nights. This intentionally scans full history through the latest processed
+      // date so incremental imports still catch streaks that started earlier.
+      const perNightMissing = allNights
+        .filter(hasTherapyData)
+        .map((night) => ({
+          date: night.night_date,
+          missingFields: computeTherapyStabilityScore(night, []).missingFields
+        }));
+      detectChronicMissingFields(perNightMissing);
 
       const latestNights = this.dataAccess.getLatestNightsForCorrelations(deviceId, 30);
       const corrs = analyzeCorrelations(latestNights);

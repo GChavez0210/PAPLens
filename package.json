@@ -60,6 +60,7 @@
     "productName": "PAPLens",
     "files": [
       "electron/**/*",
+      "src/shared/**/*",
       "dist/renderer/**/*",
       "package.json",
       "LICENSE",

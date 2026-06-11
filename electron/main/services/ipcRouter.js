@@ -214,9 +214,13 @@ class IpcRouter {
             }
         });
 
-        ipcMain.handle("cpap:set-time-filter", async (_event, dayStartHour, dayEndHour) => {
+        ipcMain.handle("cpap:set-time-filter", async (_event, dayStartHour, dayEndHour, timeZone = null) => {
             if (!this.cpap.dataLoader) return { success: false, error: "No data loaded" };
-            this.cpap.dataLoader.setDayBoundary(dayStartHour, dayEndHour);
+            try {
+                this.cpap.dataLoader.setDayBoundary(dayStartHour, dayEndHour, timeZone);
+            } catch (error) {
+                return { success: false, error: error.message };
+            }
             const summary = await this.cpap.dataLoader.getSummary();
             this.cpap.currentSummary = summary;
             if (this.windowManager.getMainWindow()) {

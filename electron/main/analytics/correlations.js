@@ -79,6 +79,31 @@ function pearsonPValue(r, n) {
     return Number.isFinite(p) ? Math.max(0, Math.min(1, p)) : null;
 }
 
+function rankValues(values) {
+    return values
+        .map((value, index) => ({ value, index }))
+        .sort((a, b) => a.value - b.value)
+        .reduce((ranks, item, sortedIndex, sorted) => {
+            if (ranks[item.index] !== undefined) {
+                return ranks;
+            }
+            let end = sortedIndex;
+            while (end + 1 < sorted.length && sorted[end + 1].value === item.value) {
+                end++;
+            }
+            const averageRank = (sortedIndex + end + 2) / 2;
+            for (let i = sortedIndex; i <= end; i++) {
+                ranks[sorted[i].index] = averageRank;
+            }
+            return ranks;
+        }, new Array(values.length));
+}
+
+function spearmanRho(xValues, yValues) {
+    if (xValues.length !== yValues.length || xValues.length < 3) return null;
+    return pearsonR(rankValues(xValues), rankValues(yValues));
+}
+
 function analyzeCorrelations(metricsList) {
     const usableMetrics = (metricsList || []).filter(hasTherapyData);
     if (usableMetrics.length < 2) return [];
@@ -94,7 +119,9 @@ function analyzeCorrelations(metricsList) {
 
         const xVals = pairs.map(p => p[0]);
         const yVals = pairs.map(p => p[1]);
-        const r = pearsonR(xVals, yVals);
+        const pearson = pearsonR(xVals, yVals);
+        const rho = spearmanRho(xVals, yVals);
+        const r = rho ?? pearson;
         if (r === null) return;
 
         const absR = Math.abs(r);
@@ -109,6 +136,9 @@ function analyzeCorrelations(metricsList) {
             x: labelX,
             y: labelY,
             r,
+            pearsonR: pearson,
+            rho,
+            method: rho === null ? "pearson" : "spearman",
             n: pairs.length,
             pValue,
             significant,
@@ -135,7 +165,9 @@ function analyzeCorrelations(metricsList) {
         if (lagPairs.length >= 3) {
             const xVals = lagPairs.map(p => p[0]);
             const yVals = lagPairs.map(p => p[1]);
-            const r = pearsonR(xVals, yVals);
+            const pearson = pearsonR(xVals, yVals);
+            const rho = spearmanRho(xVals, yVals);
+            const r = rho ?? pearson;
             if (r !== null) {
                 const absR = Math.abs(r);
                 const pValue = pearsonPValue(r, lagPairs.length);
@@ -144,7 +176,19 @@ function analyzeCorrelations(metricsList) {
                 if (absR >= 0.6) label = "strong";
                 else if (absR >= 0.4) label = "moderate";
                 else if (absR >= 0.2) label = "mild";
-                results.push({ x: "Pressure (N)", y: "AHI (N+1)", r, n: lagPairs.length, pValue, significant, label, lag: 1 });
+                results.push({
+                    x: "Pressure (N)",
+                    y: "AHI (N+1)",
+                    r,
+                    pearsonR: pearson,
+                    rho,
+                    method: rho === null ? "pearson" : "spearman",
+                    n: lagPairs.length,
+                    pValue,
+                    significant,
+                    label,
+                    lag: 1
+                });
             }
         }
     }
@@ -152,4 +196,4 @@ function analyzeCorrelations(metricsList) {
     return results;
 }
 
-module.exports = { analyzeCorrelations, pearsonPValue };
+module.exports = { analyzeCorrelations, pearsonPValue, rankValues, spearmanRho };

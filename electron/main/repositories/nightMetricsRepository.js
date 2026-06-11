@@ -23,7 +23,7 @@ class NightMetricsRepository {
           m.minute_vent_p95 AS minVent95, m.tidal_vol_p50 AS tidVol50, m.tidal_vol_p95 AS tidVol95,
           m.resp_rate_p50 AS respRate50, m.spo2_avg AS spo2Avg, m.pulse_avg AS pulseAvg,
           d.stability_score, d.therapy_stability_score, d.mask_fit_score, d.leak_severity_tier, d.leak_consistency_index,
-          d.pressure_variance, d.flow_limitation_score, d.event_cluster_index, m.data_quality
+          d.pressure_variance, d.flow_limitation_score, d.event_cluster_index, m.data_quality, m.sample_counts
         FROM nights n LEFT JOIN night_metrics m ON m.night_id = n.id LEFT JOIN derived_metrics d ON d.night_id = n.id
         WHERE n.device_id = ? ORDER BY n.night_date ASC
       `),
@@ -80,7 +80,8 @@ class NightMetricsRepository {
         const rows = this.stmts.getAllNightMetrics.all(deviceId);
         return rows.map((row) => ({
             ...row,
-            raw: { dataQuality: parseJsonSafely(row.data_quality), pressure_median: row.pressure }
+            sampleCounts: parseJsonSafely(row.sample_counts),
+            raw: { dataQuality: parseJsonSafely(row.data_quality), sampleCounts: parseJsonSafely(row.sample_counts), pressure_median: row.pressure }
         }));
     }
 

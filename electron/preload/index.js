@@ -10,8 +10,8 @@ contextBridge.exposeInMainWorld("cpapAPI", {
   reattachSessionFolder: () => ipcRenderer.invoke("cpap:reattach-session-folder"),
   refresh: () => ipcRenderer.invoke("cpap:refresh"),
   saveReport: (reportData) => ipcRenderer.invoke("cpap:save-report", reportData),
-  setTimeFilter: (dayStartHour, dayEndHour) =>
-    ipcRenderer.invoke("cpap:set-time-filter", dayStartHour, dayEndHour),
+  setTimeFilter: (dayStartHour, dayEndHour, timeZone) =>
+    ipcRenderer.invoke("cpap:set-time-filter", dayStartHour, dayEndHour, timeZone),
   getLastDataPath: () => ipcRenderer.invoke("app:get-last-data-path"),
   getProfiles: () => ipcRenderer.invoke("app:get-profiles"),
   createProfile: (profileData) => ipcRenderer.invoke("app:create-profile", profileData),
