@@ -51,7 +51,7 @@ export default defineConfig(({ mode }) => {
       outDir: "dist/renderer",
       emptyOutDir: true,
       sourcemap: !isProd, // hide source maps in prod
-      minify: isProd ? 'esbuild' : false,
+      minify: isProd ? 'oxc' : false, // Vite 8 (rolldown) uses oxc, not esbuild
       rollupOptions: {
         output: {
           manualChunks(id) {

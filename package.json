@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "description": "Self-contained Electron CPAP Viewer forked from xpaulso/cpap-viewer",
   "main": "electron/main/index.js",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite --strictPort",
@@ -21,7 +24,7 @@
     "lint": "eslint .",
     "test": "node scripts/run-node-tests.js",
     "check": "npm run lint && npm test",
-    "audit": "npm audit --omit=dev --audit-level=high",
+    "audit": "npm audit --audit-level=high",
     "test-types": "tsc --noEmit",
     "prepare": "husky"
   },
@@ -125,11 +128,12 @@
     "@eslint/js": "^10.0.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^5.1.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "electron": "^39.8.10",
     "electron-builder": "^26.0.12",
+    "esbuild": "^0.28.1",
     "eslint": "^10.0.3",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-react": "^7.37.5",
@@ -139,8 +143,8 @@
     "lint-staged": "^16.3.3",
     "prettier": "^3.8.1",
     "typescript": "^5.9.3",
-    "vite": "^7.1.12",
-    "wait-on": "^9.0.3"
+    "vite": "^8.0.16",
+    "wait-on": "^9.0.10"
   },
   "dependencies": {
     "better-sqlite3": "^12.10.0",
