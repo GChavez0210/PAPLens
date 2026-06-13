@@ -1,8 +1,65 @@
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { Chart, registerables } from "chart.js";
 import { useTheme } from "../ThemeContext";
+import { baseLegend, baseScales, baseTooltip } from "./chartTheme";
 
 Chart.register(...registerables);
+
+function isReferenceDataset(dataset) {
+  // Reference = a flat clinical guide line (threshold / limit / benchmark).
+  // Classify by label only — a dashed *data* series (e.g. "Maximum Leak (95th)",
+  // "Upper Bound (95%)") is real data and must still count toward axis scaling.
+  return /threshold|limit|benchmark/i.test(dataset?.label || "");
+}
+
+function getDataValueMax(datasets) {
+  let primaryMax = 0;
+  let referenceMax = 0;
+
+  for (const dataset of datasets || []) {
+    const target = isReferenceDataset(dataset) ? "reference" : "primary";
+    for (const point of dataset?.data || []) {
+      const value = typeof point === "number" ? point : Number(point?.y ?? point);
+      if (!Number.isFinite(value)) continue;
+      if (target === "reference") {
+        referenceMax = Math.max(referenceMax, value);
+      } else {
+        primaryMax = Math.max(primaryMax, value);
+      }
+    }
+  }
+
+  return { primaryMax, referenceMax };
+}
+
+function normalizeDatasets(datasets, isExpanded, type) {
+  return (datasets || []).map((dataset) => {
+    // Bars only need a fill + a subtle rounded corner; the line-specific
+    // properties below (tension, point radius, dashes) don't apply.
+    if (type === "bar" && dataset.type !== "line") {
+      return {
+        borderRadius: 4,
+        borderWidth: 0,
+        maxBarThickness: 46,
+        ...dataset
+      };
+    }
+
+    const reference = isReferenceDataset(dataset);
+    const showPoints = !reference && isExpanded;
+    return {
+      pointHitRadius: 10,
+      spanGaps: false,
+      fill: dataset.fill ?? false,
+      ...dataset,
+      borderDash: dataset.borderDash,
+      pointRadius: dataset.pointRadius ?? (showPoints ? 2.4 : 0),
+      pointHoverRadius: dataset.pointHoverRadius ?? (reference ? 0 : 4.5),
+      borderWidth: dataset.borderWidth ?? (reference ? 1.4 : 2.25),
+      tension: dataset.tension ?? (reference ? 0 : 0.28)
+    };
+  });
+}
 
 function TrendChartComponent({ title, labels, datasets, type = "line", options = {}, reportKey }) {
   const theme = useTheme();
@@ -11,30 +68,41 @@ function TrendChartComponent({ title, labels, datasets, type = "line", options =
   const chartRef = useRef(null);
 
   const chartOptions = useMemo(() => {
-    const textColor = theme === "light" ? "#4b5563" : "#a1a1aa";
-    const gridColor = theme === "light" ? "rgba(0,0,0,0.07)" : "rgba(255,255,255,0.15)";
+    const fontSize = isExpanded ? 13 : 11;
+    const scales = baseScales(theme, { fontSize });
+    const { primaryMax } = getDataValueMax(datasets);
 
     const dynamicBaseOptions = {
       responsive: true,
       maintainAspectRatio: false,
       animation: false,
-      interaction: { mode: "index", intersect: false },
+      layout: { padding: { top: 4, right: 8, bottom: 2, left: 2 } },
+      interaction: { mode: "nearest", axis: "x", intersect: false },
+      elements: {
+        line: { borderCapStyle: "round", borderJoinStyle: "round" },
+        point: { borderWidth: 1.5 }
+      },
       scales: {
         x: {
-          ticks: { maxTicksLimit: 10, color: textColor },
-          grid: { color: gridColor, drawBorder: false }
+          ...scales.x,
+          ticks: { ...scales.x.ticks, maxTicksLimit: isExpanded ? 14 : 7 }
         },
         y: {
-          ticks: { color: textColor },
-          grid: { color: gridColor, drawBorder: false }
+          ...scales.y,
+          // Fit every series, including threshold/limit lines, so guide lines
+          // always render as horizontal references rather than clipping off-top.
+          grace: "12%",
+          ticks: {
+            ...scales.y.ticks,
+            precision: primaryMax > 0 && primaryMax < 2 ? 1 : undefined,
+            maxTicksLimit: isExpanded ? 8 : 6
+          }
         }
       },
       plugins: {
         title: { display: false },
-        legend: {
-          position: "bottom",
-          labels: { color: textColor, boxWidth: 14, boxHeight: 2 }
-        }
+        legend: baseLegend(theme, { fontSize }),
+        tooltip: baseTooltip(theme)
       }
     };
 
@@ -62,7 +130,12 @@ function TrendChartComponent({ title, labels, datasets, type = "line", options =
     }
 
     return mergedOptions;
-  }, [isExpanded, options, theme]);
+  }, [datasets, isExpanded, options, theme]);
+
+  const chartData = useMemo(() => ({
+    labels,
+    datasets: normalizeDatasets(datasets, isExpanded, type)
+  }), [datasets, isExpanded, labels, type]);
 
   useEffect(() => {
     if (!isExpanded) return undefined;
@@ -100,10 +173,10 @@ function TrendChartComponent({ title, labels, datasets, type = "line", options =
       return;
     }
 
-    chartRef.current.data = { labels, datasets };
+    chartRef.current.data = chartData;
     chartRef.current.options = chartOptions;
     chartRef.current.update();
-  }, [chartOptions, datasets, labels]);
+  }, [chartData, chartOptions]);
 
   return (
     <>

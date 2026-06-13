@@ -1,12 +1,13 @@
 import { memo, useEffect, useMemo, useRef } from "react";
 import Chart from "chart.js/auto";
+import { SERIES, baseLegend, baseScales, baseTooltip, chartColors } from "../../charts/chartTheme";
 
 /**
  * Stacked bar showing nightly breakdown of event types:
  * Obstructive Apneas (OAI), Central Apneas (CAI), Unclassified Apneas (UAI), Hypopneas (HI).
  * Only rendered when at least one night has non-zero event type data.
  */
-function EventTypeSplitChartComponent({ trends, height = 220 }) {
+function EventTypeSplitChartComponent({ trends, height = 220, theme = "dark" }) {
     const ref = useRef(null);
 
     const nights = useMemo(
@@ -21,6 +22,8 @@ function EventTypeSplitChartComponent({ trends, height = 220 }) {
         if (!ref.current || nights.length === 0) return;
         const labels = nights.map(d => d.night_date?.slice(5));
         const ctx = ref.current.getContext("2d");
+        const colors = chartColors(theme);
+        const scales = baseScales(theme);
         const chart = new Chart(ctx, {
             type: "bar",
             data: {
@@ -29,25 +32,25 @@ function EventTypeSplitChartComponent({ trends, height = 220 }) {
                     {
                         label: "Obstructive (OA)",
                         data: nights.map(d => d.obstructive_apneas_per_hr ?? 0),
-                        backgroundColor: "#ef4444",
+                        backgroundColor: SERIES.red,
                         borderRadius: 2
                     },
                     {
                         label: "Central (CA)",
                         data: nights.map(d => d.central_apneas_per_hr ?? 0),
-                        backgroundColor: "#8b5cf6",
+                        backgroundColor: SERIES.violet,
                         borderRadius: 2
                     },
                     {
                         label: "Unclassified (UA)",
                         data: nights.map(d => d.unclassified_apneas_per_hr ?? 0),
-                        backgroundColor: "#f59e0b",
+                        backgroundColor: SERIES.amber,
                         borderRadius: 2
                     },
                     {
                         label: "Hypopneas (H)",
                         data: nights.map(d => d.hypopneas_per_hr ?? 0),
-                        backgroundColor: "#22D3EE",
+                        backgroundColor: SERIES.cyan,
                         borderRadius: 2
                     }
                 ]
@@ -56,27 +59,21 @@ function EventTypeSplitChartComponent({ trends, height = 220 }) {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: true,
-                        position: "bottom",
-                        labels: { color: "#9ca3af", font: { size: 11 }, boxWidth: 12, padding: 12 }
-                    },
-                    tooltip: { mode: "index", intersect: false }
+                    legend: baseLegend(theme),
+                    tooltip: { ...baseTooltip(theme), mode: "index", intersect: false }
                 },
                 scales: {
-                    x: { stacked: true, grid: { display: false }, ticks: { color: "#6b7280", maxRotation: 45 } },
+                    x: { ...scales.x, stacked: true, grid: { ...scales.x.grid, display: false }, ticks: { ...scales.x.ticks, maxRotation: 45 } },
                     y: {
+                        ...scales.y,
                         stacked: true,
-                        beginAtZero: true,
-                        grid: { color: "rgba(255,255,255,0.07)" },
-                        ticks: { color: "#6b7280" },
-                        title: { display: true, text: "events / hr", color: "#6b7280", font: { size: 11 } }
+                        title: { display: true, text: "events / hr", color: colors.mutedText, font: { size: 11 } }
                     }
                 }
             }
         });
         return () => chart.destroy();
-    }, [nights]);
+    }, [nights, theme]);
 
     if (nights.length === 0) return null;
     return (

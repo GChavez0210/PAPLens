@@ -1,5 +1,6 @@
 import { memo, useEffect, useMemo, useRef } from "react";
 import Chart from "chart.js/auto";
+import { SERIES, baseLegend, baseScales, baseTooltip } from "../../charts/chartTheme";
 
 function rollingAvg(arr, window) {
     return arr.map((_, i) => {
@@ -8,13 +9,14 @@ function rollingAvg(arr, window) {
     });
 }
 
-function AHITrendChartComponent({ labels, data, height = 200 }) {
+function AHITrendChartComponent({ labels, data, height = 200, theme = "dark" }) {
     const ref = useRef(null);
     const rolling = useMemo(() => rollingAvg(data, 7), [data]);
 
     useEffect(() => {
         if (!ref.current) return;
         const ctx = ref.current.getContext("2d");
+        const scales = baseScales(theme);
         const chart = new Chart(ctx, {
             type: "bar",
             data: {
@@ -25,13 +27,14 @@ function AHITrendChartComponent({ labels, data, height = 200 }) {
                         data,
                         backgroundColor: data.map(val => (val >= 5 ? "rgba(239,68,68,0.65)" : "rgba(34,211,238,0.45)")),
                         borderRadius: 4,
+                        maxBarThickness: 46,
                         order: 2
                     },
                     {
                         label: "7-day avg",
                         data: rolling,
                         type: "line",
-                        borderColor: "#f59e0b",
+                        borderColor: SERIES.amber,
                         backgroundColor: "transparent",
                         tension: 0.4,
                         pointRadius: 0,
@@ -45,27 +48,18 @@ function AHITrendChartComponent({ labels, data, height = 200 }) {
                 maintainAspectRatio: false,
                 interaction: { mode: "index", intersect: false },
                 plugins: {
-                    legend: {
-                        display: true,
-                        position: "bottom",
-                        labels: { color: "#9ca3af", font: { size: 11 }, boxWidth: 12, padding: 10 }
-                    },
-                    tooltip: { mode: "index", intersect: false }
+                    legend: baseLegend(theme),
+                    tooltip: { ...baseTooltip(theme), mode: "index", intersect: false }
                 },
                 scales: {
-                    x: { display: true, grid: { display: false }, ticks: { color: "#6b7280", maxRotation: 45 } },
-                    y: {
-                        display: true,
-                        grid: { color: "rgba(255,255,255,0.07)" },
-                        beginAtZero: true,
-                        ticks: { color: "#6b7280" }
-                    }
+                    x: { ...scales.x, grid: { ...scales.x.grid, display: false }, ticks: { ...scales.x.ticks, maxRotation: 45 } },
+                    y: scales.y
                 }
             }
         });
 
         return () => chart.destroy();
-    }, [labels, data, rolling]);
+    }, [labels, data, rolling, theme]);
 
     return (
         <div style={{ position: "relative", width: "100%", height: `${height}px` }}>

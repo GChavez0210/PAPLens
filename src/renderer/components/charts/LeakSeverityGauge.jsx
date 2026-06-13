@@ -1,8 +1,9 @@
 import { memo, useEffect, useRef } from "react";
 import Chart from "chart.js/auto";
 import { toMetricNumber } from "../../utils/therapyMetrics";
+import { SERIES, baseTooltip, chartColors } from "../../charts/chartTheme";
 
-function LeakSeverityGaugeComponent({ leak50, leak95, height = 150 }) {
+function LeakSeverityGaugeComponent({ leak50, leak95, height = 150, theme = "dark" }) {
     const ref = useRef(null);
     const leak50Value = toMetricNumber(leak50) ?? 0;
     const leak95Value = toMetricNumber(leak95);
@@ -19,7 +20,7 @@ function LeakSeverityGaugeComponent({ leak50, leak95, height = 150 }) {
                 datasets: [
                     {
                         data: [leak50Value, Math.max(0, leak95Value - leak50Value), Math.max(0, 24 - leak95Value)],
-                        backgroundColor: ["#10b981", "#f59e0b", "rgba(255,255,255,0.05)"],
+                        backgroundColor: [SERIES.emerald, SERIES.amber, chartColors(theme).track],
                         borderWidth: 0,
                         circumference: 180,
                         rotation: 270
@@ -31,14 +32,14 @@ function LeakSeverityGaugeComponent({ leak50, leak95, height = 150 }) {
                 maintainAspectRatio: false,
                 plugins: {
                     legend: { display: false },
-                    tooltip: { enabled: true }
+                    tooltip: baseTooltip(theme)
                 },
                 cutout: "80%"
             }
         });
 
         return () => chart.destroy();
-    }, [leak50Value, leak95Value]);
+    }, [leak50Value, leak95Value, theme]);
 
     return (
         <div style={{ textAlign: "center", position: "relative" }}>

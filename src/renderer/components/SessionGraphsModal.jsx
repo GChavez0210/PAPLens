@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Chart from "chart.js/auto";
+import { baseLegend, baseTooltip, chartColors, formatAxisTick } from "../charts/chartTheme";
 
 const MAX_POINTS = 1800;
+// Smallest zoom window (minutes) for the daily session graphs.
+const MIN_ZOOM_MINUTES = 0.5;
 
 function getFile(detail, fileType) {
   return detail?.data?.[fileType] && !detail.data[fileType].error ? detail.data[fileType] : null;
@@ -60,6 +63,10 @@ function buildPoints(values, file, maxPoints = MAX_POINTS) {
     }
   }
   return points;
+}
+
+function toLeakLitersPerMinute(values) {
+  return (values || []).map((value) => Number(value) * 60);
 }
 
 // ── Breathing amplitude & PB-episode detection ────────────────────────────────
@@ -293,18 +300,26 @@ function buildEventOverlayDatasets(events, pressurePoints) {
   }));
 }
 
-function SessionChart({ title, unit, datasets, yMin, yMax, theme, yTickLabel, tooltipLabel, externalPlugins }) {
+function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickLabel, tooltipLabel, externalPlugins, maxMinutes, onRangeChange }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
+  // Keep the latest formatter callbacks and interaction inputs in refs so the
+  // chart is rebuilt only when its structure changes — never on zoom/pan, which
+  // would cause a visible flicker. Zoom updates are applied to scales in place.
+  const tooltipLabelRef = useRef(tooltipLabel);
+  const yTickLabelRef = useRef(yTickLabel);
+  const maxMinutesRef = useRef(maxMinutes);
+  const onRangeChangeRef = useRef(onRangeChange);
+  tooltipLabelRef.current = tooltipLabel;
+  yTickLabelRef.current = yTickLabel;
+  maxMinutesRef.current = maxMinutes;
+  onRangeChangeRef.current = onRangeChange;
+
+  // Build the chart when its structure (data / theme / axes) changes.
   useEffect(() => {
     if (!canvasRef.current) return undefined;
-    if (chartRef.current) {
-      chartRef.current.destroy();
-    }
-
-    const textColor = theme === "light" ? "#4b5563" : "#a1a1aa";
-    const gridColor = theme === "light" ? "rgba(0,0,0,0.08)" : "rgba(255,255,255,0.11)";
+    const colors = chartColors(theme);
     chartRef.current = new Chart(canvasRef.current, {
       type: "line",
       data: { datasets },
@@ -319,30 +334,38 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, yTickLabel, to
         scales: {
           x: {
             type: "linear",
-            title: { display: true, text: "Elapsed time", color: textColor },
-            ticks: { color: textColor, callback: (value) => formatElapsed(Number(value) * 60), maxTicksLimit: 8 },
-            grid: { color: gridColor }
+            min: xRange?.start,
+            max: xRange?.end,
+            title: { display: true, text: "Elapsed time", color: colors.mutedText },
+            ticks: {
+              color: colors.text,
+              callback: (value) => formatElapsed(Number(value) * 60),
+              maxTicksLimit: 7,
+              font: { size: 11, weight: "500" }
+            },
+            grid: { color: colors.grid, tickLength: 0 },
+            border: { color: colors.axis }
           },
           y: {
             min: yMin,
             max: yMax,
-            title: { display: Boolean(unit), text: unit, color: textColor },
+            title: { display: Boolean(unit), text: unit, color: colors.mutedText },
             ticks: {
-              color: textColor,
-              callback: (value) => (yTickLabel ? yTickLabel(value) : value)
+              color: colors.text,
+              font: { size: 11, weight: "500" },
+              callback: (value) => (yTickLabelRef.current ? yTickLabelRef.current(value) : formatAxisTick(value))
             },
-            grid: { color: gridColor }
+            grid: { color: colors.grid, tickLength: 0 },
+            border: { color: colors.axis }
           }
         },
         plugins: {
-          legend: {
-            position: "bottom",
-            labels: { color: textColor, boxWidth: 14, boxHeight: 2 }
-          },
+          legend: baseLegend(theme),
           tooltip: {
+            ...baseTooltip(theme),
             callbacks: {
               title: (items) => (items[0] ? formatElapsed(items[0].parsed.x * 60) : ""),
-              label: (item) => tooltipLabel ? tooltipLabel(item) : `${item.dataset.label}: ${Number(item.parsed.y).toFixed(2)}${unit ? ` ${unit}` : ""}`
+              label: (item) => tooltipLabelRef.current ? tooltipLabelRef.current(item) : `${item.dataset.label}: ${Number(item.parsed.y).toFixed(2)}${unit ? ` ${unit}` : ""}`
             }
           }
         }
@@ -350,7 +373,95 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, yTickLabel, to
     });
 
     return () => chartRef.current?.destroy();
-  }, [datasets, externalPlugins, theme, title, tooltipLabel, unit, yMax, yMin, yTickLabel]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [datasets, externalPlugins, theme, unit, yMin, yMax]);
+
+  // Apply the shared zoom window in place (no rebuild) whenever it changes.
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart) return;
+    chart.options.scales.x.min = xRange?.start;
+    chart.options.scales.x.max = xRange?.end;
+    chart.update("none");
+  }, [xRange]);
+
+  // Direct-manipulation zoom (wheel) and pan (drag), bound once per mount.
+  // All charts share one range via onRangeChange, so any chart drives them all.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return undefined;
+
+    const clampSpan = (span) => {
+      const max = Math.max(1, maxMinutesRef.current || 1);
+      return Math.min(Math.max(MIN_ZOOM_MINUTES, span), max);
+    };
+
+    const onWheel = (e) => {
+      // Only zoom when Ctrl/Cmd is held, so a plain wheel scrolls the modal
+      // past the graphs without accidentally zooming them.
+      if (!e.ctrlKey && !e.metaKey) return;
+      const chart = chartRef.current;
+      const max = maxMinutesRef.current;
+      if (!chart || !max) return;
+      e.preventDefault();
+      const scale = chart.scales.x;
+      const rect = canvas.getBoundingClientRect();
+      const focus = scale.getValueForPixel(e.clientX - rect.left);
+      const curMin = scale.min ?? 0;
+      const curMax = scale.max ?? max;
+      const span = curMax - curMin;
+      const nextSpan = clampSpan(span * (e.deltaY > 0 ? 1.25 : 0.8));
+      if (nextSpan >= max) {
+        onRangeChangeRef.current(null);
+        return;
+      }
+      const ratio = span > 0 ? (focus - curMin) / span : 0.5;
+      onRangeChangeRef.current(clampRange(focus - ratio * nextSpan, nextSpan, max));
+    };
+
+    let dragging = false;
+    let startX = 0;
+    let snapMin = 0;
+    let snapSpan = 0;
+    let minPerPx = 0;
+
+    const onPointerDown = (e) => {
+      const chart = chartRef.current;
+      const max = maxMinutesRef.current;
+      if (!chart || !max || e.button !== 0) return;
+      const scale = chart.scales.x;
+      const curMin = scale.min ?? 0;
+      const curMax = scale.max ?? max;
+      snapSpan = curMax - curMin;
+      if (snapSpan >= max) return; // already showing the full session — nothing to pan
+      dragging = true;
+      startX = e.clientX;
+      snapMin = curMin;
+      minPerPx = snapSpan / (scale.right - scale.left);
+      canvas.style.cursor = "grabbing";
+    };
+    const onPointerMove = (e) => {
+      if (!dragging) return;
+      const deltaMin = -(e.clientX - startX) * minPerPx;
+      onRangeChangeRef.current(clampRange(snapMin + deltaMin, snapSpan, maxMinutesRef.current));
+    };
+    const endDrag = () => {
+      if (!dragging) return;
+      dragging = false;
+      canvas.style.cursor = "";
+    };
+
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("pointerdown", onPointerDown);
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", endDrag);
+    return () => {
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("pointerdown", onPointerDown);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", endDrag);
+    };
+  }, []);
 
   return (
     <section className="session-graph-card">
@@ -362,6 +473,135 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, yTickLabel, to
   );
 }
 
+/**
+ * MiniSparkline — a faint area sketch of one signal across the whole session,
+ * drawn behind the minimap window so the user can orient the zoom selection.
+ */
+function MiniSparkline({ points, maxMinutes, theme }) {
+  const canvasRef = useRef(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !points || points.length === 0 || !maxMinutes) return;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width;
+    const h = rect.height;
+    if (w === 0 || h === 0) return;
+    canvas.width = w * dpr;
+    canvas.height = h * dpr;
+    const ctx = canvas.getContext("2d");
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const p of points) {
+      if (p.y < minY) minY = p.y;
+      if (p.y > maxY) maxY = p.y;
+    }
+    const span = maxY - minY || 1;
+    const xOf = (m) => (m / maxMinutes) * w;
+    const yOf = (v) => h - 3 - ((v - minY) / span) * (h - 6);
+
+    ctx.beginPath();
+    ctx.moveTo(xOf(points[0].x), h);
+    for (const p of points) ctx.lineTo(xOf(p.x), yOf(p.y));
+    ctx.lineTo(xOf(points[points.length - 1].x), h);
+    ctx.closePath();
+    const accent = theme === "light" ? "rgba(79,70,229,0.16)" : "rgba(34,211,238,0.16)";
+    ctx.fillStyle = accent;
+    ctx.fill();
+  }, [points, maxMinutes, theme]);
+
+  return <canvas ref={canvasRef} className="session-minimap-spark" />;
+}
+
+/**
+ * SessionMinimap — full-session overview strip with a draggable / resizable
+ * window. Dragging the window body pans; dragging an edge handle resizes;
+ * clicking the track centers the current window there. Reports the new range
+ * through onRangeChange (null === fit to full session).
+ */
+function SessionMinimap({ maxMinutes, range, points, theme, onRangeChange }) {
+  const trackRef = useRef(null);
+  const dragRef = useRef(null);
+
+  const start = range ? range.start : 0;
+  const end = range ? range.end : maxMinutes;
+
+  useEffect(() => {
+    const onMove = (e) => {
+      const d = dragRef.current;
+      const track = trackRef.current;
+      if (!d || !track) return;
+      const rect = track.getBoundingClientRect();
+      const deltaMin = ((e.clientX - d.startX) / rect.width) * maxMinutes;
+      if (d.mode === "move") {
+        const span = d.origEnd - d.origStart;
+        onRangeChange(clampRange(d.origStart + deltaMin, span, maxMinutes));
+        return;
+      }
+      let s = d.origStart;
+      let en = d.origEnd;
+      if (d.mode === "left") s = Math.min(Math.max(0, d.origStart + deltaMin), d.origEnd - MIN_ZOOM_MINUTES);
+      if (d.mode === "right") en = Math.max(Math.min(maxMinutes, d.origEnd + deltaMin), d.origStart + MIN_ZOOM_MINUTES);
+      onRangeChange(clampRange(s, en - s, maxMinutes));
+    };
+    const onUp = () => { dragRef.current = null; };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+  }, [maxMinutes, onRangeChange]);
+
+  const beginDrag = (mode) => (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    dragRef.current = { mode, startX: e.clientX, origStart: start, origEnd: end };
+  };
+
+  const onTrackDown = (e) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const rect = track.getBoundingClientRect();
+    const clickMin = Math.min(maxMinutes, Math.max(0, ((e.clientX - rect.left) / rect.width) * maxMinutes));
+    const span = range ? range.end - range.start : Math.min(maxMinutes, 15);
+    onRangeChange(clampRange(clickMin - span / 2, span, maxMinutes));
+  };
+
+  const leftPct = (start / maxMinutes) * 100;
+  const widthPct = ((end - start) / maxMinutes) * 100;
+
+  return (
+    <div className="session-minimap">
+      <div className="session-minimap-track" ref={trackRef} onPointerDown={onTrackDown}>
+        <MiniSparkline points={points} maxMinutes={maxMinutes} theme={theme} />
+        <div
+          className="session-minimap-window"
+          style={{ left: `${leftPct}%`, width: `${widthPct}%` }}
+          onPointerDown={beginDrag("move")}
+          role="slider"
+          aria-label="Visible time window"
+          aria-valuemin={0}
+          aria-valuemax={Math.round(maxMinutes)}
+          aria-valuenow={Math.round(start)}
+          tabIndex={0}
+        >
+          <span className="session-minimap-handle left" onPointerDown={beginDrag("left")} />
+          <span className="session-minimap-handle right" onPointerDown={beginDrag("right")} />
+        </div>
+      </div>
+      <div className="session-minimap-labels">
+        <span>{formatElapsed(0)}</span>
+        <span>{formatElapsed(maxMinutes * 60)}</span>
+      </div>
+    </div>
+  );
+}
+
 function EmptyGraph({ title, message }) {
   return (
     <section className="session-graph-card session-graph-empty">
@@ -369,6 +609,33 @@ function EmptyGraph({ title, message }) {
       <p>{message}</p>
     </section>
   );
+}
+
+function getGraphMaxMinutes(graphData) {
+  const groups = [
+    graphData.pressure,
+    graphData.flow,
+    graphData.amplitude,
+    graphData.flowLimitation,
+    graphData.leak
+  ];
+  let max = 0;
+  for (const datasets of groups) {
+    for (const dataset of datasets || []) {
+      for (const point of dataset?.data || []) {
+        const x = Number(point?.x);
+        if (Number.isFinite(x)) max = Math.max(max, x);
+      }
+    }
+  }
+  return max;
+}
+
+function clampRange(start, span, maxMinutes) {
+  const safeMax = Math.max(1, maxMinutes || 1);
+  const safeSpan = Math.min(Math.max(1, span), safeMax);
+  const safeStart = Math.min(Math.max(0, start), Math.max(0, safeMax - safeSpan));
+  return { start: safeStart, end: safeStart + safeSpan };
 }
 
 /**
@@ -391,6 +658,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
   const [activeIdx, setActiveIdx] = useState(initialIdx);
   const [detail, setDetail] = useState(null);
   const [reattaching, setReattaching] = useState(false);
+  const [zoomRange, setZoomRange] = useState(null);
 
   const loadSession = async (session, onResult) => {
     try {
@@ -414,6 +682,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
     const session = sessions[activeIdx];
     if (!session) return undefined;
     setDetail(null);
+    setZoomRange(null);
     let cancelled = false;
     loadSession(session, (d) => { if (!cancelled) setDetail(d); });
     return () => { cancelled = true; };
@@ -518,7 +787,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
         ? [
             {
               label: "Leak rate",
-              data: buildPoints(leak.values, pld),
+              data: buildPoints(toLeakLitersPerMinute(leak.values), pld),
               borderColor: "#16a34a",
               backgroundColor: "rgba(22,163,74,0.12)",
               pointRadius: 0,
@@ -540,6 +809,49 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
       events
     };
   }, [detail, theme]);
+
+  const maxGraphMinutes = useMemo(() => getGraphMaxMinutes(graphData), [graphData]);
+  const activeZoomLabel = zoomRange
+    ? `${formatElapsed(zoomRange.start * 60)} - ${formatElapsed(zoomRange.end * 60)}`
+    : "Fit session";
+  const zoomSelectValue = (() => {
+    if (!zoomRange) return "fit";
+    const span = zoomRange.end - zoomRange.start;
+    for (const option of [1, 5, 15, 60]) {
+      if (Math.abs(span - option) < 0.05) return String(option);
+    }
+    return "custom";
+  })();
+
+  // A single sketch signal for the minimap backdrop — prefer the smooth tidal
+  // amplitude, then pressure, then raw flow.
+  const minimapPoints = useMemo(() => (
+    graphData.amplitude?.[0]?.data
+    || graphData.pressure?.[0]?.data
+    || graphData.flow?.[0]?.data
+    || []
+  ), [graphData]);
+
+  // Shared range setter used by the charts (wheel/drag) and the minimap.
+  // Collapsing to a full-session range resets to "fit" (null).
+  const applyRange = useCallback((range) => {
+    if (!range || (range.start <= 0.001 && range.end >= maxGraphMinutes - 0.001)) {
+      setZoomRange(null);
+    } else {
+      setZoomRange(range);
+    }
+  }, [maxGraphMinutes]);
+
+  const setZoomWindow = (minutes) => {
+    if (!minutes || !maxGraphMinutes) {
+      setZoomRange(null);
+      return;
+    }
+    const center = zoomRange
+      ? (zoomRange.start + zoomRange.end) / 2
+      : maxGraphMinutes / 2;
+    setZoomRange(clampRange(center - minutes / 2, minutes, maxGraphMinutes));
+  };
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -566,46 +878,70 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
             <h2 id="session-modal-title">{sessionTitle}</h2>
           </div>
 
-          {/* Session picker — only shown when multiple sessions exist for the day */}
-          {sessions.length > 1 && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, marginRight: 12 }}>
-              <span style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: 1, color: "var(--muted)", fontWeight: 600 }}>
-                Session
-              </span>
-              <select
-                value={activeIdx}
-                onChange={(e) => setActiveIdx(Number(e.target.value))}
-                style={{
-                  background: "var(--card)",
-                  color: "var(--text)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  padding: "4px 8px",
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  minWidth: 130
-                }}
-                aria-label="Select session"
-              >
-                {sessions.map((s, i) => {
-                  const t = s.timestamp
-                    ? new Date(s.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
-                    : `Session ${i + 1}`;
-                  const dur = s.durationMinutes ? ` · ${Math.round(s.durationMinutes)}m` : "";
-                  return (
-                    <option key={s.id || i} value={i}>
-                      {t}{dur}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-          )}
+          <div className="session-modal-actions">
+            {maxGraphMinutes > 0 && (
+              <div className="session-zoom-controls" aria-label="Session graph zoom window">
+                <span className="session-control-label">Window</span>
+                <select
+                  value={zoomSelectValue}
+                  onChange={(e) => setZoomWindow(e.target.value === "fit" ? null : Number(e.target.value))}
+                  aria-label="Choose zoom window"
+                >
+                  <option value="fit">Fit session</option>
+                  <option value="custom" disabled>Custom window</option>
+                  <option value="1">1 min</option>
+                  <option value="5">5 min</option>
+                  <option value="15">15 min</option>
+                  <option value="60">1 hr</option>
+                </select>
+              </div>
+            )}
 
-          <button className="session-modal-close" type="button" onClick={onClose} aria-label="Close session graphs">
-            ✕
-          </button>
+            {/* Session picker — only shown when multiple sessions exist for the day */}
+            {sessions.length > 1 && (
+              <div className="session-picker">
+                <span className="session-control-label">Session</span>
+                <select
+                  value={activeIdx}
+                  onChange={(e) => setActiveIdx(Number(e.target.value))}
+                  aria-label="Select session"
+                >
+                  {sessions.map((s, i) => {
+                    const t = s.timestamp
+                      ? new Date(s.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      : `Session ${i + 1}`;
+                    const dur = s.durationMinutes ? ` · ${Math.round(s.durationMinutes)}m` : "";
+                    return (
+                      <option key={s.id || i} value={i}>
+                        {t}{dur}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            )}
+
+            <button className="session-modal-close" type="button" onClick={onClose} aria-label="Close session graphs">
+              ✕
+            </button>
+          </div>
         </header>
+
+        {detail && !detail.error && maxGraphMinutes > 0 && (
+          <div className="session-minimap-bar">
+            <div className="session-minimap-meta">
+              <span className="session-minimap-hint">Ctrl + scroll to zoom · drag a graph to pan · drag the window</span>
+              <span className="session-zoom-readout">{activeZoomLabel}</span>
+            </div>
+            <SessionMinimap
+              maxMinutes={maxGraphMinutes}
+              range={zoomRange}
+              points={minimapPoints}
+              theme={theme}
+              onRangeChange={applyRange}
+            />
+          </div>
+        )}
 
         {!detail ? (
           <EmptyGraph title="Loading session graphs" message="Parsing the selected session EDF files..." />
@@ -636,6 +972,9 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                 unit="cmH2O"
                 datasets={graphData.pressure}
                 theme={theme}
+                xRange={zoomRange}
+                maxMinutes={maxGraphMinutes}
+                onRangeChange={applyRange}
                 tooltipLabel={(item) => {
                   if (item.dataset.type === "scatter") {
                     const pt = item.raw || {};
@@ -649,7 +988,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
               <EmptyGraph title="Pressure" message="No pressure signal found for this session." />
             )}
             {graphData.flow.length > 0 ? (
-              <SessionChart title="Flow Rate" unit="L/min" datasets={graphData.flow} theme={theme} />
+              <SessionChart title="Flow Rate" unit="L/min" datasets={graphData.flow} theme={theme} xRange={zoomRange} maxMinutes={maxGraphMinutes} onRangeChange={applyRange} />
             ) : (
               <EmptyGraph title="Flow Rate" message="No high-resolution flow signal found for this session." />
             )}
@@ -664,16 +1003,19 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                 datasets={graphData.amplitude}
                 yMin={0}
                 theme={theme}
+                xRange={zoomRange}
+                maxMinutes={maxGraphMinutes}
+                onRangeChange={applyRange}
                 externalPlugins={graphData.pbPlugin ? [graphData.pbPlugin] : []}
               />
             ) : null}
             {graphData.flowLimitation.length > 0 ? (
-              <SessionChart title="Flow Limitation" unit="index" datasets={graphData.flowLimitation} yMin={0} yMax={1} theme={theme} />
+              <SessionChart title="Flow Limitation" unit="index" datasets={graphData.flowLimitation} yMin={0} yMax={1} theme={theme} xRange={zoomRange} maxMinutes={maxGraphMinutes} onRangeChange={applyRange} />
             ) : (
               <EmptyGraph title="Flow Limitation" message="No flow limitation signal found for this session." />
             )}
             {graphData.leak.length > 0 ? (
-              <SessionChart title="Leak Rate" unit="L/min" datasets={graphData.leak} yMin={0} theme={theme} />
+              <SessionChart title="Leak Rate" unit="L/min" datasets={graphData.leak} yMin={0} theme={theme} xRange={zoomRange} maxMinutes={maxGraphMinutes} onRangeChange={applyRange} />
             ) : (
               <EmptyGraph title="Leak Rate" message="No leak signal found for this session." />
             )}

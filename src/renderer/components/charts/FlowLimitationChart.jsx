@@ -1,11 +1,12 @@
 import { memo, useEffect, useMemo, useRef } from "react";
 import Chart from "chart.js/auto";
+import { SERIES, baseLegend, baseScales, baseTooltip } from "../../charts/chartTheme";
 
 /**
  * Dual-line chart showing flow_limitation_p95 and rin_per_hr (Respiratory Disturbance Index)
  * over the selected date range.
  */
-function FlowLimitationChartComponent({ trends, height = 200 }) {
+function FlowLimitationChartComponent({ trends, height = 200, theme = "dark" }) {
     const ref = useRef(null);
 
     const nights = useMemo(
@@ -17,6 +18,7 @@ function FlowLimitationChartComponent({ trends, height = 200 }) {
         if (!ref.current || nights.length === 0) return;
         const labels = nights.map(d => d.night_date?.slice(5));
         const ctx = ref.current.getContext("2d");
+        const scales = baseScales(theme);
         const chart = new Chart(ctx, {
             type: "line",
             data: {
@@ -71,34 +73,30 @@ function FlowLimitationChartComponent({ trends, height = 200 }) {
                 maintainAspectRatio: false,
                 interaction: { mode: "index", intersect: false },
                 plugins: {
-                    legend: {
-                        display: true,
-                        position: "bottom",
-                        labels: { color: "#9ca3af", font: { size: 11 }, boxWidth: 12, padding: 12 }
-                    }
+                    legend: baseLegend(theme),
+                    tooltip: baseTooltip(theme)
                 },
                 scales: {
-                    x: { grid: { display: false }, ticks: { color: "#6b7280", maxRotation: 45 } },
+                    x: { ...scales.x, grid: { ...scales.x.grid, display: false }, ticks: { ...scales.x.ticks, maxRotation: 45 } },
                     yFL: {
+                        ...scales.y,
                         position: "left",
-                        beginAtZero: true,
                         max: 1,
-                        grid: { color: "rgba(255,255,255,0.07)" },
-                        ticks: { color: "#f59e0b" },
-                        title: { display: true, text: "FL P95 (0–1)", color: "#f59e0b", font: { size: 10 } }
+                        ticks: { ...scales.y.ticks, color: SERIES.amber },
+                        title: { display: true, text: "FL P95 (0–1)", color: SERIES.amber, font: { size: 10 } }
                     },
                     yRIN: {
+                        ...scales.y,
                         position: "right",
-                        beginAtZero: true,
                         grid: { drawOnChartArea: false },
-                        ticks: { color: "#8b5cf6" },
-                        title: { display: true, text: "RIN (events/hr)", color: "#8b5cf6", font: { size: 10 } }
+                        ticks: { ...scales.y.ticks, color: SERIES.violet },
+                        title: { display: true, text: "RIN (events/hr)", color: SERIES.violet, font: { size: 10 } }
                     }
                 }
             }
         });
         return () => chart.destroy();
-    }, [nights]);
+    }, [nights, theme]);
 
     if (nights.length === 0) return null;
     return (

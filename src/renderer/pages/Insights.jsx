@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTheme } from "../ThemeContext";
 import { filterAnalyzedDays, getCorrelationInsight } from "../utils/reportBuilder";
 import { calculatePercentile, formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
 import { AHITrendChart } from "../components/charts/AHITrendChart";
@@ -314,6 +315,7 @@ function StatCard({ label, value, unit, sub, color = "#22D3EE", tooltipKey, tool
 }
 
 export function Insights({ range = "30", customFrom = "", customTo = "" }) {
+    const theme = useTheme();
     const [data, setData] = useState(null);
 
     const loadData = useCallback(async (isCancelled = () => false) => {
@@ -426,7 +428,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                                 <StatCard label="Average Pressure" value={formatMetricValue(avgPress, 1)} unit="cmH₂O" sub="50th percentile" color="#22D3EE" tooltipKey="pressure" tooltipDown />
                                 <div style={{ gridRow: "span 2", background: "var(--card)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px" }}>
                                     <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1, textAlign: "center", marginBottom: 10 }}>Average Mask Leak</div>
-                                    <LeakSeverityGauge leak50={avgLeak50} leak95={displayLeak95} height={180} />
+                                    <LeakSeverityGauge leak50={avgLeak50} leak95={displayLeak95} height={180} theme={theme} />
                                 </div>
                                 <StatCard label="Average Flow" value={formatMetricValue(avgFlow, 1)} unit="L/min" sub="50th percentile" color="#8b5cf6" tooltipKey="flow" />
                                 <StatCard label="Average Vol." value={formatMetricValue(displayTidal, 0)} unit="mL" sub="50th percentile" color="#22D3EE" tooltipKey="tidal" />
@@ -439,7 +441,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                                 AHI Trend ({rangeLabel})
                             </h3>
                             <div data-report-key="ahi-trend">
-                                <AHITrendChart labels={labels} data={ahiData} height={220} />
+                                <AHITrendChart labels={labels} data={ahiData} height={220} theme={theme} />
                             </div>
                         </section>
 
@@ -530,7 +532,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                                     Event Type Breakdown ({rangeLabel})
                                 </h3>
                                 <div data-report-key="event-split">
-                    <EventTypeSplitChart trends={sorted} height={220} />
+                    <EventTypeSplitChart trends={sorted} height={220} theme={theme} />
                 </div>
                             </section>
                         )}
@@ -545,7 +547,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                                     FL P95 measures airway narrowing intensity; RIN counts flow-limited breaths that didn't score as events.
                                 </div>
                                 <div data-report-key="flow-limit">
-                    <FlowLimitationChart trends={sorted} height={200} />
+                    <FlowLimitationChart trends={sorted} height={200} theme={theme} />
                 </div>
                             </section>
                         )}
@@ -596,7 +598,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                                         Average % of 2-second epochs at each pressure level across {parsed.length} night{parsed.length !== 1 ? "s" : ""} with high-resolution data.
                                         {avgEff !== null && ` Avg time near pressure ceiling: ${avgEff.toFixed(1)}%.`}
                                     </div>
-                                    <PressureHistogramChart histogram={avgHist} height={200} />
+                                    <PressureHistogramChart histogram={avgHist} height={200} theme={theme} />
                                 </section>
                             );
                         })()}

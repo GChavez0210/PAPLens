@@ -1,5 +1,30 @@
 import { isNoDataDay } from "../utils/reportBuilder";
 import { formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
+import { AHI_MILD, AHI_MODERATE, LEAK_SEVERITY_P95, LEAK_SEVERITY_P50 } from "../constants";
+
+/**
+ * Severity tints. Missing values render as "normal" so N/A stays neutral,
+ * matching the old breakdown panel's behavior.
+ */
+function ahiSeverityClass(value) {
+    const v = toMetricNumber(value);
+    if (v === null) return "normal";
+    return v < AHI_MILD ? "normal" : v <= AHI_MODERATE ? "warning" : "critical";
+}
+
+/**
+ * Leak severity uses the percentile-calibrated tiers from clinicalThresholds
+ * (p50 distributions run ~half the p95 scale): "high" → warning, "severe" →
+ * critical. For p95 that means amber at 12 and red at 24 L/min — the clinical
+ * large-leak limit providers screen against.
+ */
+function leakSeverityClass(value, tiers) {
+    const v = toMetricNumber(value);
+    if (v === null) return "normal";
+    if (v >= tiers.severe) return "critical";
+    if (v >= tiers.high) return "warning";
+    return "normal";
+}
 
 function getScoreTier(score) {
     if (score === null || score === undefined) return { tier: 0, badge: "badge-nodata", label: "N/A" };
@@ -75,12 +100,16 @@ export function ClinicalSummaryCard({ night, onSelect, isSelected }) {
             <div className="cc-row">
                 <div className="cc-stat">
                     <label>AHI</label>
-                    <strong>{noData ? "-" : formatMetricValue(night.ahi, 1)}</strong>
+                    <strong className={noData ? undefined : `badge badge-${ahiSeverityClass(night.ahi)}`}>
+                        {noData ? "-" : formatMetricValue(night.ahi, 1)}
+                    </strong>
                     <span>events/hr</span>
                 </div>
                 <div className="cc-stat">
-                    <label>Leak.95</label>
-                    <strong>{noData ? "-" : leakDisplay}</strong>
+                    <label>{leak95 == null && leak50 != null ? "Leak P50" : "Leak P95"}</label>
+                    <strong className={noData ? undefined : `badge badge-${leakSeverityClass(leak95 ?? leak50, leak95 != null ? LEAK_SEVERITY_P95 : LEAK_SEVERITY_P50)}`}>
+                        {noData ? "-" : leakDisplay}
+                    </strong>
                     <span>L/min</span>
                 </div>
                 <div className="cc-stat">

@@ -91,6 +91,18 @@ class CpapService {
         return summary;
     }
 
+    attachImportMetadata(summary) {
+        if (!summary || !this.profileDatabase) return summary;
+
+        const row = this.profileDatabase.db.prepare(`
+      SELECT import_timestamp FROM import_log
+      ORDER BY import_timestamp DESC LIMIT 1
+    `).get();
+
+        summary.lastImportedAt = row?.import_timestamp || null;
+        return summary;
+    }
+
     async loadDataFromPath(dataPath) {
         if (!this.profileDatabase) {
             console.warn("Attempted to load data without active profile database.");
@@ -125,6 +137,7 @@ class CpapService {
 
             this.mergeDerivedMetricsIntoSummary(result.deviceId, summary);
         }
+        this.attachImportMetadata(summary);
 
         if (this.mainWindow) {
             measureSummaryPayload(summary);
@@ -370,6 +383,7 @@ class CpapService {
             dailyStats,
             sessions: sessionLoader ? sessionLoader.sessions : []
         };
+        this.attachImportMetadata(this.currentSummary);
 
         if (!sessionLoader) this.dataLoader = null;
         return this.currentSummary;

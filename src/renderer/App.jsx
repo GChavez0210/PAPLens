@@ -1,47 +1,51 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chart } from "chart.js";
 import { TrendChart } from "./charts/TrendChart";
-import { LastNightSidebar } from "./components/LastNightSidebar";
+import { LastNightDetails } from "./components/LastNightDetails";
 import { ProfileSelector } from "./components/ProfileSelector";
 import { ClinicalSummaryCard } from "./components/ClinicalSummaryCard";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { SessionGraphsModal } from "./components/SessionGraphsModal";
 import { SleepCalendar } from "./components/SleepCalendar";
+import { IconDashboard, IconCalendar, IconChart, IconSun, IconMoon, IconRefresh, IconFileText, IconImport, IconSwitch, IconMonitor, IconHash, IconCpu } from "./components/Icons";
+import { ScoreRing } from "./components/ScoreRing";
+import { InfoTip } from "./components/InfoTip";
+import { SkeletonPanel } from "./components/Skeleton";
 import { buildClinicalContext, buildReportProfile, computeScores, filterAnalyzedDays, filterUsageTrackedDays, getCorrelationInsight, hasTherapyData, isNoDataDay } from "./utils/reportBuilder";
-import { formatMetricValue, toMetricNumber } from "./utils/therapyMetrics";
+import { toMetricNumber } from "./utils/therapyMetrics";
 import { downsampleIndices } from "./utils/downsample";
-import { AHI_MILD, AHI_MODERATE, LEAK_HIGH, LEAK_WARNING, USAGE_COMPLIANCE_HOURS, USAGE_WARNING_HOURS, SPO2_NORMAL, SPO2_WARNING } from "./constants";
+import { AHI_MILD, AHI_MODERATE, LEAK_HIGH, USAGE_COMPLIANCE_HOURS } from "./constants";
 import { ThemeContext } from "./ThemeContext";
 
-const RANGE_OPTIONS = ["7", "14", "30", "60", "90", "180", "365", "all", "custom"];
+const RANGE_OPTIONS = [
+  { value: "7", label: "7" },
+  { value: "30", label: "30" },
+  { value: "90", label: "90" },
+  { value: "custom", label: "Custom" }
+];
 
 /** Shared style for the "PAPLens by Gabriel Chavez" footer credit line. */
 const FOOTER_CREDIT_STYLE = { textAlign: 'center', padding: '16px 0 4px', fontSize: '0.7rem', color: 'var(--muted)', opacity: 0.55 };
 const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN = /(airsense|aircurve|lumis|airmini)/i;
 const Insights = lazy(() => import("./pages/Insights").then((module) => ({ default: module.Insights })));
 
-function severity(metric, value) {
-  if (metric === "ahi") {
-    if (value < AHI_MILD) return "normal";
-    if (value <= AHI_MODERATE) return "warning";
-    return "critical";
+/**
+ * Period-over-period change indicator. Renders nothing when either side of
+ * the comparison is unavailable (e.g. "all"/"custom" ranges have no prior window).
+ */
+function MetricDelta({ current, prior, goodWhenDown = false, decimals = 1, periodLabel = "prior period" }) {
+  if (current == null || prior == null) return null;
+  const delta = current - prior;
+  const eps = Math.pow(10, -decimals) / 2;
+  if (Math.abs(delta) < eps) {
+    return <span className="metric-delta delta-flat">steady vs {periodLabel}</span>;
   }
-  if (metric === "usageHours") {
-    if (value >= USAGE_COMPLIANCE_HOURS) return "normal";
-    if (value >= USAGE_WARNING_HOURS) return "warning";
-    return "critical";
-  }
-  if (metric === "leak50") {
-    if (value < LEAK_HIGH) return "normal";
-    if (value <= LEAK_WARNING) return "warning";
-    return "critical";
-  }
-  if (metric === "spo2Avg") {
-    if (value >= SPO2_NORMAL) return "normal";
-    if (value >= SPO2_WARNING) return "warning";
-    return "critical";
-  }
-  return "normal";
+  const improved = goodWhenDown ? delta < 0 : delta > 0;
+  return (
+    <span className={`metric-delta ${improved ? "delta-good" : "delta-bad"}`}>
+      {delta < 0 ? "↓" : "↑"} {Math.abs(delta).toFixed(decimals)} vs {periodLabel}
+    </span>
+  );
 }
 
 function dayKeyFromSession(session) {
@@ -53,6 +57,27 @@ function dayKeyFromSession(session) {
     return "";
   }
   return date.toISOString().split("T")[0];
+}
+
+function parseImportTimestamp(value) {
+  if (!value) return null;
+  const normalized = typeof value === "string" && /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value)
+    ? `${value.replace(" ", "T")}Z`
+    : value;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatImportTimestamp(value) {
+  const date = parseImportTimestamp(value);
+  if (!date) return "Not imported yet";
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
 }
 
 function getChartCanvasByKey(reportKey) {
@@ -92,7 +117,6 @@ function LoadingScreen({ logoSrc, status }) {
         </div>
         <img className="boot-logo" src={logoSrc} alt="PAPLens" />
         <div className="boot-copy">
-          <p className="boot-eyebrow">Offline clinical workspace</p>
           <h1>Preparing your therapy data</h1>
           <p>{status}</p>
         </div>
@@ -108,6 +132,7 @@ export function App() {
   const [activeProfile, setActiveProfile] = useState(null);
   const [activeTab, setActiveTab] = useState("overview"); // overview or insights
   const [summary, setSummary] = useState(null);
+  const [lastNight, setLastNight] = useState(null);
   const [status, setStatus] = useState("Loading...");
   const [isBooting, setIsBooting] = useState(true);
   const [range, setRange] = useState("30");
@@ -122,9 +147,11 @@ export function App() {
   const [dataLoadingMessage, setDataLoadingMessage] = useState("");
   const [importProgress, setImportProgress] = useState(null);
   const [isReportGenerating, setIsReportGenerating] = useState(false);
+  const [showDeviceTip, setShowDeviceTip] = useState(false);
   const [showReportTip, setShowReportTip] = useState(false);
   const [showAboutModal, setShowAboutModal] = useState(false);
   const hasBootstrappedRef = useRef(false);
+  const deviceTipRef = useRef(null);
   const aboutCloseButtonRef = useRef(null);
   const aboutPreviousFocusRef = useRef(null);
 
@@ -147,6 +174,37 @@ export function App() {
       setShowAboutModal(true);
     });
     return unsub;
+  }, []);
+
+  // Dismiss the device-detected popover when clicking outside it or pressing Escape.
+  useEffect(() => {
+    if (!showDeviceTip) return;
+    const handlePointer = (event) => {
+      if (deviceTipRef.current && !deviceTipRef.current.contains(event.target)) {
+        setShowDeviceTip(false);
+      }
+    };
+    const handleKey = (event) => {
+      if (event.key === "Escape") setShowDeviceTip(false);
+    };
+    document.addEventListener("mousedown", handlePointer);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handlePointer);
+      document.removeEventListener("keydown", handleKey);
+    };
+  }, [showDeviceTip]);
+
+  // Last-night overview powers both the dashboard hero (score ring + the
+  // last-night column of the comparison table) and the detail card below it.
+  useEffect(() => {
+    const loadLastNight = async () => {
+      const res = await window.cpapAPI.getLastNightOverview();
+      if (res) setLastNight(res);
+    };
+    queueMicrotask(() => { void loadLastNight(); });
+    const unsub = window.cpapAPI.onDataLoaded(() => loadLastNight());
+    return () => unsub();
   }, []);
 
   useEffect(() => {
@@ -273,6 +331,18 @@ export function App() {
   const analyzedStats = useMemo(() => filterAnalyzedDays(filteredStats), [filteredStats]);
   const usageTrackedStats = useMemo(() => filterUsageTrackedDays(filteredStats), [filteredStats]);
 
+  // Equal-length window immediately before the selected range, for
+  // period-over-period deltas. Empty for "all"/"custom" ranges.
+  const priorRangeStats = useMemo(() => {
+    const days = parseInt(range, 10);
+    if (Number.isNaN(days) || !stats.length) return [];
+    const sorted = [...stats].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    if (sorted.length <= days) return [];
+    return sorted.slice(-(days * 2), -days);
+  }, [stats, range]);
+  const priorAnalyzedStats = useMemo(() => filterAnalyzedDays(priorRangeStats), [priorRangeStats]);
+  const priorUsageTrackedStats = useMemo(() => filterUsageTrackedDays(priorRangeStats), [priorRangeStats]);
+
   const trendsData = useMemo(() => {
     const toTrendValue = (day, selector) => (hasTherapyData(day) ? selector(day) : null);
     const ahiArr = filteredStats.map((d) => toTrendValue(d, (day) => day.ahi));
@@ -340,48 +410,55 @@ export function App() {
     return allSeries;
   }, [filteredStats]);
 
-  const overviewChartDatasets = useMemo(() => ({
+  const overviewChartDatasets = useMemo(() => {
+    // Missing/no-therapy days come through as null. Drop the metric lines to the
+    // baseline (0) on those days instead of leaving broken gaps. Rolling averages
+    // and constant threshold lines are intentionally left as-is.
+    const zf = (arr) => (arr || []).map((value) => (value == null ? 0 : value));
+    return {
     ahi: [
-      { label: "Total AHI", data: trendsData.ahi, borderColor: "#ef4444", fill: true, backgroundColor: "rgba(239,68,68,0.18)" },
-      { label: "Central (CAI)", data: trendsData.cai, borderColor: "#f59e0b" },
-      { label: "Obstructive (OAI/AI)", data: trendsData.ai, borderColor: "#3b82f6" },
-      { label: "Hypopnea (HI)", data: trendsData.hi, borderColor: "#8b5cf6" },
+      { label: "Total AHI", data: zf(trendsData.ahi), borderColor: "#ef4444", fill: true, backgroundColor: "rgba(239,68,68,0.18)" },
+      { label: "Central (CAI)", data: zf(trendsData.cai), borderColor: "#f59e0b" },
+      { label: "Obstructive (OAI/AI)", data: zf(trendsData.ai), borderColor: "#3b82f6" },
+      { label: "Hypopnea (HI)", data: zf(trendsData.hi), borderColor: "#8b5cf6" },
       { label: "7-Day Avg", data: trendsData.rolling7Ahi, borderColor: "#22d3ee", borderWidth: 2, borderDash: [4, 4], pointRadius: 0 },
       { label: "AHI = 5 Threshold", data: trendsData.ahiThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
     ],
     leak: [
-      { label: "Maximum Leak (95th)", data: trendsData.leak95, borderColor: "#ef4444", borderDash: [5, 5] },
-      { label: "Median Leak", data: trendsData.leak50, borderColor: "#3b82f6", fill: true, backgroundColor: "rgba(59,130,246,0.25)" },
+      { label: "Maximum Leak (95th)", data: zf(trendsData.leak95), borderColor: "#ef4444", borderDash: [5, 5] },
+      { label: "Median Leak", data: zf(trendsData.leak50), borderColor: "#3b82f6", fill: true, backgroundColor: "rgba(59,130,246,0.25)" },
       { label: "24 L/min Critical Limit", data: trendsData.leakThreshold, borderColor: "rgba(239,68,68,0.8)", borderWidth: 1.5, borderDash: [8, 4], pointRadius: 0, fill: false },
     ],
     pressure: [
-      { label: "95th Percentile", data: trendsData.maxPressure, borderColor: "#f59e0b" },
-      { label: "Median Delivery", data: trendsData.pressure, borderColor: "#10b981", fill: true, backgroundColor: "rgba(16,185,129,0.2)" },
-      { label: "Variability Index (P95-P50)", data: trendsData.pressureVarIndex, borderColor: "#8b5cf6", borderDash: [3, 3], pointRadius: 0 },
+      { label: "95th Percentile", data: zf(trendsData.maxPressure), borderColor: "#f59e0b" },
+      { label: "Median Delivery", data: zf(trendsData.pressure), borderColor: "#10b981", fill: true, backgroundColor: "rgba(16,185,129,0.2)" },
+      { label: "Variability Index (P95-P50)", data: zf(trendsData.pressureVarIndex), borderColor: "#8b5cf6", borderDash: [3, 3], pointRadius: 0 },
     ],
     flow: [
-      { label: "Min Vent 95%", data: trendsData.minVent95, borderColor: "#8b5cf6", tension: 0.3 },
-      { label: "Min Vent 50%", data: trendsData.minVent50, borderColor: "#3b82f6", tension: 0.3 },
-      { label: "Resp Rate", data: trendsData.respRate, borderColor: "#f59e0b", yAxisID: "y1" }
+      { label: "Min Vent 95%", data: zf(trendsData.minVent95), borderColor: "#8b5cf6", tension: 0.3 },
+      { label: "Min Vent 50%", data: zf(trendsData.minVent50), borderColor: "#3b82f6", tension: 0.3 },
+      { label: "Resp Rate", data: zf(trendsData.respRate), borderColor: "#f59e0b", yAxisID: "y1" }
     ],
     tidal: [
-      { label: "Upper Bound (95%)", data: trendsData.tidVol95, borderColor: "#f59e0b", borderDash: [5, 5] },
-      { label: "Median Efficacy", data: trendsData.tidVol50, borderColor: "#8b5cf6", fill: true, backgroundColor: "rgba(139, 92, 246, 0.1)" }
+      { label: "Upper Bound (95%)", data: zf(trendsData.tidVol95), borderColor: "#f59e0b", borderDash: [5, 5] },
+      { label: "Median Efficacy", data: zf(trendsData.tidVol50), borderColor: "#8b5cf6", fill: true, backgroundColor: "rgba(139, 92, 246, 0.1)" }
     ],
     usage: [
       {
-        label: "Duration",
-        data: trendsData.usage,
-        borderColor: "#10b981",
-        fill: true,
-        backgroundColor: "rgba(16, 185, 129, 0.15)"
+        label: "Usage Hours",
+        data: zf(trendsData.usage),
+        backgroundColor: "rgba(16, 185, 129, 0.55)",
+        hoverBackgroundColor: "rgba(16, 185, 129, 0.8)"
       }
     ],
+    // SpO2/pulse baseline is ~95%/60bpm, not 0 — a missing day means the oximeter
+    // wasn't worn, so bridge the gap (spanGaps) rather than diving the line to zero.
     oximetry: [
-      { label: "SpO2 %", data: trendsData.spo2, borderColor: "#3b82f6" },
-      { label: "Pulse", data: trendsData.pulse, borderColor: "#ef4444", yAxisID: "y1" }
+      { label: "SpO2 %", data: trendsData.spo2, borderColor: "#3b82f6", spanGaps: true },
+      { label: "Pulse", data: trendsData.pulse, borderColor: "#ef4444", yAxisID: "y1", spanGaps: true }
     ]
-  }), [trendsData]);
+    };
+  }, [trendsData]);
 
   const hasOximetryTrend = useMemo(() => trendsData.spo2.some((v) => v > 0), [trendsData.spo2]);
 
@@ -436,20 +513,27 @@ export function App() {
     const prevTab = activeTab;
 
     /**
-     * (b) Poll until all canvases under [data-report-key] elements have nonzero
-     * dimensions AND a live Chart.js instance, or a 5-second cap is reached.
+     * (b) Poll until the canvases we are about to capture are ready, or a cap
+     * is reached. `requiredKeys` must each have a mounted canvas with nonzero
+     * dimensions and a live Chart.js instance — this matters when switching to
+     * the lazy-loaded Insights tab, whose containers don't exist in the DOM yet
+     * (the always-mounted Overview charts would otherwise satisfy a "everything
+     * currently present is ready" check immediately and the Insights charts
+     * would be captured as null). All other mounted [data-report-key]
+     * containers must be ready too.
      */
-    const waitForCharts = () => new Promise((resolve) => {
-      const CAP_MS = 5000;
+    const waitForCharts = (requiredKeys = []) => new Promise((resolve) => {
+      const CAP_MS = 8000;
       const POLL_MS = 100;
       const start = Date.now();
+      const canvasReady = (canvas) =>
+        canvas && canvas.width > 0 && canvas.height > 0 && Chart.getChart(canvas) != null;
       const check = () => {
-        const containers = document.querySelectorAll("[data-report-key]");
-        const ready = Array.from(containers).every((el) => {
-          const canvas = el.querySelector("canvas");
-          return canvas && canvas.width > 0 && canvas.height > 0 && Chart.getChart(canvas) != null;
-        });
-        if (ready || Date.now() - start >= CAP_MS) {
+        const requiredReady = requiredKeys.every((key) =>
+          canvasReady(document.querySelector(`[data-report-key="${key}"] canvas`)));
+        const allPresentReady = Array.from(document.querySelectorAll("[data-report-key]"))
+          .every((el) => canvasReady(el.querySelector("canvas")));
+        if ((requiredReady && allPresentReady) || Date.now() - start >= CAP_MS) {
           resolve();
         } else {
           setTimeout(check, POLL_MS);
@@ -459,19 +543,23 @@ export function App() {
       requestAnimationFrame(check);
     });
 
-    // Step 1: Switch to insights tab to render and capture those charts
+    // Step 1: Switch to insights tab to render and capture those charts.
+    // "ahi-trend" always renders once the Insights data arrives; the
+    // conditional charts (event-split, flow-limit) mount in the same React
+    // commit, so the all-present check above covers them once it exists.
     if (activeTab !== "insights") {
       setActiveTab("insights");
     }
-    await waitForCharts();
+    await waitForCharts(["ahi-trend"]);
 
     const ahiTrendUri = captureChartDataUri(getChartCanvasByKey("ahi-trend"));
     const eventSplitUri = captureChartDataUri(getChartCanvasByKey("event-split"));
     const flowLimitUri = captureChartDataUri(getChartCanvasByKey("flow-limit"));
 
-    // Step 2: Switch to overview tab to capture the remaining charts
+    // Step 2: Switch to overview tab to capture the remaining charts.
+    // "pressure" and "usage" are always rendered on the overview.
     setActiveTab("overview");
-    await waitForCharts();
+    await waitForCharts(["pressure", "usage"]);
 
     const charts = {
       ahiDataUri: ahiTrendUri,
@@ -674,6 +762,33 @@ export function App() {
     setIsSessionModalOpen(true);
   };
 
+  const lastImportedLine = `Last imported: ${formatImportTimestamp(summary?.lastImportedAt)}`;
+
+  const renderRangeControls = () => (
+    <div className="controls range-controls" aria-label="View range">
+      <label>View Range:</label>
+      <div className="range-group" role="group" aria-label="View range">
+        {RANGE_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            className={`btn-range${range === option.value ? " active" : ""}`}
+            aria-pressed={range === option.value}
+            onClick={() => setRange(option.value)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      {range === "custom" && (
+        <div className="custom-range" aria-label="Custom date range">
+          <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+          <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+        </div>
+      )}
+    </div>
+  );
+
   if (isBooting) {
     return <LoadingScreen logoSrc={bootLogoSrc} status={status} />;
   }
@@ -757,53 +872,92 @@ export function App() {
       )}
       <header className="top-nav">
         <div className="brand">
-          <img src={theme === 'light' ? new URL("./assets/PLLogoL.png", import.meta.url).href : new URL("./assets/PLLogoD.png", import.meta.url).href} alt="PAPLens" style={{ height: "48px", width: "auto" }} />
+          <img src={theme === 'light' ? new URL("./assets/PLLogoL.png", import.meta.url).href : new URL("./assets/PLLogoD.png", import.meta.url).href} alt="PAPLens" style={{ height: "34px", width: "auto" }} />
         </div>
-        <div className="nav-controls" style={{ marginLeft: "auto" }}>
+        <div className="nav-controls">
           {deviceInfo.productName && (() => {
             const name = (deviceInfo.productName || "").toLowerCase();
             const model = name.includes("11") ? "AirSense 11" : name.includes("10") ? "AirSense 10" : deviceInfo.productName;
+            const deviceRows = [
+              { DeviceIcon: IconMonitor, label: "Model", value: deviceInfo.productName || "Unknown" },
+              { DeviceIcon: IconHash, label: "Serial", value: deviceInfo.serialNumber || "Unknown" },
+              { DeviceIcon: IconCpu, label: "Firmware", value: deviceInfo.firmwareVersion || "Unknown" },
+            ];
             return (
-              <span style={{ fontSize: '0.9rem', color: 'var(--muted)', background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 8, padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: '0.9rem' }}>🖥️</span> {model}
-              </span>
+              <div className="nav-device" ref={deviceTipRef}>
+                <button
+                  type="button"
+                  className="nav-chip"
+                  aria-expanded={showDeviceTip}
+                  aria-controls="device-detected-popover"
+                  onClick={() => setShowDeviceTip((isShown) => !isShown)}
+                >
+                  <IconMonitor size={15} /> Device Detected: {model}
+                </button>
+                {showDeviceTip && (
+                  <div id="device-detected-popover" className="device-popover" role="tooltip">
+                    <div className="section-eyebrow">Device Information</div>
+                    {deviceRows.map(({ DeviceIcon, label, value }) => (
+                      <div key={label} className="device-popover-row">
+                        <span className="device-icon"><DeviceIcon size={18} /></span>
+                        <div>
+                          <div className="device-label">{label}</div>
+                          <div className="device-value">{value}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             );
           })()}
           <button
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            style={{ fontSize: '1.2rem', padding: '10px 14px', background: 'var(--hover-bg)', border: '1px solid var(--border)', borderRadius: 10, cursor: 'pointer', lineHeight: 1 }}
+            className="nav-chip"
+            title="Switch profile"
+            onClick={async () => {
+              await window.cpapAPI.setActiveProfile(null);
+              setSummary(null);
+              setActiveProfile(null);
+            }}
           >
-            {theme === 'dark' ? '☀️' : '🌙'}
+            <span className="chip-avatar">{(activeProfile.name || "?").charAt(0)}</span>
+            <strong>{activeProfile.name}</strong>
+            {activeProfile.age ? <span>Age {activeProfile.age}</span> : null}
+            <IconSwitch size={13} />
           </button>
-          <div style={{ position: 'relative' }}
+          <button
+            className="icon-btn"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          >
+            {theme === 'dark' ? <IconSun size={17} /> : <IconMoon size={17} />}
+          </button>
+          <button className="icon-btn" onClick={refresh} title="Refresh data" aria-label="Refresh data">
+            <IconRefresh size={16} />
+          </button>
+          <button className="btn-secondary" onClick={chooseFolder}>
+            <IconImport size={16} /> Import Data
+          </button>
+          <div className="report-action"
                onMouseEnter={() => setShowReportTip(true)}
                onMouseLeave={() => setShowReportTip(false)}>
             <button className="btn-primary" onClick={saveReport}>
-              Save Data Report
+              <IconFileText size={16} /> Save Report
             </button>
             {showReportTip && (
-              <div style={{
-                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-                background: 'var(--card-bg)', border: '1px solid var(--border)',
-                borderRadius: 10, padding: '10px 14px', width: 230, zIndex: 200,
-                fontSize: '0.8rem', color: 'var(--muted)', lineHeight: 1.55,
-                boxShadow: '0 4px 20px rgba(0,0,0,0.22)', pointerEvents: 'none'
-              }}>
+              <div className="report-tip">
                 Generates a printable PDF clinical summary — AHI, usage, leak, event profile, trend charts, and metric correlations. Designed to bring to your care team appointment.
               </div>
             )}
           </div>
-          <button className="btn-secondary" onClick={chooseFolder}>
-            Import Data Folder
-          </button>
-          <button className="btn-secondary" onClick={refresh}>
-            Refresh
-          </button>
         </div>
       </header>
 
-      <p className="status-line">{status}</p>
+      <div className="data-status">
+        <p className="status-line">{status}</p>
+        <p className="imported-line">{lastImportedLine}</p>
+      </div>
 
       <div className="print-header">
         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -822,30 +976,32 @@ export function App() {
 
       <div className="clinical-layout">
         <aside className="left-sidebar">
-          <div className="info-edit" style={{ display: 'flex', flexDirection: 'column', gap: '8px', paddingBottom: '15px', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-            <label style={{ fontSize: '0.75rem', color: 'var(--muted)', textTransform: 'uppercase' }}>Active Profile</label>
-            <strong style={{ fontSize: '1.2em', color: 'var(--brand)' }}>{activeProfile.name}</strong>
-            {activeProfile.age && <span style={{ fontSize: "0.8em", color: "var(--muted)" }}>(Age: {activeProfile.age})</span>}
-            <button
-              className="btn-secondary"
-              style={{ padding: "4px 8px", fontSize: "0.8em", marginTop: "5px" }}
-              onClick={async () => {
-                await window.cpapAPI.setActiveProfile(null);
-                setSummary(null);
-                setActiveProfile(null);
-              }}
-            >
-              Switch Profile
-            </button>
-          </div>
-
           <nav className="sidebar-nav">
-            <button className={activeTab === "overview" ? "active" : ""} onClick={() => setActiveTab("overview")}>Dashboard Overview</button>
-            <button className={activeTab === "sessions" ? "active" : ""} onClick={() => setActiveTab("sessions")}>Clinical Daily Sessions</button>
-            <button className={activeTab === "insights" ? "active" : ""} onClick={() => setActiveTab("insights")}>Analytics & Explanations</button>
+            <button
+              className={activeTab === "overview" ? "active" : ""}
+              onClick={() => setActiveTab("overview")}
+              data-label="Overview"
+              aria-label="Overview"
+            >
+              <IconDashboard size={20} />
+            </button>
+            <button
+              className={activeTab === "sessions" ? "active" : ""}
+              onClick={() => setActiveTab("sessions")}
+              data-label="Daily Sessions"
+              aria-label="Daily Sessions"
+            >
+              <IconCalendar size={20} />
+            </button>
+            <button
+              className={activeTab === "insights" ? "active" : ""}
+              onClick={() => setActiveTab("insights")}
+              data-label="Insights"
+              aria-label="Insights"
+            >
+              <IconChart size={20} />
+            </button>
           </nav>
-
-          <LastNightSidebar />
         </aside>
 
         <section className="main-content">
@@ -855,80 +1011,142 @@ export function App() {
                 {/* RANGE CONTROLS ROW */}
                 <div className="control-row" style={{ marginBottom: "20px" }}>
                   <h2 style={{ margin: 0 }}>Clinical Dashboard</h2>
-                  <div className="controls">
-                    <label>View Range:</label>
-                    <select value={range} onChange={(e) => setRange(e.target.value)}>
-                      {RANGE_OPTIONS.map((opt) => (
-                        <option key={opt} value={opt}>
-                          {opt === "all" ? "All Time" : opt === "custom" ? "Custom" : `Last ${opt} Days`}
-                        </option>
-                      ))}
-                    </select>
-                    {range === "custom" && (
-                      <>
-                        <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-                        <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-                      </>
-                    )}
-                  </div>
+                  {renderRangeControls()}
                 </div>
 
                 {/* SECTION A: Device Info + Therapy Efficacy Overview */}
                 {filteredStats.length > 0 && (() => {
                   const last = analyzedStats[analyzedStats.length - 1];
-                  const rangeAvg = (fn, positiveOnly = false) => {
-                    const vals = analyzedStats.map(fn).filter(v => v != null && !isNaN(v) && (positiveOnly ? v > 0 : v >= 0));
+                  const avgOf = (list, fn, positiveOnly = false) => {
+                    const vals = list.map(fn).filter(v => v != null && !isNaN(v) && (positiveOnly ? v > 0 : v >= 0));
                     return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
                   };
-                  const avgAhi = rangeAvg(d => d.ahi);
-                  const avgLeak = rangeAvg(d => d.leak50, true);
+                  const avgAhi = avgOf(analyzedStats, d => d.ahi);
+                  const avgLeak = avgOf(analyzedStats, d => d.leak50, true);
+                  const avgPressure = avgOf(analyzedStats, d => d.pressure, true);
                   const usageValues = usageTrackedStats.map(d => d.usageHours).filter(v => v != null && !isNaN(v) && v >= 0);
                   const avgUsage = usageValues.length ? usageValues.reduce((a, b) => a + b, 0) / usageValues.length : null;
-                  const rangeLabel = range === 'all' ? 'All Time' : range === 'custom' ? 'Custom' : `Last ${range} Days`;
+
+                  // Prior equal-length window for deltas (empty for all/custom)
+                  const priorAvgAhi = avgOf(priorAnalyzedStats, d => d.ahi);
+                  const priorAvgLeak = avgOf(priorAnalyzedStats, d => d.leak50, true);
+                  const priorAvgPressure = avgOf(priorAnalyzedStats, d => d.pressure, true);
+                  const priorAvgUsage = avgOf(priorUsageTrackedStats, d => d.usageHours);
+                  const periodLabel = `prior ${range}d`;
+
+                  // ── Consolidated hero: last-night column + score ring ──────────
+                  // Score ring shows the most recent night's stability score
+                  // (getLastNightOverview), falling back to the last in-range night.
+                  const heroScore = (() => {
+                    const s = toMetricNumber(lastNight?.therapy_stability_score);
+                    if (s != null) return Math.round(s);
+                    const f = toMetricNumber(last?.therapy_stability_score);
+                    return f != null ? Math.round(f) : null;
+                  })();
+                  const heroColor = heroScore == null ? 'var(--muted)'
+                    : heroScore >= 95 ? 'var(--success)' : heroScore >= 85 ? 'var(--cyan)'
+                    : heroScore >= 70 ? 'var(--warning)' : heroScore >= 50 ? 'var(--tier-orange)' : 'var(--critical)';
+                  const heroTier = heroScore == null ? 'No data'
+                    : heroScore >= 95 ? 'Optimal' : heroScore >= 85 ? 'Stable'
+                    : heroScore >= 70 ? 'Acceptable' : heroScore >= 50 ? 'Suboptimal' : 'High Risk';
+                  const avgColLabel = range === "custom" ? "Range avg" : range === "all" ? "All-time avg" : `${range}-day avg`;
+                  // Last-night metric values (treat 0 as no-data for pressure)
+                  const lnAhi = toMetricNumber(lastNight?.ahi_total);
+                  const lnLeak = toMetricNumber(lastNight?.leak_p50);
+                  const lnUsage = toMetricNumber(lastNight?.usage_hours);
+                  const lnPressureRaw = toMetricNumber(lastNight?.pressure_median);
+                  const lnPressure = lnPressureRaw != null && lnPressureRaw > 0 ? lnPressureRaw : null;
+                  const heroRows = [
+                    { key: 'ahi', label: 'AHI', unit: 'ev/hr', dec: 1, last: lnAhi, avg: avgAhi, prior: priorAvgAhi, goodWhenDown: true,
+                      info: "Apnea–Hypopnea Index: breathing interruptions per hour of sleep. Under 5 is considered controlled therapy." },
+                    { key: 'leak', label: 'Leak P50', unit: 'L/min', dec: 1, last: lnLeak, avg: avgLeak, prior: priorAvgLeak, goodWhenDown: true,
+                      info: "Median mask leak across the night, in liters per minute. Sustained high leak reduces therapy effectiveness." },
+                    { key: 'usage', label: 'Usage', unit: 'hrs', dec: 1, last: lnUsage, avg: avgUsage, prior: priorAvgUsage, goodWhenDown: false,
+                      info: "Therapy hours per night. 4 or more hours is the common compliance benchmark." },
+                    { key: 'pressure', label: 'Pressure', unit: 'cmH₂O', dec: 1, last: lnPressure, avg: avgPressure, prior: priorAvgPressure, goodWhenDown: false, delta: false,
+                      info: "Median delivered pressure across the night, in cmH₂O." },
+                  ];
+
+                  // Plain-language range summary
+                  const nights = analyzedStats.length;
+                  const controlled = analyzedStats.filter(d => {
+                    const v = toMetricNumber(d.ahi);
+                    return v != null && v < AHI_MILD;
+                  }).length;
+                  const compliantNights = usageValues.filter(v => v >= USAGE_COMPLIANCE_HOURS).length;
+                  const leakDelta = avgLeak != null && priorAvgLeak != null ? avgLeak - priorAvgLeak : null;
+                  let leakNote = null;
+                  if (avgLeak != null && avgLeak >= LEAK_HIGH) {
+                    leakNote = `Median leak averaged ${avgLeak.toFixed(1)} L/min, above the ${LEAK_HIGH} L/min limit — check the mask seal and cushion fit.`;
+                  } else if (leakDelta != null && leakDelta > 2) {
+                    leakNote = `Median leak averaged ${avgLeak.toFixed(1)} L/min, up ${leakDelta.toFixed(1)} from the prior period — worth checking the mask seal.`;
+                  }
+                  let tone = "good";
+                  let toneLabel = "On track";
+                  if (avgAhi != null && avgAhi > AHI_MODERATE) {
+                    tone = "bad";
+                    toneLabel = "High residual AHI";
+                  } else if ((nights > 0 && controlled / nights < 0.7) || leakNote || (avgUsage != null && avgUsage < USAGE_COMPLIANCE_HOURS)) {
+                    tone = "warn";
+                    toneLabel = "Needs attention";
+                  }
+
                   return (
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 20 }}>
-                      {/* Left: Device Info Card */}
-                      <div style={{ background: 'linear-gradient(135deg, rgba(79,70,229,0.12) 0%, rgba(34,211,238,0.06) 100%)', border: '1px solid rgba(79,70,229,0.25)', borderRadius: 12, padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 2, fontWeight: 700 }}>Device Information</div>
-                        {[
-                          { icon: '🖥️', label: 'Model', value: deviceInfo.productName || '—' },
-                          { icon: '🔢', label: 'Serial', value: deviceInfo.serialNumber || '—' },
-                          { icon: '⚙️', label: 'Firmware', value: deviceInfo.firmwareVersion || '—' },
-                        ].map(({ icon, label, value }) => (
-                          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                            <span style={{ fontSize: '1.4rem', width: 32, textAlign: 'center', flexShrink: 0 }}>{icon}</span>
-                            <div>
-                              <div style={{ fontSize: '0.6rem', color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: 1 }}>{label}</div>
-                              <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text)' }}>{value}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="stability-overview" style={{ margin: 0 }}>
-                        <div className={`score-circle ${(() => { const s = last?.therapy_stability_score == null ? null : Math.round(last.therapy_stability_score); if (s === null) return ''; if (s === 100) return 'score-tier-blue'; if (s >= 85) return 'score-tier-green'; if (s >= 75) return 'score-tier-yellow'; if (s >= 50) return 'score-tier-orange'; return 'score-tier-red'; })()}`}>
-                          <div className="score-value">{last?.therapy_stability_score == null ? "-" : Math.round(last.therapy_stability_score)}</div>
-                          <div className="score-label">{last ? "Score" : "No Data"}</div>
+                    <>
+                    {nights > 0 && (
+                      <div className="summary-strip">
+                        <div>
+                          <p className="summary-headline">
+                            AHI was under {AHI_MILD} on {controlled} of {nights} analyzed nights
+                            {usageValues.length > 0 && `; usage met the ${USAGE_COMPLIANCE_HOURS}-hour benchmark on ${compliantNights} of ${usageValues.length} nights`}.
+                          </p>
+                          {leakNote && <p className="summary-note">{leakNote}</p>}
                         </div>
-                        <div className="overview-metrics">
-                          <div className="overview-metric">
-                            <div className="value">{avgAhi == null ? "-" : avgAhi.toFixed(1)}</div>
-                            <div className="label">Avg AHI</div>
-                          </div>
-                          <div className="overview-metric">
-                            <div className="value">{avgLeak == null ? "-" : `${avgLeak.toFixed(1)} L/m`}</div>
-                            <div className="label">Avg Leak P50</div>
-                          </div>
-                          <div className="overview-metric">
-                            <div className="value">{avgUsage == null ? "-" : `${avgUsage.toFixed(1)} hrs`}</div>
-                            <div className="label">Avg Usage</div>
-                          </div>
-                          <div className="overview-metric">
-                            <div className="value" style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{rangeLabel}</div>
-                            <div className="label">Range</div>
+                        <span className={`status-pill pill-${tone}`}>{toneLabel}</span>
+                      </div>
+                    )}
+                    <div className="overview-hero-grid">
+                      <div className="stability-overview">
+                        <div className="hero-score">
+                          <ScoreRing score={heroScore} size={128} strokeWidth={8} label="Score" stroke={heroScore == null ? undefined : heroColor} />
+                          <div className="hero-tier" style={{ color: heroColor }}>{heroTier}</div>
+                          <div className="hero-nights">
+                            <strong>{nights}</strong> of {filteredStats.length} nights analyzed
                           </div>
                         </div>
+                        <div className="hero-metric-cards">
+                          <section className="hero-metric-card" aria-label="Last night metrics">
+                            <div className="hero-metric-card-title">Last night</div>
+                            {heroRows.map((r) => (
+                              <div key={r.key} className="hero-metric-row">
+                                <div className="hero-metric-label">{r.label} <InfoTip text={r.info} /></div>
+                                <div className="hero-metric-value">
+                                  <span className="hero-num">{r.last == null ? "—" : r.last.toFixed(r.dec)}</span>
+                                  {r.last != null && <span className="hero-unit">{r.unit}</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </section>
+                          <section className="hero-metric-card" aria-label={`${avgColLabel} metrics`}>
+                            <div className="hero-metric-card-title">{avgColLabel}</div>
+                            {heroRows.map((r) => (
+                              <div key={r.key} className="hero-metric-row">
+                                <div className="hero-metric-label">{r.label} <InfoTip text={r.info} /></div>
+                                <div className="hero-metric-value">
+                                  <span className="hero-num">{r.avg == null ? "—" : r.avg.toFixed(r.dec)}</span>
+                                  {r.avg != null && <span className="hero-unit">{r.unit}</span>}
+                                  {r.delta !== false && (
+                                    <MetricDelta current={r.avg} prior={r.prior} goodWhenDown={r.goodWhenDown} periodLabel={periodLabel} />
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </section>
+                        </div>
                       </div>
+                      <LastNightDetails data={lastNight} />
                     </div>
+                    </>
                   );
                 })()}
 
@@ -979,6 +1197,7 @@ export function App() {
                   <TrendChart
                     reportKey="usage"
                     title="Compliance Usage Hours"
+                    type="bar"
                     labels={trendsData.labels}
                     datasets={overviewChartDatasets.usage}
                   />
@@ -1006,7 +1225,7 @@ export function App() {
 
           {activeTab === "sessions" && (
             <ErrorBoundary>
-            <section className="panel flex-split" style={{ margin: 0 }}>
+            <section className="panel" style={{ margin: 0 }}>
               <div className="split-left">
                 <div className="control-row">
                   <h2>Daily Details & Sessions</h2>
@@ -1046,70 +1265,6 @@ export function App() {
                 </div>
               </div>
 
-              <div className="split-right">
-                {selectedDay ? (() => {
-                  const selectedDayNoData = isNoDataDay(selectedDay);
-
-                  return (
-                    <div>
-                      <h3>{selectedDay.date} Breakdown</h3>
-                      {selectedDayNoData ? (
-                        <div
-                          style={{
-                            padding: "15px",
-                            background: "rgba(107,114,128,0.12)",
-                            border: "1px solid rgba(107,114,128,0.35)",
-                            borderRadius: "8px",
-                            color: "var(--text)"
-                          }}
-                        >
-                          <strong style={{ display: "block", marginBottom: "8px" }}>No therapy data for this day</strong>
-                          <div style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-                            Usage was recorded as 0.0 hours, so this day is marked as no data for therapy metrics while still counting toward usage-based measures such as adherence.
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="info-grid">
-                          <div className="info-item">
-                            <label>Total Usage</label>
-                            <strong>{Number(selectedDay.usageHours).toFixed(2)} hrs</strong>
-                          </div>
-                          <div className="info-item">
-                            <label>AHI</label>
-                            <strong className={`badge badge-${severity("ahi", selectedDay.ahi)}`}>
-                              {Number(selectedDay.ahi).toFixed(1)}
-                            </strong>
-                          </div>
-                          <div className="info-item">
-                            <label>Median Pressure</label>
-                            <strong>
-                              {formatMetricValue(toMetricNumber(selectedDay.pressure) > 0 ? selectedDay.pressure : null, 1)} cmH₂O
-                            </strong>
-                          </div>
-                          <div className="info-item">
-                            <label>Median Leak</label>
-                            <strong className={`badge badge-${severity("leak50", selectedDay.leak50)}`}>
-                              {formatMetricValue(toMetricNumber(selectedDay.leak50) > 0 ? selectedDay.leak50 : null, 0)} L/min
-                            </strong>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })() : (
-                  <div
-                    style={{
-                      height: "100%",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      color: "var(--muted)"
-                    }}
-                  >
-                    Select a date to view details
-                  </div>
-                )}
-              </div>
               <div style={FOOTER_CREDIT_STYLE}>
                 PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
               </div>
@@ -1133,24 +1288,9 @@ export function App() {
               {/* RANGE CONTROLS ROW */}
               <div className="control-row" style={{ marginBottom: 0 }}>
                 <h2 style={{ margin: 0 }}>Analytics & Explanations</h2>
-                <div className="controls">
-                  <label>View Range:</label>
-                  <select value={range} onChange={(e) => setRange(e.target.value)}>
-                    {RANGE_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt === "all" ? "All Time" : opt === "custom" ? "Custom" : `Last ${opt} Days`}
-                      </option>
-                    ))}
-                  </select>
-                  {range === "custom" && (
-                    <>
-                      <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
-                      <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
-                    </>
-                  )}
-                </div>
+                {renderRangeControls()}
               </div>
-              <Suspense fallback={<div className="loading">Loading...</div>}>
+              <Suspense fallback={<SkeletonPanel rows={3} />}>
                 <Insights range={range} customFrom={customFrom} customTo={customTo} />
               </Suspense>
               <div style={FOOTER_CREDIT_STYLE}>
@@ -1177,7 +1317,7 @@ export function App() {
             role="dialog" aria-modal="true" aria-label="About PAPLens"
             onClick={(e) => e.stopPropagation()}
             style={{
-              background: 'var(--card-bg)', border: '1px solid var(--border)',
+              background: 'var(--card)', border: '1px solid var(--border)',
               borderRadius: 20, padding: '48px 56px', textAlign: 'center',
               boxShadow: '0 32px 100px rgba(0,0,0,0.7)', maxWidth: 420, width: '90%'
             }}
@@ -1189,12 +1329,9 @@ export function App() {
               alt="PAPLens"
               style={{ height: 64, width: 'auto', marginBottom: 20 }}
             />
-            <h2 style={{ margin: '0 0 6px', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)' }}>
+            <h2 style={{ margin: '0 0 24px', fontSize: '1.5rem', fontWeight: 700, color: 'var(--text)' }}>
               PAPLens
             </h2>
-            <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 24, letterSpacing: 1, textTransform: 'uppercase' }}>
-              Clinical CPAP Analytics
-            </div>
             <p style={{ margin: '0 0 28px', fontSize: '0.9rem', color: 'var(--muted)', lineHeight: 1.7 }}>
               PAPLens processes your CPAP data entirely offline — no accounts,
               no cloud, no data leaving your device.

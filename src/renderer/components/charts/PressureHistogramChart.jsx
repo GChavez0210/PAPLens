@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef } from "react";
 import Chart from "chart.js/auto";
+import { baseScales, baseTooltip, chartColors } from "../../charts/chartTheme";
 
 /**
  * Vertical column chart showing the pressure distribution for the selected range.
@@ -7,7 +8,7 @@ import Chart from "chart.js/auto";
  *
  * Displayed as columns so pressure increases left-to-right (intuitive axis direction).
  */
-function PressureHistogramChartComponent({ histogram, height = 200 }) {
+function PressureHistogramChartComponent({ histogram, height = 200, theme = "dark" }) {
     const ref = useRef(null);
 
     useEffect(() => {
@@ -16,6 +17,8 @@ function PressureHistogramChartComponent({ histogram, height = 200 }) {
         const labels = histogram.map(b => `${b.lo}`);
         const data = histogram.map(b => Number(b.pct?.toFixed(1) ?? 0));
         const ctx = ref.current.getContext("2d");
+        const colors = chartColors(theme);
+        const scales = baseScales(theme);
 
         const chart = new Chart(ctx, {
             type: "bar",
@@ -42,6 +45,7 @@ function PressureHistogramChartComponent({ histogram, height = 200 }) {
                 plugins: {
                     legend: { display: false },
                     tooltip: {
+                        ...baseTooltip(theme),
                         callbacks: {
                             title: ctx => `${ctx[0].label} cmH₂O`,
                             label: ctx => `${ctx.parsed.y.toFixed(1)}% of session time`
@@ -50,27 +54,26 @@ function PressureHistogramChartComponent({ histogram, height = 200 }) {
                 },
                 scales: {
                     x: {
+                        ...scales.x,
                         title: {
                             display: true,
                             text: "Pressure (cmH₂O)",
-                            color: "#6b7280",
+                            color: colors.mutedText,
                             font: { size: 11 }
                         },
-                        grid: { display: false },
-                        ticks: { color: "#9ca3af", font: { size: 11 } }
+                        grid: { ...scales.x.grid, display: false }
                     },
                     y: {
-                        beginAtZero: true,
+                        ...scales.y,
                         max: 100,
                         title: {
                             display: true,
                             text: "% of Time",
-                            color: "#6b7280",
+                            color: colors.mutedText,
                             font: { size: 11 }
                         },
-                        grid: { color: "rgba(255,255,255,0.07)" },
                         ticks: {
-                            color: "#6b7280",
+                            ...scales.y.ticks,
                             callback: v => `${v}%`,
                             maxTicksLimit: 6
                         }
@@ -80,7 +83,7 @@ function PressureHistogramChartComponent({ histogram, height = 200 }) {
         });
 
         return () => chart.destroy();
-    }, [histogram]);
+    }, [histogram, theme]);
 
     if (!histogram || histogram.length === 0) return null;
     return (
