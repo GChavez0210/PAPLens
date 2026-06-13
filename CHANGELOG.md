@@ -6,7 +6,7 @@ All notable changes to this project are documented in this file.
 
 ### Changed
 
-- **Build Tooling — Vite 8:** Upgraded `vite` 7 → 8 (rolldown/oxc bundler) and `@vitejs/plugin-react` 5 → 6, switching the production `minify` setting to `oxc`. Also bumped `wait-on` and pinned a current `esbuild`. This clears the dev-server `esbuild` advisories and the `wait-on`→`joi` advisory at the source, so `npm run audit` is restored to the strict full-tree check (`npm audit --audit-level=high`), reverting the temporary `--omit=dev` scope introduced for the v2.0.0 release.
+- **Build Tooling — Vite 8:** Upgraded `vite` 7 → 8 (rolldown/oxc bundler) and `@vitejs/plugin-react` 5 → 6, switching the production `minify` setting to `oxc`. Also bumped `wait-on` and added an explicit, current `esbuild` devDependency, and declared an `engines.node` range (`^20.19.0 || >=22.12.0`) matching Vite 8's runtime requirement so installs fail fast on unsupported Node. This clears the dev-server `esbuild` advisories and the `wait-on`→`joi` advisory at the source, so `npm run audit` is restored to the strict full-tree check (`npm audit --audit-level=high`), reverting the temporary `--omit=dev` scope introduced for the v2.0.0 release.
 
 ## [2.0.0] - 2026-06-13
 

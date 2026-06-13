@@ -3,6 +3,9 @@
   "version": "2.0.0",
   "description": "Self-contained Electron CPAP Viewer forked from xpaulso/cpap-viewer",
   "main": "electron/main/index.js",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
   "scripts": {
     "dev": "concurrently -k \"npm:dev:renderer\" \"npm:dev:electron\"",
     "dev:renderer": "vite --strictPort",
