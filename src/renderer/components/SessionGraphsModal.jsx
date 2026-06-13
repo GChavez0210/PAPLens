@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Chart from "chart.js/auto";
 import { baseLegend, baseTooltip, chartColors, formatAxisTick } from "../charts/chartTheme";
+import { glossaryForEvent, glossaryForPB } from "../charts/eventGlossary";
+import { ChartInfoPopover } from "./charts/ChartInfoPopover";
 
 const MAX_POINTS = 1800;
 // Smallest zoom window (minutes) for the daily session graphs.
@@ -230,6 +232,49 @@ function makePBRegionPlugin(episodes) {
   };
 }
 
+/**
+ * Build a clickable info-badge scatter dataset — one diamond per PB episode,
+ * sitting atop the episode's amplitude peak. Each point carries a `popover`
+ * payload so it reuses the same click/tooltip plumbing as the event markers,
+ * while the amber band stays purely cosmetic.
+ */
+function buildPBBadgeDataset(episodes, ampPoints) {
+  if (!episodes || episodes.length === 0 || !ampPoints || ampPoints.length === 0) return null;
+  const g = glossaryForPB();
+  const points = episodes.map((ep, i) => {
+    let peak = 0;
+    for (const p of ampPoints) {
+      if (p.x >= ep.startMin && p.x <= ep.endMin && p.y > peak) peak = p.y;
+    }
+    const durSec = Math.round((ep.endMin - ep.startMin) * 60);
+    const durStr = durSec >= 60 ? `${Math.floor(durSec / 60)}m ${durSec % 60}s` : `${durSec}s`;
+    return {
+      x: (ep.startMin + ep.endMin) / 2,
+      y: peak,
+      tip: g.tip,
+      popover: {
+        title: `${g.title} ${i + 1} of ${episodes.length}`,
+        accent: g.accent,
+        meta: `Lasted ${durStr}`,
+        what: g.what,
+        action: g.action
+      }
+    };
+  });
+  return {
+    type: "scatter",
+    label: "PB episode",
+    data: points,
+    backgroundColor: g.accent,
+    borderColor: "#fff",
+    borderWidth: 1.5,
+    pointStyle: "rectRot",
+    pointRadius: 7,
+    pointHoverRadius: 9,
+    order: 0
+  };
+}
+
 // ── End PB helpers ─────────────────────────────────────────────────────────────
 
 function collectEvents(detail) {
@@ -277,12 +322,40 @@ function buildEventOverlayDatasets(events, pressurePoints) {
   // Group events by canonical type label
   const groups = new Map();
   for (const ev of events) {
+    // Skip annotations that aren't describable respiratory events (e.g.
+    // "Recording starts" or other device markers) — we don't plot a marker
+    // we can't explain.
+    const g = glossaryForEvent(ev.text);
+    if (!g) continue;
     const color = eventColor(ev.text);
     if (!groups.has(ev.text)) groups.set(ev.text, { color, points: [] });
     const xMin = ev.onsetSeconds / 60;
     const y = interpolatePressureAt(pressurePoints, xMin);
     if (y !== null) {
-      groups.get(ev.text).points.push({ x: xMin, y, durationSeconds: ev.durationSeconds, label: ev.text });
+      // ResMed stores most respiratory events as zero-duration point flags — the
+      // annotation marks a single timestamp, not the event length. Only show a
+      // duration when one is genuinely recorded (> 0); otherwise "lasted 0s"
+      // would misrepresent a flag as instantaneous.
+      const durLabel = Number.isFinite(ev.durationSeconds) && ev.durationSeconds > 0
+        ? `${Math.round(ev.durationSeconds)}s`
+        : null;
+      groups.get(ev.text).points.push({
+        x: xMin,
+        y,
+        durationSeconds: ev.durationSeconds,
+        label: ev.text,
+        tip: g.tip,
+        popover: {
+          title: g.title,
+          accent: color,
+          // Match the PB popover: show only how long the event lasted. Most
+          // ResMed events are zero-duration flags with no recorded length, so
+          // those are labelled "Point event" instead.
+          meta: durLabel ? `Lasted ${durLabel}` : "Point event",
+          what: g.what,
+          action: g.action
+        }
+      });
     }
   }
 
@@ -300,7 +373,7 @@ function buildEventOverlayDatasets(events, pressurePoints) {
   }));
 }
 
-function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickLabel, tooltipLabel, externalPlugins, maxMinutes, onRangeChange }) {
+function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickLabel, tooltipLabel, externalPlugins, maxMinutes, onRangeChange, onPointClick }) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -311,10 +384,12 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickL
   const yTickLabelRef = useRef(yTickLabel);
   const maxMinutesRef = useRef(maxMinutes);
   const onRangeChangeRef = useRef(onRangeChange);
+  const onPointClickRef = useRef(onPointClick);
   tooltipLabelRef.current = tooltipLabel;
   yTickLabelRef.current = yTickLabel;
   maxMinutesRef.current = maxMinutes;
   onRangeChangeRef.current = onRangeChange;
+  onPointClickRef.current = onPointClick;
 
   // Build the chart when its structure (data / theme / axes) changes.
   useEffect(() => {
@@ -331,6 +406,27 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickL
         parsing: false,
         normalized: true,
         interaction: { mode: "nearest", intersect: false },
+        // Click a marker that carries a `popover` payload to pin an explanation;
+        // a click on empty chart area dismisses any open popover.
+        onClick: (evt, _elements, chart) => {
+          const handler = onPointClickRef.current;
+          if (!handler) return;
+          const hits = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, false);
+          const hit = hits[0];
+          const raw = hit ? chart.data.datasets[hit.datasetIndex]?.data?.[hit.index] : null;
+          if (raw?.popover) {
+            const native = evt.native || evt;
+            handler(raw.popover, { x: native.clientX, y: native.clientY });
+          } else {
+            handler(null, null);
+          }
+        },
+        // Pointer cursor only when hovering a clickable (popover-bearing) marker.
+        onHover: (evt, _elements, chart) => {
+          const hits = chart.getElementsAtEventForMode(evt, "nearest", { intersect: true }, false);
+          const raw = hits[0] ? chart.data.datasets[hits[0].datasetIndex]?.data?.[hits[0].index] : null;
+          chart.canvas.style.cursor = raw?.popover ? "pointer" : "";
+        },
         scales: {
           x: {
             type: "linear",
@@ -365,7 +461,14 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickL
             ...baseTooltip(theme),
             callbacks: {
               title: (items) => (items[0] ? formatElapsed(items[0].parsed.x * 60) : ""),
-              label: (item) => tooltipLabelRef.current ? tooltipLabelRef.current(item) : `${item.dataset.label}: ${Number(item.parsed.y).toFixed(2)}${unit ? ` ${unit}` : ""}`
+              label: (item) => tooltipLabelRef.current ? tooltipLabelRef.current(item) : `${item.dataset.label}: ${Number(item.parsed.y).toFixed(2)}${unit ? ` ${unit}` : ""}`,
+              // Markers that carry a glossary `tip` get an extra explanatory line,
+              // plus a hint that the marker can be clicked for the full detail.
+              afterBody: (items) => {
+                const raw = items[0]?.raw;
+                if (!raw?.tip) return "";
+                return ["", raw.tip, "(click for details)"];
+              }
             }
           }
         }
@@ -659,6 +762,12 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
   const [detail, setDetail] = useState(null);
   const [reattaching, setReattaching] = useState(false);
   const [zoomRange, setZoomRange] = useState(null);
+  // Pinned marker explanation: { content, anchor } | null.
+  const [popover, setPopover] = useState(null);
+
+  const handlePointClick = useCallback((content, anchor) => {
+    setPopover(content ? { content, anchor } : null);
+  }, []);
 
   const loadSession = async (session, onResult) => {
     try {
@@ -683,6 +792,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
     if (!session) return undefined;
     setDetail(null);
     setZoomRange(null);
+    setPopover(null);
     let cancelled = false;
     loadSession(session, (d) => { if (!cancelled) setDetail(d); });
     return () => { cancelled = true; };
@@ -724,6 +834,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
     const ampPoints = flow ? buildAmplitudePoints(flow.values, brp) : null;
     const pbEpisodes = ampPoints ? detectPBFromAmplitude(ampPoints) : [];
     const pbPlugin = pbEpisodes.length > 0 ? makePBRegionPlugin(pbEpisodes) : null;
+    const pbBadge = buildPBBadgeDataset(pbEpisodes, ampPoints);
 
     const pressureLinePoints = pressure.map((series) => buildPoints(series.values, pld));
     const events = collectEvents(detail);
@@ -758,16 +869,19 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
         : [],
       // Breathing amplitude: peak-to-peak envelope in 5-second windows (from BRP)
       amplitude: ampPoints
-        ? [{
-            label: "Tidal amplitude",
-            data: ampPoints,
-            borderColor: "#ef4444",
-            backgroundColor: "rgba(239,68,68,0.08)",
-            pointRadius: 0,
-            borderWidth: 1.5,
-            tension: 0.3,
-            fill: true
-          }]
+        ? [
+            {
+              label: "Tidal amplitude",
+              data: ampPoints,
+              borderColor: "#ef4444",
+              backgroundColor: "rgba(239,68,68,0.08)",
+              pointRadius: 0,
+              borderWidth: 1.5,
+              tension: 0.3,
+              fill: true
+            },
+            ...(pbBadge ? [pbBadge] : [])
+          ]
         : [],
       pbEpisodes,
       pbPlugin,
@@ -975,6 +1089,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                 xRange={zoomRange}
                 maxMinutes={maxGraphMinutes}
                 onRangeChange={applyRange}
+                onPointClick={handlePointClick}
                 tooltipLabel={(item) => {
                   if (item.dataset.type === "scatter") {
                     const pt = item.raw || {};
@@ -1006,6 +1121,12 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                 xRange={zoomRange}
                 maxMinutes={maxGraphMinutes}
                 onRangeChange={applyRange}
+                onPointClick={handlePointClick}
+                tooltipLabel={(item) =>
+                  item.dataset.type === "scatter"
+                    ? "Periodic breathing episode"
+                    : `${item.dataset.label}: ${Number(item.parsed.y).toFixed(2)} L/min`
+                }
                 externalPlugins={graphData.pbPlugin ? [graphData.pbPlugin] : []}
               />
             ) : null}
@@ -1021,6 +1142,12 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
             )}
           </div>
         )}
+
+        <ChartInfoPopover
+          popover={popover?.content || null}
+          anchor={popover?.anchor || null}
+          onClose={() => setPopover(null)}
+        />
       </div>
     </div>
   );
