@@ -1,6 +1,6 @@
 {
   "name": "paplens",
-  "version": "1.7.0",
+  "version": "2.0.0",
   "description": "Self-contained Electron CPAP Viewer forked from xpaulso/cpap-viewer",
   "main": "electron/main/index.js",
   "scripts": {
@@ -21,7 +21,7 @@
     "lint": "eslint .",
     "test": "node scripts/run-node-tests.js",
     "check": "npm run lint && npm test",
-    "audit": "npm audit --audit-level=high",
+    "audit": "npm audit --omit=dev --audit-level=high",
     "test-types": "tsc --noEmit",
     "prepare": "husky"
   },

@@ -4,8 +4,12 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-06-13
+
 ### Added
 
+- **Visual Overhaul:** Refreshed the entire application UI across the dashboard, import flow, charts, and metadata panels for a cleaner, more consistent look in both light and dark themes.
+- **Daily Session Graph Tooltips:** Event markers on the Pressure chart are now clickable and carry plain-English explanations — hovering shows the event type plus a one-line description, and clicking pins a detail popover describing what the event means and what to do about it. Periodic-breathing episodes gain clickable badges on the Breathing Amplitude chart that explain the episode and its duration. Annotations that aren't describable respiratory events (e.g. recording-start markers) are no longer plotted, and zero-duration ResMed point flags are labelled accordingly instead of showing a misleading "0s" duration.
 - **Renderer Resilience:** Added an Error Boundary around dashboard, session, insights, and modal regions so a render-time chart or page failure no longer blanks the entire app shell.
 - **Insights Lazy Loading:** The Insights page is now loaded as a separate renderer chunk, reducing the initial dashboard bundle size.
 - **Development Checks:** Added `npm test`, `npm run check`, and `npm run audit` scripts. Node tests are discovered through `scripts/run-node-tests.js` for reliable cross-platform execution.
@@ -38,6 +42,7 @@ All notable changes to this project are documented in this file.
 - **Lint Coverage:** Enabled selected React lint rules for display names and unstable nested components while keeping the existing React Hooks rules active.
 - **Dependency Hygiene:** Updated `concurrently` to clear the critical `shell-quote` audit advisory.
 - **Release Workflow Hygiene:** Removed unnecessary `GH_TOKEN` exposure from build jobs that only package artifacts.
+- **Release Audit Scope:** `npm run audit` now scopes to production dependencies (`--omit=dev`). The shipped Electron app bundles no build tooling, so dev-only advisories in `vite`/`esbuild` (dev server) and `wait-on`→`joi` no longer block packaging. A full-tree `npm audit` still surfaces them, and a `vite` 8 upgrade is tracked as follow-up.
 
 ### Fixed
 
