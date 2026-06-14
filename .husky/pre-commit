@@ -1,1 +1,6 @@
-npx lint-staged
+# Call lint-staged's entry point directly via node instead of `npx`.
+# The Windows `npx` wrapper has a `#!/usr/bin/env bash` shebang; under GUI git
+# clients (GitHub Desktop) `env` resolves `bash` to the WSL launcher in
+# System32, which fails on Windows paths (exit 127). Going straight to node
+# avoids that shell entirely. node is put on PATH by ~/.config/husky/init.sh.
+node "node_modules/lint-staged/bin/lint-staged.js"
