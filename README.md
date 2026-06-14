@@ -78,8 +78,6 @@ When available from supported devices and imported data:
 - Flow limitation
 - Ventilation metrics
 - Periodic breathing
-- Oxygen saturation (SpO₂)
-- Pulse data
 - Session trends and long-term analytics
 
 ### Documentation
