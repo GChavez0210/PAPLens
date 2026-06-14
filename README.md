@@ -5,20 +5,13 @@
 </p>
 
 <p align="center">
-  <a href="LICENSE">
-    <img src="https://img.shields.io/badge/License-GPLv3-blue.svg" alt="GPL-3.0">
-  </a>
-  <a href="https://github.com/GChavez0210/PAPLens/releases">
-    <img src="https://img.shields.io/github/v/release/GChavez0210/PAPLens" alt="Latest Release">
-  </a>
-  <a href="https://github.com/GChavez0210/PAPLens/releases">
-    <img src="https://img.shields.io/github/downloads/GChavez0210/PAPLens/total" alt="Downloads">
-  </a>
-  <a href="https://github.com/GChavez0210/PAPLens/stargazers">
-    <img src="https://img.shields.io/github/stars/GChavez0210/PAPLens" alt="Stars">
-  </a>
+  <img src="https://img.shields.io/badge/Open%20Source-GPLv3-blue" alt="GPLv3">
+  <img src="https://img.shields.io/badge/Offline-100%25-green" alt="Offline">
+  <img src="https://img.shields.io/badge/No%20Telemetry-Privacy%20Focused-success" alt="Privacy Focused">
+  <img src="https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux%20%7C%20macOS-blue" alt="Platforms">
+  <img src="https://img.shields.io/badge/CPAP-Analytics-orange" alt="CPAP Analytics">
   <a href="https://buymeacoffee.com/gchavez0210">
-    <img src="https://img.shields.io/badge/Buy%20Me%20a%20Coffee-Support-FFDD00?logo=buy-me-a-coffee&logoColor=000000" alt="Buy Me A Coffee">
+    <img src="https://img.shields.io/badge/Support-Buy%20Me%20a%20Coffee-FFDD00?logo=buy-me-a-coffee&logoColor=000000" alt="Buy Me A Coffee">
   </a>
 </p>
 
