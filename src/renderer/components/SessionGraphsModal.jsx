@@ -67,6 +67,34 @@ function buildPoints(values, file, maxPoints = MAX_POINTS) {
   return points;
 }
 
+/**
+ * Like buildPoints, but downsamples only the samples that fall inside a
+ * [start, end] (minutes) window. Used to re-sample a high-resolution signal
+ * at higher effective resolution when the user zooms in: at a tight zoom the
+ * window holds few enough raw samples that `step` collapses to 1 and the true
+ * waveform is drawn instead of a decimated, aliased approximation.
+ * A null/full-session range falls back to buildPoints.
+ */
+function buildPointsRange(values, file, range, maxPoints = MAX_POINTS) {
+  if (!Array.isArray(values) || values.length === 0) return [];
+  const duration = getDurationSeconds(file, values.length);
+  if (!range || !(duration > 0)) return buildPoints(values, file, maxPoints);
+  const n = values.length;
+  const minToIndex = (m) => Math.round(((m * 60) / duration) * (n - 1));
+  const lo = Math.max(0, minToIndex(range.start));
+  const hi = Math.min(n - 1, minToIndex(range.end));
+  if (hi <= lo) return buildPoints(values, file, maxPoints);
+  const step = Math.max(1, Math.ceil((hi - lo + 1) / maxPoints));
+  const points = [];
+  for (let index = lo; index <= hi; index += step) {
+    const value = Number(values[index]);
+    if (Number.isFinite(value)) {
+      points.push({ x: (index / (n - 1)) * (duration / 60), y: value });
+    }
+  }
+  return points;
+}
+
 function toLeakLitersPerMinute(values) {
   return (values || []).map((value) => Number(value) * 60);
 }
@@ -307,7 +335,10 @@ function interpolatePressureAt(pressurePoints, xMin) {
   let bestDist = Infinity;
   for (const pt of pressurePoints) {
     const d = Math.abs(pt.x - xMin);
-    if (d < bestDist) { bestDist = d; best = pt.y; }
+    if (d < bestDist) {
+      bestDist = d;
+      best = pt.y;
+    }
   }
   return best;
 }
@@ -336,9 +367,8 @@ function buildEventOverlayDatasets(events, pressurePoints) {
       // annotation marks a single timestamp, not the event length. Only show a
       // duration when one is genuinely recorded (> 0); otherwise "lasted 0s"
       // would misrepresent a flag as instantaneous.
-      const durLabel = Number.isFinite(ev.durationSeconds) && ev.durationSeconds > 0
-        ? `${Math.round(ev.durationSeconds)}s`
-        : null;
+      const durLabel =
+        Number.isFinite(ev.durationSeconds) && ev.durationSeconds > 0 ? `${Math.round(ev.durationSeconds)}s` : null;
       groups.get(ev.text).points.push({
         x: xMin,
         y,
@@ -369,11 +399,26 @@ function buildEventOverlayDatasets(events, pressurePoints) {
     pointRadius: 6,
     pointHoverRadius: 8,
     pointStyle: "circle",
-    order: 0  // draw on top of line datasets
+    order: 0 // draw on top of line datasets
   }));
 }
 
-function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickLabel, tooltipLabel, externalPlugins, maxMinutes, onRangeChange, onPointClick }) {
+function SessionChart({
+  title,
+  unit,
+  datasets,
+  yMin,
+  yMax,
+  theme,
+  xRange,
+  yTickLabel,
+  tooltipLabel,
+  externalPlugins,
+  maxMinutes,
+  onRangeChange,
+  onPointClick,
+  resampler
+}) {
   const canvasRef = useRef(null);
   const chartRef = useRef(null);
 
@@ -385,11 +430,13 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickL
   const maxMinutesRef = useRef(maxMinutes);
   const onRangeChangeRef = useRef(onRangeChange);
   const onPointClickRef = useRef(onPointClick);
+  const resamplerRef = useRef(resampler);
   tooltipLabelRef.current = tooltipLabel;
   yTickLabelRef.current = yTickLabel;
   maxMinutesRef.current = maxMinutes;
   onRangeChangeRef.current = onRangeChange;
   onPointClickRef.current = onPointClick;
+  resamplerRef.current = resampler;
 
   // Build the chart when its structure (data / theme / axes) changes.
   useEffect(() => {
@@ -461,7 +508,10 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickL
             ...baseTooltip(theme),
             callbacks: {
               title: (items) => (items[0] ? formatElapsed(items[0].parsed.x * 60) : ""),
-              label: (item) => tooltipLabelRef.current ? tooltipLabelRef.current(item) : `${item.dataset.label}: ${Number(item.parsed.y).toFixed(2)}${unit ? ` ${unit}` : ""}`,
+              label: (item) =>
+                tooltipLabelRef.current
+                  ? tooltipLabelRef.current(item)
+                  : `${item.dataset.label}: ${Number(item.parsed.y).toFixed(2)}${unit ? ` ${unit}` : ""}`,
               // Markers that carry a glossary `tip` get an extra explanatory line,
               // plus a hint that the marker can be clicked for the full detail.
               afterBody: (items) => {
@@ -475,6 +525,14 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickL
       }
     });
 
+    // If a resampler is supplied and we rebuilt while zoomed (e.g. theme
+    // toggle), re-sample the first dataset to the current window so it keeps
+    // its high-resolution detail instead of reverting to the decimated view.
+    if (resamplerRef.current && chartRef.current.data.datasets[0]) {
+      chartRef.current.data.datasets[0].data = resamplerRef.current(xRange);
+      chartRef.current.update("none");
+    }
+
     return () => chartRef.current?.destroy();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [datasets, externalPlugins, theme, unit, yMin, yMax]);
@@ -485,6 +543,10 @@ function SessionChart({ title, unit, datasets, yMin, yMax, theme, xRange, yTickL
     if (!chart) return;
     chart.options.scales.x.min = xRange?.start;
     chart.options.scales.x.max = xRange?.end;
+    // Re-sample the visible window for higher per-breath fidelity on zoom.
+    if (resamplerRef.current && chart.data.datasets[0]) {
+      chart.data.datasets[0].data = resamplerRef.current(xRange);
+    }
     chart.update("none");
   }, [xRange]);
 
@@ -651,7 +713,9 @@ function SessionMinimap({ maxMinutes, range, points, theme, onRangeChange }) {
       if (d.mode === "right") en = Math.max(Math.min(maxMinutes, d.origEnd + deltaMin), d.origStart + MIN_ZOOM_MINUTES);
       onRangeChange(clampRange(s, en - s, maxMinutes));
     };
-    const onUp = () => { dragRef.current = null; };
+    const onUp = () => {
+      dragRef.current = null;
+    };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
     return () => {
@@ -715,13 +779,7 @@ function EmptyGraph({ title, message }) {
 }
 
 function getGraphMaxMinutes(graphData) {
-  const groups = [
-    graphData.pressure,
-    graphData.flow,
-    graphData.amplitude,
-    graphData.flowLimitation,
-    graphData.leak
-  ];
+  const groups = [graphData.pressure, graphData.flow, graphData.amplitude, graphData.flowLimitation, graphData.leak];
   let max = 0;
   for (const datasets of groups) {
     for (const dataset of datasets || []) {
@@ -794,8 +852,12 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
     setZoomRange(null);
     setPopover(null);
     let cancelled = false;
-    loadSession(session, (d) => { if (!cancelled) setDetail(d); });
-    return () => { cancelled = true; };
+    loadSession(session, (d) => {
+      if (!cancelled) setDetail(d);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [activeIdx, sessions]);
 
   const handleReattach = async () => {
@@ -822,10 +884,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
   const graphData = useMemo(() => {
     const brp = getFile(detail, "BRP");
     const pld = getFile(detail, "PLD");
-    const pressure = [
-      pickSeries(pld, ["MaskPress.2s", "Press.2s"]),
-      pickSeries(pld, ["EprPress.2s"])
-    ].filter(Boolean);
+    const pressure = [pickSeries(pld, ["MaskPress.2s", "Press.2s"]), pickSeries(pld, ["EprPress.2s"])].filter(Boolean);
     const flow = pickSeries(brp, ["Flow.40ms", "Flow"]);
     const leak = pickSeries(pld, ["Leak.2s", "Leak"]);
     const flowLimitation = pickSeries(pld, ["FlowLim.2s", "FlowLimit.2s", "Flow Limitation"]);
@@ -856,17 +915,23 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
         ...eventOverlay
       ],
       flow: flow
-        ? [{
-            label: "Flow rate",
-            data: buildPoints(flow.values, brp, 2200),
-            borderColor: theme === "light" ? "#111827" : "#e5e7eb",
-            backgroundColor: theme === "light" ? "rgba(17,24,39,0.08)" : "rgba(229,231,235,0.08)",
-            pointRadius: 0,
-            borderWidth: 1,
-            tension: 0,
-            fill: true
-          }]
+        ? [
+            {
+              label: "Flow rate",
+              data: buildPoints(flow.values, brp, 2200),
+              borderColor: theme === "light" ? "#111827" : "#e5e7eb",
+              backgroundColor: theme === "light" ? "rgba(17,24,39,0.08)" : "rgba(229,231,235,0.08)",
+              pointRadius: 0,
+              borderWidth: 1,
+              tension: 0.3,
+              fill: true
+            }
+          ]
         : [],
+      // Re-sample the raw flow signal to the visible window on zoom, so each
+      // breath is drawn from enough samples to look like a curve rather than a
+      // decimated spike. Returns full-session points for a null (fit) range.
+      flowResampler: flow ? (range) => buildPointsRange(flow.values, brp, range, 2200) : null,
       // Breathing amplitude: peak-to-peak envelope in 5-second windows (from BRP)
       amplitude: ampPoints
         ? [
@@ -886,16 +951,18 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
       pbEpisodes,
       pbPlugin,
       flowLimitation: flowLimitation
-        ? [{
-            label: "Flow limitation",
-            data: buildPoints(flowLimitation.values, pld),
-            borderColor: "#71717a",
-            backgroundColor: "rgba(113,113,122,0.12)",
-            pointRadius: 0,
-            borderWidth: 1.5,
-            fill: true,
-            tension: 0.1
-          }]
+        ? [
+            {
+              label: "Flow limitation",
+              data: buildPoints(flowLimitation.values, pld),
+              borderColor: "#71717a",
+              backgroundColor: "rgba(113,113,122,0.12)",
+              pointRadius: 0,
+              borderWidth: 1.5,
+              fill: true,
+              tension: 0.1
+            }
+          ]
         : [],
       leak: leak
         ? [
@@ -911,7 +978,13 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
             },
             {
               label: "24 L/min threshold",
-              data: (() => { const dur = getDurationSeconds(pld, leak.values.length) / 60; return [{ x: 0, y: 24 }, { x: dur, y: 24 }]; })(),
+              data: (() => {
+                const dur = getDurationSeconds(pld, leak.values.length) / 60;
+                return [
+                  { x: 0, y: 24 },
+                  { x: dur, y: 24 }
+                ];
+              })(),
               borderColor: "#ef4444",
               pointRadius: 0,
               borderWidth: 1,
@@ -939,31 +1012,30 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
 
   // A single sketch signal for the minimap backdrop — prefer the smooth tidal
   // amplitude, then pressure, then raw flow.
-  const minimapPoints = useMemo(() => (
-    graphData.amplitude?.[0]?.data
-    || graphData.pressure?.[0]?.data
-    || graphData.flow?.[0]?.data
-    || []
-  ), [graphData]);
+  const minimapPoints = useMemo(
+    () => graphData.amplitude?.[0]?.data || graphData.pressure?.[0]?.data || graphData.flow?.[0]?.data || [],
+    [graphData]
+  );
 
   // Shared range setter used by the charts (wheel/drag) and the minimap.
   // Collapsing to a full-session range resets to "fit" (null).
-  const applyRange = useCallback((range) => {
-    if (!range || (range.start <= 0.001 && range.end >= maxGraphMinutes - 0.001)) {
-      setZoomRange(null);
-    } else {
-      setZoomRange(range);
-    }
-  }, [maxGraphMinutes]);
+  const applyRange = useCallback(
+    (range) => {
+      if (!range || (range.start <= 0.001 && range.end >= maxGraphMinutes - 0.001)) {
+        setZoomRange(null);
+      } else {
+        setZoomRange(range);
+      }
+    },
+    [maxGraphMinutes]
+  );
 
   const setZoomWindow = (minutes) => {
     if (!minutes || !maxGraphMinutes) {
       setZoomRange(null);
       return;
     }
-    const center = zoomRange
-      ? (zoomRange.start + zoomRange.end) / 2
-      : maxGraphMinutes / 2;
+    const center = zoomRange ? (zoomRange.start + zoomRange.end) / 2 : maxGraphMinutes / 2;
     setZoomRange(clampRange(center - minutes / 2, minutes, maxGraphMinutes));
   };
 
@@ -979,13 +1051,20 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
 
   // Derive a title from the active session timestamp.
   const start = activeSession?.timestamp ? new Date(activeSession.timestamp) : null;
-  const sessionTitle = start && !Number.isNaN(start.getTime())
-    ? start.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
-    : activeSession?.id || "Session";
+  const sessionTitle =
+    start && !Number.isNaN(start.getTime())
+      ? start.toLocaleString([], { dateStyle: "medium", timeStyle: "short" })
+      : activeSession?.id || "Session";
 
   return (
     <div className="session-modal-backdrop" onClick={onClose}>
-      <div className="session-modal" role="dialog" aria-modal="true" aria-labelledby="session-modal-title" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="session-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="session-modal-title"
+        onClick={(event) => event.stopPropagation()}
+      >
         <header className="session-modal-header">
           <div style={{ minWidth: 0, flex: 1 }}>
             <p>Daily session graphs</p>
@@ -1002,7 +1081,9 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                   aria-label="Choose zoom window"
                 >
                   <option value="fit">Fit session</option>
-                  <option value="custom" disabled>Custom window</option>
+                  <option value="custom" disabled>
+                    Custom window
+                  </option>
                   <option value="1">1 min</option>
                   <option value="5">5 min</option>
                   <option value="15">15 min</option>
@@ -1027,7 +1108,8 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                     const dur = s.durationMinutes ? ` · ${Math.round(s.durationMinutes)}m` : "";
                     return (
                       <option key={s.id || i} value={i}>
-                        {t}{dur}
+                        {t}
+                        {dur}
                       </option>
                     );
                   })}
@@ -1044,7 +1126,9 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
         {detail && !detail.error && maxGraphMinutes > 0 && (
           <div className="session-minimap-bar">
             <div className="session-minimap-meta">
-              <span className="session-minimap-hint">Ctrl + scroll to zoom · drag a graph to pan · drag the window</span>
+              <span className="session-minimap-hint">
+                Ctrl + scroll to zoom · drag a graph to pan · drag the window
+              </span>
               <span className="session-zoom-readout">{activeZoomLabel}</span>
             </div>
             <SessionMinimap
@@ -1069,9 +1153,16 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                 onClick={handleReattach}
                 disabled={reattaching}
                 style={{
-                  marginTop: 12, padding: "8px 18px", borderRadius: 6, cursor: reattaching ? "wait" : "pointer",
-                  background: "var(--accent, #22D3EE)", color: "#000", border: "none",
-                  fontWeight: 700, fontSize: "0.85rem", opacity: reattaching ? 0.6 : 1
+                  marginTop: 12,
+                  padding: "8px 18px",
+                  borderRadius: 6,
+                  cursor: reattaching ? "wait" : "pointer",
+                  background: "var(--accent, #22D3EE)",
+                  color: "#000",
+                  border: "none",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  opacity: reattaching ? 0.6 : 1
                 }}
               >
                 {reattaching ? "Locating…" : "Locate data folder"}
@@ -1103,7 +1194,16 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
               <EmptyGraph title="Pressure" message="No pressure signal found for this session." />
             )}
             {graphData.flow.length > 0 ? (
-              <SessionChart title="Flow Rate" unit="L/min" datasets={graphData.flow} theme={theme} xRange={zoomRange} maxMinutes={maxGraphMinutes} onRangeChange={applyRange} />
+              <SessionChart
+                title="Flow Rate"
+                unit="L/min"
+                datasets={graphData.flow}
+                theme={theme}
+                xRange={zoomRange}
+                maxMinutes={maxGraphMinutes}
+                onRangeChange={applyRange}
+                resampler={graphData.flowResampler}
+              />
             ) : (
               <EmptyGraph title="Flow Rate" message="No high-resolution flow signal found for this session." />
             )}
@@ -1131,12 +1231,31 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
               />
             ) : null}
             {graphData.flowLimitation.length > 0 ? (
-              <SessionChart title="Flow Limitation" unit="index" datasets={graphData.flowLimitation} yMin={0} yMax={1} theme={theme} xRange={zoomRange} maxMinutes={maxGraphMinutes} onRangeChange={applyRange} />
+              <SessionChart
+                title="Flow Limitation"
+                unit="index"
+                datasets={graphData.flowLimitation}
+                yMin={0}
+                yMax={1}
+                theme={theme}
+                xRange={zoomRange}
+                maxMinutes={maxGraphMinutes}
+                onRangeChange={applyRange}
+              />
             ) : (
               <EmptyGraph title="Flow Limitation" message="No flow limitation signal found for this session." />
             )}
             {graphData.leak.length > 0 ? (
-              <SessionChart title="Leak Rate" unit="L/min" datasets={graphData.leak} yMin={0} theme={theme} xRange={zoomRange} maxMinutes={maxGraphMinutes} onRangeChange={applyRange} />
+              <SessionChart
+                title="Leak Rate"
+                unit="L/min"
+                datasets={graphData.leak}
+                yMin={0}
+                theme={theme}
+                xRange={zoomRange}
+                maxMinutes={maxGraphMinutes}
+                onRangeChange={applyRange}
+              />
             ) : (
               <EmptyGraph title="Leak Rate" message="No leak signal found for this session." />
             )}

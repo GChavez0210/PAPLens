@@ -1621,6 +1621,52 @@ th {
   visibility: visible;
 }
 
+/* Hoverable score-breakdown rows — reuse the info-tip bubble styling. */
+.score-bar-tip {
+  position: relative;
+  cursor: help;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.score-bar-tip:hover,
+.score-bar-tip:focus-visible {
+  background: color-mix(in srgb, var(--text) 4%, transparent);
+}
+
+.score-bar-tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: 280px;
+  max-width: 90vw;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: var(--text-xs);
+  font-weight: 400;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  box-shadow: 0 8px 24px var(--shadow-lg);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+  z-index: 100;
+}
+
+.score-bar-tip:hover::after,
+.score-bar-tip:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
 /* Skeleton loaders */
 .skeleton {
   border-radius: var(--radius-sm);
