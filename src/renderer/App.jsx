@@ -139,18 +139,11 @@ function LoadingScreen({ logoSrc, status }) {
   return (
     <main className="boot-shell" aria-busy="true" aria-live="polite">
       <section className="boot-card">
-        <div className="boot-orbit" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
+        <div className="boot-spinner" aria-hidden="true" />
         <img className="boot-logo" src={logoSrc} alt="PAPLens" />
         <div className="boot-copy">
           <h1>Preparing your therapy data</h1>
           <p>{status}</p>
-        </div>
-        <div className="boot-progress" aria-hidden="true">
-          <span />
         </div>
       </section>
     </main>
@@ -187,8 +180,8 @@ export function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("paplens-theme") || "dark");
   const bootLogoSrc =
     theme === "light"
-      ? new URL("./assets/PLLogoL.png", import.meta.url).href
-      : new URL("./assets/PLLogoD.png", import.meta.url).href;
+      ? new URL("../../Assets/PAPLens Logo Light.png", import.meta.url).href
+      : new URL("../../Assets/PAPLens Logo Dark.png", import.meta.url).href;
 
   useEffect(() => {
     if (theme === "light") {
@@ -1014,13 +1007,13 @@ export function App() {
         <header className="top-nav">
           <div className="brand">
             <img
+              className="app-brand-logo"
               src={
                 theme === "light"
-                  ? new URL("./assets/PLLogoL.png", import.meta.url).href
-                  : new URL("./assets/PLLogoD.png", import.meta.url).href
+                  ? new URL("../../Assets/PAPLens Logo Light.png", import.meta.url).href
+                  : new URL("../../Assets/PAPLens Logo Dark.png", import.meta.url).href
               }
               alt="PAPLens"
-              style={{ height: "34px", width: "auto" }}
             />
           </div>
           <div className="nav-controls">
@@ -1115,11 +1108,9 @@ export function App() {
 
         <div className="print-header">
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <img
-              src={new URL("./assets/PLReportLogo.png", import.meta.url).href}
-              alt="PAPLens Logo"
-              style={{ height: "48px", width: "auto" }}
-            />
+            <span className="print-brand-logo">
+              <img src={new URL("../../Assets/PAPLens Logo Light.png", import.meta.url).href} alt="PAPLens Logo" />
+            </span>
             <div>
               <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Clinical Report</h1>
               <div style={{ color: "#555" }}>Processed securely offline</div>
@@ -1602,15 +1593,16 @@ export function App() {
                 width: "90%"
               }}
             >
-              <img
-                src={
-                  theme === "light"
-                    ? new URL("./assets/PLLogoL.png", import.meta.url).href
-                    : new URL("./assets/PLLogoD.png", import.meta.url).href
-                }
-                alt="PAPLens"
-                style={{ height: 64, width: "auto", marginBottom: 20 }}
-              />
+              <div className="about-logo-frame">
+                <img
+                  src={
+                    theme === "light"
+                      ? new URL("../../Assets/PAPLens Logo Light.png", import.meta.url).href
+                      : new URL("../../Assets/PAPLens Logo Dark.png", import.meta.url).href
+                  }
+                  alt="PAPLens"
+                />
+              </div>
               <h2 style={{ margin: "0 0 24px", fontSize: "1.5rem", fontWeight: 700, color: "var(--text)" }}>PAPLens</h2>
               <p style={{ margin: "0 0 28px", fontSize: "0.9rem", color: "var(--muted)", lineHeight: 1.7 }}>
                 PAPLens processes your CPAP data entirely offline — no accounts, no cloud, no data leaving your device.

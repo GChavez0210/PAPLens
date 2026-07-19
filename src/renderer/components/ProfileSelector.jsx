@@ -185,7 +185,7 @@ export function ProfileSelector({ onSelect }) {
 function ProfileHeader({ title, subtitle }) {
   return (
     <header className="profile-header">
-      <img src={new URL("../assets/PLIcon.png", import.meta.url).href} alt="" aria-hidden="true" />
+      <img src={new URL("../../../Assets/PAPLens.ico", import.meta.url).href} alt="" aria-hidden="true" />
       <div>
         <div className="section-eyebrow">PAPLens clinical workspace</div>
         <h2>{title}</h2>

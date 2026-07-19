@@ -35,7 +35,7 @@ class WindowManager {
         sandbox: true
       },
       title: "PAPLens",
-      icon: this.resolveAssetPath(path.join("src", "renderer", "assets", "PLIcon.ico"))
+      icon: this.resolveAssetPath(path.join("Assets", "PAPLens.ico"))
     });
 
     this.mainWindow.on("closed", () => {

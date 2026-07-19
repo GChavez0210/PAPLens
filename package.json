@@ -69,15 +69,15 @@
       "LICENSE",
       "NOTICES.md",
       "report.html",
-      "src/renderer/assets/PLReportLogo.png",
-      "src/renderer/assets/PLIcon.ico"
+      "Assets/**/*",
+      "src/renderer/assets/PLIcon.png"
     ],
     "directories": {
       "buildResources": "build",
       "output": "release"
     },
     "win": {
-      "icon": "src/renderer/assets/PLIcon.ico",
+      "icon": "Assets/PAPLens.ico",
       "target": [
         {
           "target": "nsis"
@@ -85,7 +85,7 @@
       ]
     },
     "mac": {
-      "icon": "src/renderer/assets/PLIcon.icns",
+      "icon": "Assets/PAPLens.icns",
       "target": [
         {
           "target": "dmg",

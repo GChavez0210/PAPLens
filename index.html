@@ -49,42 +49,18 @@
         text-align: center;
       }
 
-      #app-boot-splash .boot-orbit {
-        position: relative;
-        width: 112px;
-        height: 112px;
-      }
-
-      #app-boot-splash .boot-orbit::before {
-        content: "";
-        position: absolute;
-        inset: 0;
+      #app-boot-splash .boot-spinner {
+        width: 56px;
+        height: 56px;
         border-radius: 50%;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-      }
-
-      #app-boot-splash .boot-orbit span {
-        position: absolute;
-        inset: 50%;
-        width: 12px;
-        height: 12px;
-        margin: -6px 0 0 -6px;
-        border-radius: 999px;
-        background: linear-gradient(135deg, #6366f1, #22d3ee);
-        box-shadow: 0 0 18px rgba(99, 102, 241, 0.45);
-        animation: boot-orbit 2.1s linear infinite;
-      }
-
-      #app-boot-splash .boot-orbit span:nth-child(2) {
-        animation-delay: -0.7s;
-      }
-
-      #app-boot-splash .boot-orbit span:nth-child(3) {
-        animation-delay: -1.4s;
+        border: 4px solid rgba(148, 163, 184, 0.18);
+        border-top-color: #3b82f6;
+        border-right-color: #2dd4bf;
+        animation: boot-spin 0.85s linear infinite;
       }
 
       #app-boot-splash img {
-        width: min(240px, 72%);
+        width: min(360px, 92%);
         height: auto;
       }
 
@@ -100,47 +76,9 @@
         line-height: 1.6;
       }
 
-      #app-boot-splash .boot-progress {
-        width: 100%;
-        height: 4px;
-        overflow: hidden;
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.08);
-      }
-
-      #app-boot-splash .boot-progress span {
-        display: block;
-        width: 40%;
-        height: 100%;
-        border-radius: inherit;
-        background: linear-gradient(90deg, #6366f1, #22d3ee);
-        animation: boot-progress 1.4s ease-in-out infinite;
-      }
-
-      @keyframes boot-orbit {
-        0% {
-          transform: rotate(0deg) translateY(-46px) scale(0.85);
-          opacity: 0.5;
-        }
-
-        50% {
-          transform: rotate(180deg) translateY(-46px) scale(1);
-          opacity: 1;
-        }
-
-        100% {
-          transform: rotate(360deg) translateY(-46px) scale(0.85);
-          opacity: 0.5;
-        }
-      }
-
-      @keyframes boot-progress {
-        0% {
-          transform: translateX(-120%);
-        }
-
-        100% {
-          transform: translateX(320%);
+      @keyframes boot-spin {
+        to {
+          transform: rotate(360deg);
         }
       }
     </style>
@@ -148,17 +86,12 @@
   <body>
     <div id="app-boot-splash" aria-hidden="true">
       <div class="boot-card">
-        <div class="boot-orbit">
-          <span></span>
-          <span></span>
-          <span></span>
-        </div>
-        <img src="./src/renderer/assets/PLLogoD.png" alt="PAPLens" />
+        <div class="boot-spinner"></div>
+        <img src="./Assets/PAPLens Logo Dark.png" alt="PAPLens" />
         <div>
           <h1>Preparing your therapy data</h1>
           <p>Loading therapy history from the local database.</p>
         </div>
-        <div class="boot-progress"><span></span></div>
       </div>
     </div>
     <div id="root"></div>
