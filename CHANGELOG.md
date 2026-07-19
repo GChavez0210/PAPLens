@@ -4,8 +4,17 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-19
+
+### Added
+
+- **Score Tooltips:** LastNight score lines now carry human-readable hover explanations, with an accessible info bubble (hover/focus, `data-tip`, `aria-label`) on each `ScoreBar`.
+- **Flow Chart Resampling:** High-resolution flow signals in the session waveform viewer are re-sampled to the current zoom window instead of reverting to a decimated view, with slightly smoothed rendering for clearer zoomed waveforms.
+
 ### Changed
 
+- **Rebrand — App Icons & Logo:** Replaced the legacy logo with new PAPLens brand assets (light/dark PNG plus `.ico`/`.icns`) used for the app/window icon on Windows and macOS, and updated every in-app logo reference (boot splash, top nav, profile header, about modal, print/report views).
+- **Clinical UI Refresh:** Reworked the visual system to a cleaner clinical style across light/dark themes — updated design tokens, radii, spacing, and typography. Added labeled sidebar navigation, moved data status into the sidebar, and introduced section eyebrow/page heading patterns for Overview, Sessions, and Insights. Profile selection/creation screens now share a branded header component, and chart/report color palettes and the Electron window background were aligned with the refreshed theme.
 - **Build Tooling — Vite 8:** Upgraded `vite` 7 → 8 (rolldown/oxc bundler) and `@vitejs/plugin-react` 5 → 6, switching the production `minify` setting to `oxc`. Also bumped `wait-on` and added an explicit, current `esbuild` devDependency, and declared an `engines.node` range (`^20.19.0 || >=22.12.0`) matching Vite 8's runtime requirement so installs fail fast on unsupported Node. This clears the dev-server `esbuild` advisories and the `wait-on`→`joi` advisory at the source, so `npm run audit` is restored to the strict full-tree check (`npm audit --audit-level=high`), reverting the temporary `--omit=dev` scope introduced for the v2.0.0 release.
 
 ## [2.0.0] - 2026-06-13
