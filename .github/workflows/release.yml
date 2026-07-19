@@ -7,7 +7,10 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    # Pinned to windows-2022: windows-latest now resolves to an image whose
+    # preinstalled Visual Studio version node-gyp@11 cannot detect, breaking
+    # the better-sqlite3 native rebuild.
+    runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
