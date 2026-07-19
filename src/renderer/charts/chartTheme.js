@@ -13,23 +13,23 @@
  * hex values so a series for the same metric reads the same color everywhere.
  */
 export const SERIES = {
-  red: "#ef4444",
-  blue: "#3b82f6",
-  violet: "#8b5cf6",
+  red: "#f43f5e",
+  blue: "#2563eb",
+  violet: "#7c6ee6",
   amber: "#f59e0b",
-  cyan: "#22d3ee",
-  emerald: "#10b981",
+  cyan: "#14b8a6",
+  emerald: "#16a36a",
   slate: "#64748b"
 };
 
 /** Translucent fill variants for area/bar fills (matches SERIES hues). */
 export const SERIES_FILL = {
-  red: "rgba(239,68,68,0.18)",
-  blue: "rgba(59,130,246,0.20)",
-  violet: "rgba(139,92,246,0.18)",
+  red: "rgba(244,63,94,0.16)",
+  blue: "rgba(37,99,235,0.16)",
+  violet: "rgba(124,110,230,0.15)",
   amber: "rgba(245,158,11,0.16)",
-  cyan: "rgba(34,211,238,0.18)",
-  emerald: "rgba(16,185,129,0.18)",
+  cyan: "rgba(20,184,166,0.16)",
+  emerald: "rgba(22,163,106,0.16)",
   slate: "rgba(100,116,139,0.18)"
 };
 
@@ -41,13 +41,13 @@ export function chartColors(theme) {
   const light = theme === "light";
   return {
     text: light ? "#475569" : "#cbd5e1",
-    mutedText: light ? "#64748b" : "#94a3b8",
-    grid: light ? "rgba(15,23,42,0.075)" : "rgba(226,232,240,0.11)",
-    axis: light ? "rgba(15,23,42,0.16)" : "rgba(226,232,240,0.18)",
+    mutedText: light ? "#64748b" : "#8fa2b8",
+    grid: light ? "rgba(71,85,105,0.10)" : "rgba(148,163,184,0.12)",
+    axis: light ? "rgba(71,85,105,0.18)" : "rgba(148,163,184,0.22)",
     track: light ? "rgba(15,23,42,0.06)" : "rgba(226,232,240,0.08)",
-    tooltipBg: light ? "rgba(255,255,255,0.96)" : "rgba(24,24,27,0.96)",
-    tooltipBorder: light ? "rgba(79,70,229,0.18)" : "rgba(255,255,255,0.14)",
-    tooltipTitle: light ? "#0f172a" : "#ffffff"
+    tooltipBg: light ? "rgba(255,255,255,0.98)" : "rgba(13,27,42,0.98)",
+    tooltipBorder: light ? "rgba(148,163,184,0.42)" : "rgba(148,163,184,0.28)",
+    tooltipTitle: light ? "#132238" : "#f1f5f9"
   };
 }
 
