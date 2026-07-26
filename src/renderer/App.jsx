@@ -35,9 +35,23 @@ import {
   isNoDataDay
 } from "./utils/reportBuilder";
 import { toMetricNumber } from "./utils/therapyMetrics";
+import { PB_SIGNIFICANT_PCT, pbBarFill, pbHex } from "./utils/periodicBreathing";
 import { downsampleIndices } from "./utils/downsample";
 import { AHI_MILD, AHI_MODERATE, LEAK_HIGH, USAGE_COMPLIANCE_HOURS } from "./constants";
 import { ThemeContext } from "./ThemeContext";
+
+/**
+ * Chart.js scriptable colours: tint each PB bar by its own severity tier, so a
+ * night crossing 5% or 20% is legible without reading it off the axis.
+ * `parsed` is undefined on the first pass before the scale resolves, so fall
+ * back to the raw datum.
+ */
+const pbBarValue = (ctx) => {
+  const value = ctx.parsed?.y ?? ctx.raw;
+  return Number.isFinite(value) ? value : 0;
+};
+const pbBarColor = (ctx) => pbBarFill(pbBarValue(ctx));
+const pbBarHoverColor = (ctx) => pbHex(pbBarValue(ctx));
 
 const RANGE_OPTIONS = [
   { value: "7", label: "7" },
@@ -403,9 +417,13 @@ export function App() {
       respRate: filteredStats.map((d) => toTrendValue(d, (day) => day.respRate50)),
       spo2: filteredStats.map((d) => toTrendValue(d, (day) => day.spo2Avg)),
       pulse: filteredStats.map((d) => toTrendValue(d, (day) => day.pulseAvg)),
+      // Deliberately not zero-filled downstream: a device or parser that never
+      // reports PB must show a gap, not a flat 0% line implying it measured none.
+      pb: filteredStats.map((d) => toTrendValue(d, (day) => day.pbPct)),
       rolling7Ahi: rolling7,
       ahiThreshold: Array(n).fill(5),
-      leakThreshold: Array(n).fill(24)
+      leakThreshold: Array(n).fill(24),
+      pbThreshold: Array(n).fill(PB_SIGNIFICANT_PCT)
     };
 
     // Downsample long ranges to keep chart rendering snappy
@@ -431,9 +449,11 @@ export function App() {
         respRate: pick(allSeries.respRate),
         spo2: pick(allSeries.spo2),
         pulse: pick(allSeries.pulse),
+        pb: pick(allSeries.pb),
         rolling7Ahi: pick(allSeries.rolling7Ahi),
         ahiThreshold: pick(allSeries.ahiThreshold),
-        leakThreshold: pick(allSeries.leakThreshold)
+        leakThreshold: pick(allSeries.leakThreshold),
+        pbThreshold: pick(allSeries.pbThreshold)
       };
     }
 
@@ -539,11 +559,32 @@ export function App() {
       oximetry: [
         { label: "SpO2 %", data: trendsData.spo2, borderColor: "#3b82f6", spanGaps: true },
         { label: "Pulse", data: trendsData.pulse, borderColor: "#ef4444", yAxisID: "y1", spanGaps: true }
+      ],
+      pb: [
+        {
+          label: "Periodic Breathing (% of night)",
+          data: trendsData.pb,
+          backgroundColor: pbBarColor,
+          hoverBackgroundColor: pbBarHoverColor
+        },
+        {
+          // Explicit line type so this stays a reference rule across the bars
+          // rather than becoming a second bar series.
+          type: "line",
+          label: `${PB_SIGNIFICANT_PCT}% Significance Threshold`,
+          data: trendsData.pbThreshold,
+          borderColor: "rgba(245,158,11,0.8)",
+          borderWidth: 1.5,
+          borderDash: [8, 4],
+          pointRadius: 0,
+          fill: false
+        }
       ]
     };
   }, [trendsData]);
 
   const hasOximetryTrend = useMemo(() => trendsData.spo2.some((v) => v > 0), [trendsData.spo2]);
+  const hasPeriodicBreathingTrend = useMemo(() => trendsData.pb.some((v) => v != null), [trendsData.pb]);
 
   const chooseFolder = async () => {
     setIsDataLoading(true);
@@ -1459,6 +1500,16 @@ export function App() {
                         title="Oximetry Validation"
                         labels={trendsData.labels}
                         datasets={overviewChartDatasets.oximetry}
+                      />
+                    )}
+
+                    {hasPeriodicBreathingTrend && (
+                      <TrendChart
+                        reportKey="periodicBreathing"
+                        title="Periodic Breathing (% of Night)"
+                        type="bar"
+                        labels={trendsData.labels}
+                        datasets={overviewChartDatasets.pb}
                       />
                     )}
                   </div>

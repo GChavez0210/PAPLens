@@ -25,6 +25,21 @@ const USAGE_WARNING_HOURS = 2;
 const SPO2_NORMAL = 95;
 const SPO2_WARNING = 90;
 
+// Therapy stability score (0-100) below which a night reads as inconsistent
+// rather than stable.
+const STABILITY_UNSTABLE = 70;
+
+// Mask-fit score (0-100, higher is a better seal) tiers used by the findings
+// narrative. The report builder's getMaskFitTier adds finer display bands on top
+// of these, but shares the 60 boundary.
+const MASK_FIT_POOR = 60;
+const MASK_FIT_MODERATE = 80;
+
+// Flow limitation index (0-1, 95th percentile) and RIN (events/hr).
+const FLOW_LIMITATION_MILD = 0.1;
+const FLOW_LIMITATION_SIGNIFICANT = 0.3;
+const RIN_ELEVATED = 5;
+
 // Leak severity tiers consumed by classifyLeakSeverity. Calibrated for
 // 95th-percentile leak; the median (p50) scale is ~half because leak
 // distributions are right-skewed (see DATA-9). Tier mapping: severe -> 3,
@@ -41,6 +56,12 @@ module.exports = {
   USAGE_WARNING_HOURS,
   SPO2_NORMAL,
   SPO2_WARNING,
+  STABILITY_UNSTABLE,
+  MASK_FIT_POOR,
+  MASK_FIT_MODERATE,
+  FLOW_LIMITATION_MILD,
+  FLOW_LIMITATION_SIGNIFICANT,
+  RIN_ELEVATED,
   LEAK_SEVERITY_P95,
   LEAK_SEVERITY_P50
 };

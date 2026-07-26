@@ -284,6 +284,7 @@ class IpcRouter {
           `
         SELECT n.id AS night_id, n.night_date, m.ahi_total, m.pressure_median, m.pressure_p95, m.leak_p50, m.leak_p95,
                m.flow_limitation_p95, m.event_cluster_index_source, n.usage_hours,
+               m.pb_pct, m.pb_episode_count, m.pb_total_seconds, m.pb_is_significant, m.pb_leak_confounded,
                d.stability_score, d.therapy_stability_score, d.mask_fit_score, d.compliance_risk, d.outliers,
                d.pressure_variance, d.flow_limitation_score, d.event_cluster_index
         FROM nights n
@@ -341,7 +342,7 @@ class IpcRouter {
                  m.flow_limitation_p95, m.rin_per_hr, m.csr_per_hr,
                  m.snore_index, m.leak_spike_count, m.pressure_histogram, m.pressure_efficiency,
                  m.pb_episode_count, m.pb_total_seconds, m.pb_pct, m.pb_avg_cycle_sec, m.pb_is_significant, m.pb_leak_confounded,
-                 d.residual_burden, d.stability_score, d.compliance_risk`;
+                 d.residual_burden, d.stability_score, d.mask_fit_score, d.compliance_risk, d.outliers`;
       let trendRows;
       if (from && to) {
         trendRows = this.profileDb.db
@@ -407,12 +408,16 @@ class IpcRouter {
         explanations = this.profileDb.db
           .prepare(
             `
-          SELECT title, summary, details, key, night_id
-          FROM insights_explanations
-          WHERE night_id IN (
+          SELECT e.title, e.summary, e.details, e.key, e.night_id,
+                 MAX(n.night_date) AS night_date, COUNT(*) AS night_count
+          FROM insights_explanations e
+          JOIN nights n ON n.id = e.night_id
+          WHERE e.night_id IN (
             SELECT id FROM nights WHERE device_id = ? AND usage_hours > 0
             AND night_date BETWEEN ? AND ? AND night_date != ?
-          ) ORDER BY created_at DESC LIMIT 20
+          )
+          GROUP BY e.key
+          ORDER BY night_count DESC, night_date DESC
         `
           )
           .all(device.id, from, to, lastNightDate ?? "");
@@ -421,12 +426,16 @@ class IpcRouter {
         explanations = this.profileDb.db
           .prepare(
             `
-          SELECT title, summary, details, key, night_id
-          FROM insights_explanations
-          WHERE night_id IN (
+          SELECT e.title, e.summary, e.details, e.key, e.night_id,
+                 MAX(n.night_date) AS night_date, COUNT(*) AS night_count
+          FROM insights_explanations e
+          JOIN nights n ON n.id = e.night_id
+          WHERE e.night_id IN (
             SELECT id FROM nights WHERE device_id = ? AND usage_hours > 0
             AND night_date != ? ORDER BY night_date DESC LIMIT ?
-          ) ORDER BY created_at DESC LIMIT 20
+          )
+          GROUP BY e.key
+          ORDER BY night_count DESC, night_date DESC
         `
           )
           .all(device.id, lastNightDate ?? "", expLimit);

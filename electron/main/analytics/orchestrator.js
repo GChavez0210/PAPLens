@@ -1,8 +1,17 @@
-const { classifyLeakSeverity } = require("./clinicalInsights");
-const { computeTherapyStabilityScore, computeComplianceRisk, processResidualBurden, hasTherapyData } = require("./scores");
+const { classifyLeakSeverity, computeMaskFitScore } = require("./clinicalInsights");
+const {
+  computeTherapyStabilityScore,
+  computeComplianceRisk,
+  processResidualBurden,
+  hasTherapyData
+} = require("./scores");
 const { detectOutliers } = require("./outliers");
 const { analyzeCorrelations } = require("./correlations");
-const { generateInsightNarratives, generatePeriodicBreathingInsight, generateFlowLimitationInsight } = require("./explanations");
+const {
+  generateInsightNarratives,
+  generatePeriodicBreathingInsight,
+  generateFlowLimitationInsight
+} = require("./explanations");
 const { detectChronicMissingFields } = require("./diagnostics");
 const { AnalyticsDataAccess } = require("./dataAccess");
 const crypto = require("crypto");
@@ -82,18 +91,32 @@ class AnalyticsOrchestrator {
 
         if (!hasTherapyData(current)) {
           upsertDerived.run({
-            night_id: current.night_id, stability: null, mask_fit: null, ventilation: null,
-            compliance: null, pri: null, residual: null, outliers: JSON.stringify([]), z_scores: JSON.stringify({}),
-            therapy_stability_score: null, leak_severity_tier: null, leak_consistency_index: null,
-            pressure_variance: null, flow_limitation_score: null, event_cluster_index: null
+            night_id: current.night_id,
+            stability: null,
+            mask_fit: null,
+            ventilation: null,
+            compliance: null,
+            pri: null,
+            residual: null,
+            outliers: JSON.stringify([]),
+            z_scores: JSON.stringify({}),
+            therapy_stability_score: null,
+            leak_severity_tier: null,
+            leak_consistency_index: null,
+            pressure_variance: null,
+            flow_limitation_score: null,
+            event_cluster_index: null
           });
           continue;
         }
 
         const clinicalStability = computeTherapyStabilityScore(current, history30);
         const leakForClassify = current.leak_p95 ?? current.leak_max ?? current.leak_p50;
-        const leakBasis = (current.leak_p95 != null || current.leak_max != null) ? "p95" : "p50";
-        const leakClass = classifyLeakSeverity(leakForClassify, current.leak_p50, current.usage_hours * 60, { basis: leakBasis });
+        const leakBasis = current.leak_p95 != null || current.leak_max != null ? "p95" : "p50";
+        const leakClass = classifyLeakSeverity(leakForClassify, current.leak_p50, current.usage_hours * 60, {
+          basis: leakBasis
+        });
+        const maskFitScore = computeMaskFitScore(current);
         const compliance = computeComplianceRisk(usage14);
         const residual = processResidualBurden(ahi30);
         const { flags, z_scores } = detectOutliers(current, history30);
@@ -101,33 +124,57 @@ class AnalyticsOrchestrator {
         upsertDerived.run({
           night_id: current.night_id,
           stability: clinicalStability.stabilityScore == null ? null : Math.round(clinicalStability.stabilityScore),
-          mask_fit: null, ventilation: null, compliance, pri: null,
+          mask_fit: maskFitScore,
+          ventilation: null,
+          compliance,
+          pri: null,
           residual: residual ? JSON.stringify(residual) : null,
-          outliers: JSON.stringify(flags), z_scores: JSON.stringify(z_scores),
+          outliers: JSON.stringify(flags),
+          z_scores: JSON.stringify(z_scores),
           therapy_stability_score: clinicalStability.stabilityScore,
-          leak_severity_tier: leakClass.tier, leak_consistency_index: leakClass.consistencyIndex,
+          leak_severity_tier: leakClass.tier,
+          leak_consistency_index: leakClass.consistencyIndex,
           pressure_variance: clinicalStability.pressureVariance,
           flow_limitation_score: clinicalStability.flScore,
           event_cluster_index: current.event_cluster_index_source ?? clinicalStability.clusterIndex
         });
 
-        const insights = generateInsightNarratives(current.night_id, {
-          stability_score: clinicalStability.stabilityScore, mask_fit_score: null, compliance_risk: compliance
-        }, flags);
+        const insights = generateInsightNarratives(
+          current.night_id,
+          {
+            stability_score: clinicalStability.stabilityScore,
+            mask_fit_score: maskFitScore,
+            compliance_risk: compliance
+          },
+          flags
+        );
 
         const pbInsight = generatePeriodicBreathingInsight(
-          current.pb_pct, current.pb_is_significant === 1, current.pb_episode_count, current.pb_leak_confounded === 1
+          current.pb_pct,
+          current.pb_is_significant === 1,
+          current.pb_episode_count,
+          current.pb_leak_confounded === 1
         );
         if (pbInsight) insights.push(pbInsight);
 
-        const nightsElevatedFL = history30.filter(h => h.flow_limitation_p95 != null && h.flow_limitation_p95 >= 0.10).length;
-        const flInsight = generateFlowLimitationInsight(current.flow_limitation_p95, current.rin_per_hr, nightsElevatedFL);
+        const nightsElevatedFL = history30.filter(
+          (h) => h.flow_limitation_p95 != null && h.flow_limitation_p95 >= 0.1
+        ).length;
+        const flInsight = generateFlowLimitationInsight(
+          current.flow_limitation_p95,
+          current.rin_per_hr,
+          nightsElevatedFL
+        );
         if (flInsight) insights.push(flInsight);
 
         for (const ins of insights) {
           upsertInsight.run({
-            id: crypto.randomUUID(), night_id: current.night_id,
-            key: ins.key, title: ins.title, summary: ins.summary, details: ins.details
+            id: crypto.randomUUID(),
+            night_id: current.night_id,
+            key: ins.key,
+            title: ins.title,
+            summary: ins.summary,
+            details: ins.details
           });
         }
       }
@@ -135,22 +182,24 @@ class AnalyticsOrchestrator {
       // Warn (once per run) about metrics missing for >10 consecutive stored therapy
       // nights. This intentionally scans full history through the latest processed
       // date so incremental imports still catch streaks that started earlier.
-      const perNightMissing = allNights
-        .filter(hasTherapyData)
-        .map((night) => ({
-          date: night.night_date,
-          missingFields: computeTherapyStabilityScore(night, []).missingFields
-        }));
+      const perNightMissing = allNights.filter(hasTherapyData).map((night) => ({
+        date: night.night_date,
+        missingFields: computeTherapyStabilityScore(night, []).missingFields
+      }));
       detectChronicMissingFields(perNightMissing);
 
       const latestNights = this.dataAccess.getLatestNightsForCorrelations(deviceId, 30);
       const corrs = analyzeCorrelations(latestNights);
       this.db.prepare(`DELETE FROM correlations WHERE device_id = ? AND window_days = 30`).run(deviceId);
       if (corrs.length > 0) {
-        this.db.prepare(`
+        this.db
+          .prepare(
+            `
           INSERT INTO correlations (id, device_id, window_days, results)
           VALUES (?, ?, ?, ?)
-        `).run(crypto.randomUUID(), deviceId, 30, JSON.stringify(corrs));
+        `
+          )
+          .run(crypto.randomUUID(), deviceId, 30, JSON.stringify(corrs));
       }
 
       this.dataAccess.commitTransaction();

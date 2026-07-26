@@ -1,4 +1,5 @@
 import { memo, useMemo, useState } from "react";
+import { PB_SEVERITY_COLOR, pbSeverity } from "../../utils/periodicBreathing";
 
 const TOOLTIP = {
   title: "What this means",
@@ -40,29 +41,36 @@ function PeriodicBreathingCardComponent({ trends }) {
 
   const hasPB = avgPbPct > 0;
 
-  const borderColor = anySignificant ? (majorityConfounded ? "#a78bfa" : "#f59e0b") : hasPB ? "#22D3EE" : "#374151";
-  const bgColor = anySignificant
-    ? majorityConfounded
-      ? "rgba(167,139,250,0.07)"
-      : "rgba(245,158,11,0.07)"
-    : hasPB
-      ? "rgba(34,211,238,0.06)"
-      : "var(--card)";
-  const badgeColor = anySignificant ? (majorityConfounded ? "#a78bfa" : "#f59e0b") : hasPB ? "#22D3EE" : "#6b7280";
-  const badgeBg = anySignificant
-    ? majorityConfounded
-      ? "rgba(167,139,250,0.15)"
-      : "rgba(245,158,11,0.15)"
-    : hasPB
-      ? "rgba(34,211,238,0.12)"
-      : "rgba(107,114,128,0.12)";
-  const badgeLabel = anySignificant
-    ? majorityConfounded
-      ? "? Possibly Significant"
-      : "⚠ Clinically Significant"
-    : hasPB
-      ? "Detected"
-      : "None";
+  // Severity follows the range-average PB% the card headlines, on the same scale
+  // as the bar below. Individual nights that crossed 5% are surfaced by the flag
+  // banner rather than recolouring the card — an average below the threshold is
+  // not itself clinically significant.
+  const severity = pbSeverity(avgPbPct);
+  const accent = severity === "elevated" && majorityConfounded ? "#a78bfa" : PB_SEVERITY_COLOR[severity];
+
+  // The flag banner keeps its own warning colour so a green card can still
+  // carry an amber "n nights crossed 5%" note without the two contradicting.
+  const flagAccent = majorityConfounded ? "#a78bfa" : "var(--warning)";
+
+  // The badge reports presence, the card colour reports severity — so a sub-5%
+  // average keeps the card green (the average is not clinically significant)
+  // while the badge goes amber to mark that PB was detected at all.
+  const badgeAccent = severity === "normal" ? "var(--warning)" : accent;
+
+  const borderColor = accent;
+  const bgColor = severity === "none" ? "var(--card)" : `color-mix(in srgb, ${accent} 7%, var(--card))`;
+  const badgeColor = badgeAccent;
+  const badgeBg = `color-mix(in srgb, ${badgeAccent} 15%, transparent)`;
+  const badgeLabel =
+    severity === "none"
+      ? "None"
+      : severity === "severe"
+        ? "⚠ Severe"
+        : severity === "elevated"
+          ? majorityConfounded
+            ? "? Possibly Significant"
+            : "⚠ Clinically Significant"
+          : "Detected";
 
   return (
     <div
@@ -175,10 +183,10 @@ function PeriodicBreathingCardComponent({ trends }) {
             marginTop: 12,
             padding: "8px 12px",
             borderRadius: 6,
-            background: majorityConfounded ? "rgba(167,139,250,0.10)" : "rgba(245,158,11,0.12)",
-            border: `1px solid ${majorityConfounded ? "rgba(167,139,250,0.3)" : "rgba(245,158,11,0.3)"}`,
+            background: `color-mix(in srgb, ${flagAccent} 12%, transparent)`,
+            border: `1px solid color-mix(in srgb, ${flagAccent} 30%, transparent)`,
             fontSize: "0.78rem",
-            color: borderColor,
+            color: flagAccent,
             lineHeight: 1.5
           }}
         >

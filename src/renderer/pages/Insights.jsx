@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTheme } from "../ThemeContext";
 import { filterAnalyzedDays, getCorrelationInsight } from "../utils/reportBuilder";
 import { calculatePercentile, formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
+import { formatNightLabel, summarizeFinding } from "../utils/findingSummaries";
 import { AHITrendChart } from "../components/charts/AHITrendChart";
 import { TherapyStabilityCard } from "../components/charts/TherapyStabilityCard";
 import { LeakSeverityGauge } from "../components/charts/LeakSeverityGauge";
@@ -306,6 +307,7 @@ function InsightCard({ insight }) {
   const theme = KEY_COLOR[insight.key] || KEY_COLOR.default;
   const icon = insight.key in KEY_COLOR ? insight.key : "default";
   const tooltip = INSIGHT_TOOLTIPS[insight.key] || INSIGHT_TOOLTIPS.default;
+  const scopeLabel = scopeLabelFor(insight);
 
   return (
     <div
@@ -340,7 +342,25 @@ function InsightCard({ insight }) {
         <AppIcon type={icon} color={theme.border} size={18} />
       </span>
       <div>
-        <div style={{ fontWeight: 700, marginBottom: 4, color: "var(--text)" }}>{insight.title}</div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
+          <span style={{ fontWeight: 700, color: "var(--text)" }}>{insight.title}</span>
+          {scopeLabel && (
+            <span
+              style={{
+                fontSize: "0.66rem",
+                fontWeight: 600,
+                color: "var(--muted)",
+                background: "var(--card-inner)",
+                border: "1px solid var(--border)",
+                borderRadius: 999,
+                padding: "1px 7px",
+                whiteSpace: "nowrap"
+              }}
+            >
+              {scopeLabel}
+            </span>
+          )}
+        </div>
         <div style={{ color: "var(--muted)", fontSize: "0.85rem", lineHeight: 1.5 }}>{insight.summary}</div>
       </div>
       {hovered && (
@@ -386,30 +406,16 @@ function InsightCard({ insight }) {
   );
 }
 
-const MULTI_NIGHT_TITLES = {
-  "Significant Flow Limitation": "Significant Flow Limitation Detected",
-  "Mild Flow Limitation": "Mild Flow Limitation Observed",
-  "Elevated Respiratory Disturbance": "Elevated Respiratory Disturbance Observed",
-  "Stable Night": "Generally Stable",
-  "Fluctuating Therapy": "Inconsistent Therapy Detected",
-  "Unusual Night Detected": "Unusual Nights Detected",
-  "Elevated Event Count": "Elevated Event Count Detected",
-  "Exceptionally Low AHI": "Consistently Low AHI",
-  "Reduced Therapy Usage": "Reduced Therapy Usage Detected",
-  "Extended Usage Night": "Extended Usage Observed",
-  "Elevated Mask Leak": "Elevated Mask Leak Detected",
-  "High Tidal Volume": "High Tidal Volume Observed",
-  "Low Tidal Volume": "Low Tidal Volume Observed",
-  "Elevated Breathing Volume": "Elevated Breathing Volume Observed",
-  "Reduced Breathing Volume": "Reduced Breathing Volume Observed"
-};
-
-function adaptForRange(exp) {
-  const title = MULTI_NIGHT_TITLES[exp.title] ?? exp.title;
-  const summary = (exp.summary || "")
-    .replace(/^This night stood out because/, "Some nights stood out because")
-    .replace(/^This night/, "Some nights");
-  return { ...exp, title, summary };
+// Findings are generated per night; the query groups them by key across the
+// range and counts the nights. The card body is then composed from the range's
+// trend rows (see summarizeFinding) so it describes the whole period and names
+// its worst night, rather than replaying one night's stored prose.
+function scopeLabelFor(finding) {
+  const worst = formatNightLabel(finding.worstDate);
+  if (finding.nightCount > 1) {
+    return worst ? `${finding.nightCount} nights · worst ${worst}` : `${finding.nightCount} nights`;
+  }
+  return worst ?? formatNightLabel(finding.night_date);
 }
 
 function StatCard({ label, value, unit, sub, color = "#22D3EE", tooltipKey, tooltipDown = false }) {
@@ -510,16 +516,45 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
   }, [loadData]);
 
   const { trends, correlations, explanations, complianceRate, complianceWindowNights, compliantNights } = data || {};
-  const uniqueExplanations = useMemo(() => {
-    const seenKeys = new Set();
-    return (explanations || [])
-      .filter((exp) => {
-        if (seenKeys.has(exp.key)) return false;
-        seenKeys.add(exp.key);
-        return true;
+  // The query already groups to one row per finding key. Collapse again here so
+  // the panel still shows one card per finding when the renderer is running
+  // ahead of a main process that has not restarted onto the grouped query —
+  // Electron only reloads the renderer on rebuild, never the main process.
+  const rangeFindings = useMemo(() => {
+    const byKey = new Map();
+    for (const exp of explanations || []) {
+      const nights = Number(exp.night_count) || 1;
+      const existing = byKey.get(exp.key);
+      if (!existing) {
+        byKey.set(exp.key, { ...exp, night_count: nights });
+        continue;
+      }
+      // Keep the most recent night's row, but the count of every night.
+      const total = existing.night_count + nights;
+      if ((exp.night_date || "") > (existing.night_date || "")) {
+        Object.assign(existing, exp);
+      }
+      existing.night_count = total;
+    }
+
+    return [...byKey.values()]
+      .map((exp) => {
+        const nightCount = exp.night_count;
+        // Prefer the range summary; the stored per-night row is the fallback for
+        // keys without a summariser (or a range with no usable values).
+        const ranged = summarizeFinding(exp.key, trends || [], { nightCount });
+        return {
+          ...exp,
+          nightCount,
+          title: ranged?.title ?? exp.title,
+          summary: ranged?.text ?? exp.summary,
+          worstDate: ranged?.worstDate ?? null
+        };
       })
-      .map(adaptForRange);
-  }, [explanations]);
+      .sort(
+        (a, b) => b.nightCount - a.nightCount || String(b.night_date || "").localeCompare(String(a.night_date || ""))
+      );
+  }, [explanations, trends]);
 
   const sorted = useMemo(() => [...(trends || [])].reverse(), [trends]);
   const analyzed = useMemo(() => filterAnalyzedDays(sorted), [sorted]);
@@ -981,7 +1016,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
         </section>
       )}
 
-      {uniqueExplanations.length > 0 && (
+      {rangeFindings.length > 0 && (
         <section className="panel" style={{ padding: 20 }}>
           <h3
             style={{
@@ -999,7 +1034,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
             Findings — {rangeLabel}
           </h3>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-            {uniqueExplanations.map((exp) => (
+            {rangeFindings.map((exp) => (
               <InsightCard key={`${exp.night_id}-${exp.key}`} insight={exp} />
             ))}
           </div>

@@ -559,7 +559,9 @@ button.nav-chip:hover {
   overflow: hidden;
 }
 
-.chart-card:hover {
+/* Exclude .expanded: the lift transform would replace the centering
+   translate(-50%, -50%) below and shove the modal out from under the cursor. */
+.chart-card:not(.expanded):hover {
   border-color: rgba(79, 70, 229, 0.6);
   transform: translateY(-1px);
   box-shadow: var(--shadow-card);
@@ -2467,7 +2469,7 @@ button {
   padding: 16px;
 }
 
-.chart-card:hover,
+.chart-card:not(.expanded):hover,
 .clinical-card:hover {
   transform: none;
   border-color: var(--border-strong);
