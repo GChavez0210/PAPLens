@@ -4,6 +4,32 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-07-26
+
+### Added
+
+- **Periodic Breathing Trend Chart:** The Overview dashboard gains a per-night periodic-breathing bar chart, with each bar tinted by its severity tier and a dashed 5% clinical-significance rule across the range. Nights where PB was never measured render as gaps rather than 0% bars, so a device that doesn't report PB can't be mistaken for one reporting none.
+- **Periodic Breathing on Last Night Detail:** The last-night card now reports the night's PB percentage as a peer of the score lines, plotted against the same 0–20% scale with a marker at the 5% threshold. It is explicitly observational — PB carries no score penalty — and says so on hover.
+- **Mask Fit Scoring:** Revived the mask-fit finding, which could never fire because the analytics orchestrator wrote `mask_fit_score` as a hardcoded `null`. Scores now derive from peak leak (p95), median leak (p50) weighted separately so a persistently leaky baseline scores worse than one brief excursion, and per-hour seal breaks — all anchored to the existing shared leak tiers.
+- **Profile Data Migration:** Added a one-time, `user_version`-gated backfill that corrects values already written to a profile database, so existing nights pick up fixes without re-importing from the SD card.
+
+### Changed
+
+- **Findings Are Now Range-Level:** The Insights findings panel showed one card per night, each replaying a single night's stored prose beneath a "Last N Days" heading. Findings are now grouped to one card per type, and the body is composed live from the range's trend rows — how often the finding occurred, the typical value, and the worst night, named and dated. Because the text is generated rather than stored, cards can no longer show wording from an older analytics build.
+- **Periodic Breathing Severity Colours:** The Insights PB card is tiered on its range-average PB%: green below the 5% threshold, amber from 5–20%, red above 20%, with neutral grey when nothing was detected. The per-night clinical flag keeps its own amber so a green card can still carry a "n nights crossed 5%" note without the two contradicting. The "Detected" badge is amber even on a green card, since presence and severity are different statements.
+- **Clinical Thresholds Consolidated:** Moved the stability, mask-fit, flow-limitation, and RIN thresholds into `src/shared/clinicalThresholds.js` alongside the existing leak and AHI values, so the main-process narrative generator and the renderer's range summariser read the same numbers instead of mirroring literals.
+
+### Fixed
+
+- **Expanded Charts Fleeing the Cursor:** Hovering a full-screen chart moved it out from under the pointer. A later `transform: none` hover rule overrode the modal's centring transform at equal specificity, snapping the card half its own size down and right, then back on mouse-leave. Both hover rules are now scoped to exclude the expanded state.
+- **"Optimal" Shown on Nights That Lost Points:** Score penalties were rounded to whole points for display while the stability score itself was computed from the unrounded values, so a sub-point deduction reported as `0` and rendered as "Optimal". Penalties now carry one decimal, matching the score they produced.
+- **Periodic Breathing Significance Off-By-Rounding:** `pb_is_significant` was tested against the unrounded PB percentage but stored next to the rounded one, so a 4.96% night persisted as "5.0%, not clinically significant" and coloured as if below threshold. The detector now rounds before deciding.
+- **Dependency Audit:** Applied `npm audit fix` for a new advisory wave across transitive build tooling (`app-builder-lib`, `builder-util-runtime`, `axios`, `postcss`, `shell-quote`, `tar`), clearing 11 of 12 advisories without downgrades.
+
+### Known Issues
+
+- **Audit Scope Temporarily Narrowed:** `npm run audit` is scoped to production dependencies (`--omit=dev`) for this release, re-narrowing the strict full-tree check that v2.1.0 restored. A new advisory against `brace-expansion` (`<=5.0.7`, GHSA-3jxr-9vmj-r5cp / GHSA-mh99-v99m-4gvg) is patched only in 5.0.8, and the 1.x and 2.x lines have no backported fix — so every `minimatch` 3/5/9 consumer in the build toolchain is flagged with no clean upgrade. Forcing 5.0.8 tree-wide breaks `@electron/asar` (its CommonJS entry is no longer callable), and npm's auto-fix downgrades `electron-builder` 26 → 25/22 rather than moving to genuinely patched versions. None of the affected packages ship in the installer: the five production dependencies (`better-sqlite3`, `chart.js`, `handlebars`, `react`, `react-dom`) audit clean. Restore the full-tree check once `minimatch` picks up `brace-expansion` 5.0.8.
+
 ## [2.1.0] - 2026-07-19
 
 ### Added
