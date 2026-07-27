@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file.
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-07-26
+
+### Fixed
+
+- **Windows Installer Produced No Executable:** The v2.2.0 Windows installer reported success but never wrote `PAPLens.exe` or any of the Electron DLLs, leaving a populated install directory, a working uninstaller, and a Start Menu shortcut pointing at nothing ("Windows is searching for PAPLens.exe"). Only the architecture-specific payload of the combined x64/arm64 NSIS installer was affected — arch-neutral files, `app.asar`, and `elevate.exe` all extracted normally. Traced to `electron-builder`, which the v2.2.0 dependency-audit pass moved from 26.8.1 to 26.15.3 under its existing `^26.0.12` range; 26.8.1 installs correctly on the same configuration and 26.15.3 does not. `electron-builder` is now pinned to an exact `26.8.1` so an audit or lockfile refresh cannot silently change the packaging toolchain again.
+
+  **v2.2.0 Windows installers should not be used.** macOS and Linux artifacts are unaffected.
+
 ## [2.2.0] - 2026-07-26
 
 ### Added
@@ -28,7 +36,7 @@ All notable changes to this project are documented in this file.
 
 ### Known Issues
 
-- **Audit Scope Temporarily Narrowed:** `npm run audit` is scoped to production dependencies (`--omit=dev`) for this release, re-narrowing the strict full-tree check that v2.1.0 restored. A new advisory against `brace-expansion` (`<=5.0.7`, GHSA-3jxr-9vmj-r5cp / GHSA-mh99-v99m-4gvg) is patched only in 5.0.8, and the 1.x and 2.x lines have no backported fix — so every `minimatch` 3/5/9 consumer in the build toolchain is flagged with no clean upgrade. Forcing 5.0.8 tree-wide breaks `@electron/asar` (its CommonJS entry is no longer callable), and npm's auto-fix downgrades `electron-builder` 26 → 25/22 rather than moving to genuinely patched versions. None of the affected packages ship in the installer: the five production dependencies (`better-sqlite3`, `chart.js`, `handlebars`, `react`, `react-dom`) audit clean. Restore the full-tree check once `minimatch` picks up `brace-expansion` 5.0.8.
+- **Audit Scope Temporarily Narrowed:** `npm run audit` is scoped to production dependencies (`--omit=dev`) for this release, re-narrowing the strict full-tree check that v2.1.0 restored. (As of v2.2.1 this also covers `electron-builder`, deliberately pinned to 26.8.1 — below its own advisory fix — because later 26.x releases break the Windows installer.) A new advisory against `brace-expansion` (`<=5.0.7`, GHSA-3jxr-9vmj-r5cp / GHSA-mh99-v99m-4gvg) is patched only in 5.0.8, and the 1.x and 2.x lines have no backported fix — so every `minimatch` 3/5/9 consumer in the build toolchain is flagged with no clean upgrade. Forcing 5.0.8 tree-wide breaks `@electron/asar` (its CommonJS entry is no longer callable), and npm's auto-fix downgrades `electron-builder` 26 → 25/22 rather than moving to genuinely patched versions. None of the affected packages ship in the installer: the five production dependencies (`better-sqlite3`, `chart.js`, `handlebars`, `react`, `react-dom`) audit clean. Restore the full-tree check once `minimatch` picks up `brace-expansion` 5.0.8.
 
 ## [2.1.0] - 2026-07-19
 

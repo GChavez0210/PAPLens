@@ -1,4 +1,4 @@
-# PAPLens (v2.2.0)
+# PAPLens (v2.2.1)
 
 <p align="center">
   <picture>
