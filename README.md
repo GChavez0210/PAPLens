@@ -1,7 +1,10 @@
-# PAPLens (v2.1.0)
+# PAPLens (v2.2.0)
 
 <p align="center">
-  <img src="PAPLens-logo.png" alt="PAPLens Logo" width="250">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="Assets/PAPLens%20Logo%20Dark.png">
+    <img src="Assets/PAPLens%20Logo%20Light.png" alt="PAPLens Logo" width="420">
+  </picture>
 </p>
 
 <p align="center">
@@ -55,7 +58,10 @@ Designed for PAP/CPAP users who want deeper visibility into their therapy, PAPLe
 - Detailed therapy analytics
 - Dashboard visualizations and trend tracking
 - Calendar heatmaps and compliance reporting
-- Clinical insight generation
+- Range-level clinical findings that summarize the selected period and name its worst night
+- Nightly therapy stability scoring with a per-metric breakdown of where points were lost
+- Mask seal scoring from leak percentiles and per-hour seal breaks
+- Periodic breathing detection with per-night trends and clinical significance thresholds
 - EDF waveform viewing for supported sessions
 - High-quality PDF report generation
 
@@ -65,12 +71,12 @@ When available from supported devices and imported data:
 
 - Apnea-Hypopnea Index (AHI)
 - Event breakdowns
-- Leak rates
+- Leak rates and mask seal quality
 - Pressure statistics
 - Usage and compliance
-- Flow limitation
+- Flow limitation and respiratory disturbance (RIN)
 - Ventilation metrics
-- Periodic breathing
+- Periodic breathing as a share of each night, against the 5% clinical threshold
 - Session trends and long-term analytics
 
 ### Documentation
