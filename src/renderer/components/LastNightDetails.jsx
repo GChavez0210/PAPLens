@@ -1,5 +1,5 @@
 import { toMetricNumber } from "../utils/therapyMetrics";
-import { PB_SEVERE_PCT, PB_SIGNIFICANT_PCT, pbColor, pbSeverity } from "../utils/periodicBreathing";
+import { PB_SEVERE_PCT, PB_SIGNIFICANT_PCT, pbSeverity, pbStatusClass } from "../utils/periodicBreathing";
 
 // Human-readable labels for raw DB/analytics metric keys
 const METRIC_LABELS = {
@@ -118,38 +118,25 @@ function buildScoreTip(key, penalty, data, scoreDetails) {
 }
 
 // ── Score decomposition component ────────────────────────────────────────────
-function ScoreBar({ label, penalty, maxPenalty, color, tip }) {
+function ScoreBar({ label, penalty, maxPenalty, fill, tip }) {
   const unavailable = penalty === null || penalty === undefined;
   const pct = maxPenalty > 0 ? Math.min((penalty / maxPenalty) * 100, 100) : 0;
+  const state = unavailable ? "is-na" : penalty > 0 ? "is-penalty" : "is-ok";
   return (
     <div
       className={tip ? "score-bar score-bar-tip" : "score-bar"}
-      style={{ marginBottom: 6 }}
       data-tip={tip || undefined}
       tabIndex={tip ? 0 : undefined}
       aria-label={tip || undefined}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", marginBottom: 3 }}>
-        <span style={{ color: "var(--muted)" }}>{label}</span>
-        <span
-          style={{
-            color: unavailable ? "var(--muted)" : penalty > 0 ? "var(--critical)" : "var(--success)",
-            fontWeight: 600
-          }}
-        >
+      <div className="score-bar-head">
+        <span className="score-bar-label">{label}</span>
+        <span className={`score-bar-readout ${state}`}>
           {unavailable ? "N/A" : penalty > 0 ? `-${penalty} pts` : "Optimal"}
         </span>
       </div>
-      <div style={{ background: "var(--separator)", borderRadius: 3, height: 4 }}>
-        <div
-          style={{
-            width: unavailable ? "0%" : `${pct}%`,
-            background: color,
-            height: "100%",
-            borderRadius: 4,
-            transition: "width 0.8s ease"
-          }}
-        />
+      <div className="score-bar-track">
+        <div className={`score-bar-fill ${fill}`} style={{ width: unavailable ? "0%" : `${pct}%` }} />
       </div>
     </div>
   );
@@ -166,7 +153,7 @@ function PeriodicBreathingBar({ data }) {
 
   const episodes = toMetricNumber(data.pb_episode_count);
   const severity = pbSeverity(pct);
-  const color = pbColor(pct);
+  const statusClass = pbStatusClass(pct);
   const significant = data.pb_is_significant === 1;
   const confounded = data.pb_leak_confounded === 1;
 
@@ -183,41 +170,29 @@ function PeriodicBreathingBar({ data }) {
     .join(" ");
 
   return (
-    <div className="score-bar score-bar-tip" style={{ marginBottom: 6 }} data-tip={tip} tabIndex={0} aria-label={tip}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", marginBottom: 3 }}>
+    <div className="score-bar score-bar-tip" data-tip={tip} tabIndex={0} aria-label={tip}>
+      <div className="score-bar-head">
         {/* No "not scored" marker here — the hover tip already says it, and the
             row reports a percentage rather than a deduction, unlike its peers. */}
-        <span style={{ color: "var(--muted)" }}>Periodic Breathing</span>
-        <span style={{ color, fontWeight: 600 }}>
+        <span className="score-bar-label">Periodic Breathing</span>
+        <span className={`score-bar-readout ${statusClass}`}>
           {severity === "none" ? "None detected" : `${pct.toFixed(1)}% of night`}
         </span>
       </div>
-      <div style={{ background: "var(--separator)", borderRadius: 3, height: 4, position: "relative" }}>
+      <div className="score-bar-track">
         <div
-          style={{
-            // Same 0–20% scale the Insights PB card plots against.
-            width: `${Math.min((pct / PB_SEVERE_PCT) * 100, 100)}%`,
-            background: color,
-            height: "100%",
-            borderRadius: 4,
-            transition: "width 0.8s ease"
-          }}
+          className={`score-bar-fill ${statusClass}`}
+          // Same 0–20% scale the Insights PB card plots against.
+          style={{ width: `${Math.min((pct / PB_SEVERE_PCT) * 100, 100)}%` }}
         />
         <div
+          className="score-bar-threshold"
           title={`${PB_SIGNIFICANT_PCT}% clinical threshold`}
-          style={{
-            position: "absolute",
-            top: -1,
-            left: `${(PB_SIGNIFICANT_PCT / PB_SEVERE_PCT) * 100}%`,
-            width: 1,
-            height: 6,
-            background: "var(--warning)",
-            opacity: 0.6
-          }}
+          style={{ left: `${(PB_SIGNIFICANT_PCT / PB_SEVERE_PCT) * 100}%` }}
         />
       </div>
       {significant && (
-        <div style={{ fontSize: "0.68rem", color, marginTop: 4 }}>
+        <div className={`pb-note ${statusClass}`}>
           {confounded
             ? `Crossed the ${PB_SIGNIFICANT_PCT}% threshold, but episodes overlapped mask leak — low confidence.`
             : `Crossed the ${PB_SIGNIFICANT_PCT}% clinical threshold. Worth raising with your care team.`}
@@ -258,58 +233,47 @@ export function LastNightDetails({ data }) {
   return (
     <div className="detail-card">
       <div className="detail-card-header">
-        <div className="section-eyebrow">Last Night Detail</div>
+        <div className="section-eyebrow">Last night detail</div>
         <span className="detail-card-date">{data.night_date}</span>
       </div>
 
       <div className="detail-card-grid">
         {/* Score decomposition */}
         <div className="detail-breakdown">
-          <div
-            style={{
-              fontSize: "0.66rem",
-              color: "var(--muted)",
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              marginBottom: 8,
-              fontWeight: 700
-            }}
-          >
-            Score Breakdown
-          </div>
+          <div className="section-eyebrow detail-breakdown-title">Score breakdown</div>
           <ScoreBar
             label="Residual AHI Impact"
             penalty={pAhi}
             maxPenalty={50}
-            color="var(--critical)"
+            fill="fill-alert"
             tip={buildScoreTip("ahi", pAhi, data, scoreDetails)}
           />
           <ScoreBar
             label="Leak Stability"
             penalty={pLeak}
             maxPenalty={25}
-            color="var(--warning)"
+            fill="fill-watch"
             tip={buildScoreTip("leak", pLeak, data, scoreDetails)}
           />
           <ScoreBar
             label="Usage Adherence"
             penalty={pUsage}
             maxPenalty={15}
-            color="var(--cyan)"
+            fill="fill-accent"
             tip={buildScoreTip("usage", pUsage, data, scoreDetails)}
           />
           <ScoreBar
             label="Pressure Variance"
             penalty={pPressVar}
             maxPenalty={5}
-            color="#8b5cf6"
+            fill="fill-accent"
             tip={buildScoreTip("pressureVar", pPressVar, data, scoreDetails)}
           />
           <ScoreBar
             label="Flow Limitation"
             penalty={pFlow}
             maxPenalty={5}
-            color="var(--tier-orange)"
+            fill="fill-sev3"
             tip={buildScoreTip("flowLim", pFlow, data, scoreDetails)}
           />
           <PeriodicBreathingBar data={data} />
@@ -324,17 +288,13 @@ export function LastNightDetails({ data }) {
             {outliers.length > 0 &&
               outliers.map((o, i) => (
                 <div key={i} className="alert-flag alert-flag-critical">
-                  <div className="alert-flag-title" style={{ color: "var(--critical)" }}>
-                    Unusual Reading Flagged
-                  </div>
+                  <div className="alert-flag-title">Unusual reading flagged</div>
                   <div className="alert-flag-body">{describeFlagInSidebar(o.metric, o.z)}</div>
                 </div>
               ))}
             {leak95Display !== null && leak95Display >= 24 && (
               <div className="alert-flag alert-flag-warning">
-                <div className="alert-flag-title" style={{ color: "var(--warning)" }}>
-                  Elevated Mask Leak
-                </div>
+                <div className="alert-flag-title">Elevated mask leak</div>
                 <div className="alert-flag-body">
                   Peak leak ({leak95Display.toFixed(1)} L/min) exceeded the 24 L/min clinical threshold. This reduces
                   effective pressure delivery and may allow unresolved events during the night.
@@ -343,9 +303,7 @@ export function LastNightDetails({ data }) {
             )}
             {toMetricNumber(data.ahi_total) !== null && data.ahi_total > 5 && (
               <div className="alert-flag alert-flag-warning">
-                <div className="alert-flag-title" style={{ color: "var(--warning)" }}>
-                  AHI Above Normal Range
-                </div>
+                <div className="alert-flag-title">AHI above normal range</div>
                 <div className="alert-flag-body">
                   AHI of {Number(data.ahi_total).toFixed(1)} events/hr is above the 5 events/hr threshold considered
                   controlled therapy. Occasional elevated nights are common — watch for a persistent pattern.
@@ -354,9 +312,7 @@ export function LastNightDetails({ data }) {
             )}
             {toMetricNumber(data.usage_hours) !== null && data.usage_hours < 4 && (
               <div className="alert-flag alert-flag-critical">
-                <div className="alert-flag-title" style={{ color: "var(--critical)" }}>
-                  Usage Below Compliance Minimum
-                </div>
+                <div className="alert-flag-title">Usage below compliance minimum</div>
                 <div className="alert-flag-body">
                   Therapy ran for {Number(data.usage_hours).toFixed(1)} hrs, under the 4-hour nightly minimum required
                   for clinical compliance. Check your sleep schedule and address any comfort issues.

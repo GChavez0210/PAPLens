@@ -5,6 +5,8 @@
 // 5% of recording time is the clinical significance threshold; 20% is the top of
 // the scale the Insights bar plots against and the point where the pattern
 // dominates enough of the night to read as severe.
+import { statusColors, withAlpha } from "../charts/chartTheme";
+
 export const PB_SIGNIFICANT_PCT = 5;
 export const PB_SEVERE_PCT = 20;
 
@@ -17,37 +19,44 @@ export function pbSeverity(pct) {
 
 export const PB_SEVERITY_COLOR = {
   none: "var(--muted)",
-  normal: "var(--success)",
-  elevated: "var(--warning)",
-  severe: "var(--critical)"
+  normal: "var(--ok)",
+  elevated: "var(--watch)",
+  severe: "var(--alert)"
+};
+
+/** CSS class that applies the severity's status color to a value. */
+export const PB_SEVERITY_CLASS = {
+  none: "is-muted",
+  normal: "is-ok",
+  elevated: "is-watch",
+  severe: "is-alert"
 };
 
 export function pbColor(pct) {
   return PB_SEVERITY_COLOR[pbSeverity(pct)];
 }
 
-// Canvas cannot resolve CSS custom properties, so chart datasets need literal
-// colours. These track the dark-theme values of the vars above, matching how the
-// other overview trend charts hardcode their series colours. The translucent set
-// fills the bars; the solid set is their hover state.
-export const PB_SEVERITY_BAR = {
-  none: "rgba(34,197,94,0.55)",
-  normal: "rgba(34,197,94,0.55)",
-  elevated: "rgba(245,158,11,0.65)",
-  severe: "rgba(244,63,94,0.7)"
-};
-
-export const PB_SEVERITY_HEX = {
-  none: "#22c55e",
-  normal: "#22c55e",
-  elevated: "#f59e0b",
-  severe: "#f43f5e"
-};
-
-export function pbBarFill(pct) {
-  return PB_SEVERITY_BAR[pbSeverity(pct)];
+export function pbStatusClass(pct) {
+  return PB_SEVERITY_CLASS[pbSeverity(pct)];
 }
 
-export function pbHex(pct) {
-  return PB_SEVERITY_HEX[pbSeverity(pct)];
+// Canvas cannot resolve CSS custom properties, so chart datasets need literal
+// colours. These come from the same status palette the stylesheet uses, so the
+// bars match the numbers beside them in both themes.
+export function pbBarFill(pct, theme) {
+  const severity = pbSeverity(pct);
+  const status = statusColors(theme);
+  const color =
+    severity === "none" || severity === "normal" ? status.ok : severity === "elevated" ? status.watch : status.alert;
+  return withAlpha(color, 0.55);
+}
+
+export function pbHex(pct, theme) {
+  const severity = pbSeverity(pct);
+  const status = statusColors(theme);
+  return severity === "none" || severity === "normal"
+    ? status.ok
+    : severity === "elevated"
+      ? status.watch
+      : status.alert;
 }

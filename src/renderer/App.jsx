@@ -37,6 +37,7 @@ import {
 import { toMetricNumber } from "./utils/therapyMetrics";
 import { PB_SIGNIFICANT_PCT, pbBarFill, pbHex } from "./utils/periodicBreathing";
 import { downsampleIndices } from "./utils/downsample";
+import { seriesPalette, statusColors, withAlpha } from "./charts/chartTheme";
 import { AHI_MILD, AHI_MODERATE, LEAK_HIGH, USAGE_COMPLIANCE_HOURS } from "./constants";
 import { ThemeContext } from "./ThemeContext";
 
@@ -50,8 +51,8 @@ const pbBarValue = (ctx) => {
   const value = ctx.parsed?.y ?? ctx.raw;
   return Number.isFinite(value) ? value : 0;
 };
-const pbBarColor = (ctx) => pbBarFill(pbBarValue(ctx));
-const pbBarHoverColor = (ctx) => pbHex(pbBarValue(ctx));
+const makePbBarColor = (theme) => (ctx) => pbBarFill(pbBarValue(ctx), theme);
+const makePbBarHoverColor = (theme) => (ctx) => pbHex(pbBarValue(ctx), theme);
 
 const RANGE_OPTIONS = [
   { value: "7", label: "7" },
@@ -60,14 +61,8 @@ const RANGE_OPTIONS = [
   { value: "custom", label: "Custom" }
 ];
 
-/** Shared style for the "PAPLens by Gabriel Chavez" footer credit line. */
-const FOOTER_CREDIT_STYLE = {
-  textAlign: "center",
-  padding: "16px 0 4px",
-  fontSize: "0.7rem",
-  color: "var(--muted)",
-  opacity: 0.55
-};
+/** The "PAPLens by Gabriel Chavez" footer credit line, repeated per tab. */
+const FOOTER_CREDIT = "PAPLens by Gabriel Chavez  |  Developed in Mexico with love";
 const OXIMETRY_UNSUPPORTED_PRODUCT_PATTERN = /(airsense|aircurve|lumis|airmini)/i;
 const Insights = lazy(() => import("./pages/Insights").then((module) => ({ default: module.Insights })));
 
@@ -465,107 +460,102 @@ export function App() {
     // baseline (0) on those days instead of leaving broken gaps. Rolling averages
     // and constant threshold lines are intentionally left as-is.
     const zf = (arr) => (arr || []).map((value) => (value == null ? 0 : value));
+    // Series colours and clinical-threshold colours are separate vocabularies:
+    // a palette hue identifies a metric, a status hue marks a limit.
+    const palette = seriesPalette(theme);
+    const status = statusColors(theme);
+    const limit = {
+      borderColor: withAlpha(status.alert, 0.55),
+      borderWidth: 1.25,
+      borderDash: [6, 4],
+      pointRadius: 0,
+      fill: false
+    };
     return {
       ahi: [
         {
           label: "Total AHI",
           data: zf(trendsData.ahi),
-          borderColor: "#ef4444",
+          borderColor: palette.clay,
           fill: true,
-          backgroundColor: "rgba(239,68,68,0.18)"
+          backgroundColor: withAlpha(palette.clay, 0.12)
         },
-        { label: "Central (CAI)", data: zf(trendsData.cai), borderColor: "#f59e0b" },
-        { label: "Obstructive (OAI/AI)", data: zf(trendsData.ai), borderColor: "#3b82f6" },
-        { label: "Hypopnea (HI)", data: zf(trendsData.hi), borderColor: "#8b5cf6" },
+        { label: "Central (CAI)", data: zf(trendsData.cai), borderColor: palette.ochre },
+        { label: "Obstructive (OAI/AI)", data: zf(trendsData.ai), borderColor: palette.blue },
+        { label: "Hypopnea (HI)", data: zf(trendsData.hi), borderColor: palette.plum },
         {
           label: "7-Day Avg",
           data: trendsData.rolling7Ahi,
-          borderColor: "#22d3ee",
-          borderWidth: 2,
+          borderColor: palette.slate,
+          borderWidth: 1.5,
           borderDash: [4, 4],
           pointRadius: 0
         },
-        {
-          label: "AHI = 5 Threshold",
-          data: trendsData.ahiThreshold,
-          borderColor: "rgba(239,68,68,0.8)",
-          borderWidth: 1.5,
-          borderDash: [8, 4],
-          pointRadius: 0,
-          fill: false
-        }
+        { ...limit, label: `AHI = ${AHI_MILD} Threshold`, data: trendsData.ahiThreshold }
       ],
       leak: [
-        { label: "Maximum Leak (95th)", data: zf(trendsData.leak95), borderColor: "#ef4444", borderDash: [5, 5] },
+        { label: "Maximum Leak (95th)", data: zf(trendsData.leak95), borderColor: palette.clay, borderDash: [5, 5] },
         {
           label: "Median Leak",
           data: zf(trendsData.leak50),
-          borderColor: "#3b82f6",
+          borderColor: palette.blue,
           fill: true,
-          backgroundColor: "rgba(59,130,246,0.25)"
+          backgroundColor: withAlpha(palette.blue, 0.14)
         },
-        {
-          label: "24 L/min Critical Limit",
-          data: trendsData.leakThreshold,
-          borderColor: "rgba(239,68,68,0.8)",
-          borderWidth: 1.5,
-          borderDash: [8, 4],
-          pointRadius: 0,
-          fill: false
-        }
+        { ...limit, label: `${LEAK_HIGH} L/min Critical Limit`, data: trendsData.leakThreshold }
       ],
       pressure: [
-        { label: "95th Percentile", data: zf(trendsData.maxPressure), borderColor: "#f59e0b" },
+        { label: "95th Percentile", data: zf(trendsData.maxPressure), borderColor: palette.ochre },
         {
           label: "Median Delivery",
           data: zf(trendsData.pressure),
-          borderColor: "#10b981",
+          borderColor: palette.sage,
           fill: true,
-          backgroundColor: "rgba(16,185,129,0.2)"
+          backgroundColor: withAlpha(palette.sage, 0.14)
         },
         {
           label: "Variability Index (P95-P50)",
           data: zf(trendsData.pressureVarIndex),
-          borderColor: "#8b5cf6",
+          borderColor: palette.plum,
           borderDash: [3, 3],
           pointRadius: 0
         }
       ],
       flow: [
-        { label: "Min Vent 95%", data: zf(trendsData.minVent95), borderColor: "#8b5cf6", tension: 0.3 },
-        { label: "Min Vent 50%", data: zf(trendsData.minVent50), borderColor: "#3b82f6", tension: 0.3 },
-        { label: "Resp Rate", data: zf(trendsData.respRate), borderColor: "#f59e0b", yAxisID: "y1" }
+        { label: "Min Vent 95%", data: zf(trendsData.minVent95), borderColor: palette.plum, tension: 0.3 },
+        { label: "Min Vent 50%", data: zf(trendsData.minVent50), borderColor: palette.blue, tension: 0.3 },
+        { label: "Resp Rate", data: zf(trendsData.respRate), borderColor: palette.ochre, yAxisID: "y1" }
       ],
       tidal: [
-        { label: "Upper Bound (95%)", data: zf(trendsData.tidVol95), borderColor: "#f59e0b", borderDash: [5, 5] },
+        { label: "Upper Bound (95%)", data: zf(trendsData.tidVol95), borderColor: palette.ochre, borderDash: [5, 5] },
         {
           label: "Median Efficacy",
           data: zf(trendsData.tidVol50),
-          borderColor: "#8b5cf6",
+          borderColor: palette.plum,
           fill: true,
-          backgroundColor: "rgba(139, 92, 246, 0.1)"
+          backgroundColor: withAlpha(palette.plum, 0.1)
         }
       ],
       usage: [
         {
           label: "Usage Hours",
           data: zf(trendsData.usage),
-          backgroundColor: "rgba(16, 185, 129, 0.55)",
-          hoverBackgroundColor: "rgba(16, 185, 129, 0.8)"
+          backgroundColor: withAlpha(palette.sage, 0.55),
+          hoverBackgroundColor: palette.sage
         }
       ],
       // SpO2/pulse baseline is ~95%/60bpm, not 0 — a missing day means the oximeter
       // wasn't worn, so bridge the gap (spanGaps) rather than diving the line to zero.
       oximetry: [
-        { label: "SpO2 %", data: trendsData.spo2, borderColor: "#3b82f6", spanGaps: true },
-        { label: "Pulse", data: trendsData.pulse, borderColor: "#ef4444", yAxisID: "y1", spanGaps: true }
+        { label: "SpO2 %", data: trendsData.spo2, borderColor: palette.blue, spanGaps: true },
+        { label: "Pulse", data: trendsData.pulse, borderColor: palette.clay, yAxisID: "y1", spanGaps: true }
       ],
       pb: [
         {
           label: "Periodic Breathing (% of night)",
           data: trendsData.pb,
-          backgroundColor: pbBarColor,
-          hoverBackgroundColor: pbBarHoverColor
+          backgroundColor: makePbBarColor(theme),
+          hoverBackgroundColor: makePbBarHoverColor(theme)
         },
         {
           // Explicit line type so this stays a reference rule across the bars
@@ -581,7 +571,7 @@ export function App() {
         }
       ]
     };
-  }, [trendsData]);
+  }, [trendsData, theme]);
 
   const hasOximetryTrend = useMemo(() => trendsData.spo2.some((v) => v > 0), [trendsData.spo2]);
   const hasPeriodicBreathingTrend = useMemo(() => trendsData.pb.some((v) => v != null), [trendsData.pb]);
@@ -938,61 +928,20 @@ export function App() {
     <ThemeContext.Provider value={theme}>
       <main className="app-shell">
         {isDataLoading && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 1000,
-              backdropFilter: "blur(10px)",
-              WebkitBackdropFilter: "blur(10px)",
-              background: "rgba(0,0,0,0.55)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-          >
-            <div
-              style={{
-                background: "var(--card)",
-                border: "1px solid var(--border)",
-                borderRadius: 16,
-                padding: "36px 52px",
-                textAlign: "center",
-                boxShadow: "0 24px 80px rgba(0,0,0,0.65)",
-                maxWidth: 380
-              }}
-            >
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: "50%",
-                  border: "3px solid var(--border)",
-                  borderTopColor: "#22D3EE",
-                  margin: "0 auto 20px",
-                  animation: "spin 0.9s linear infinite"
-                }}
-              />
-              <h2 style={{ color: "var(--text)", margin: "0 0 10px", fontSize: "1.15rem", fontWeight: 700 }}>
-                Loading Data
-              </h2>
-              <p style={{ color: "var(--muted)", margin: 0, fontSize: "0.875rem", lineHeight: 1.6 }}>
-                {dataLoadingMessage}
-              </p>
+          <div className="overlay" role="status" aria-live="polite">
+            <div className="overlay-card">
+              <div className="overlay-spinner" aria-hidden="true" />
+              <h2>Loading data</h2>
+              <p>{dataLoadingMessage}</p>
               {importProgress && importProgress.total > 0 && (
-                <div style={{ marginTop: 16, width: "100%" }}>
-                  <div style={{ height: 4, background: "var(--border)", borderRadius: 2, overflow: "hidden" }}>
+                <div className="progress">
+                  <div className="progress-track">
                     <div
-                      style={{
-                        height: "100%",
-                        width: `${Math.round((importProgress.done / importProgress.total) * 100)}%`,
-                        background: "#22D3EE",
-                        transition: "width 0.15s ease",
-                        borderRadius: 2
-                      }}
+                      className="progress-fill"
+                      style={{ width: `${Math.round((importProgress.done / importProgress.total) * 100)}%` }}
                     />
                   </div>
-                  <p style={{ color: "var(--muted)", margin: "8px 0 0", fontSize: "0.75rem" }}>
+                  <p className="progress-caption">
                     {importProgress.done} / {importProgress.total} sessions parsed
                   </p>
                 </div>
@@ -1001,47 +950,11 @@ export function App() {
           </div>
         )}
         {isReportGenerating && (
-          <div
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 1001,
-              backdropFilter: "blur(12px)",
-              WebkitBackdropFilter: "blur(12px)",
-              background: "rgba(0,0,0,0.60)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
-            }}
-          >
-            <div
-              style={{
-                background: "var(--card)",
-                border: "1px solid var(--border)",
-                borderRadius: 16,
-                padding: "36px 52px",
-                textAlign: "center",
-                boxShadow: "0 24px 80px rgba(0,0,0,0.65)",
-                maxWidth: 360
-              }}
-            >
-              <div
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: "50%",
-                  border: "3px solid var(--border)",
-                  borderTopColor: "#22D3EE",
-                  margin: "0 auto 20px",
-                  animation: "spin 0.9s linear infinite"
-                }}
-              />
-              <h2 style={{ color: "var(--text)", margin: "0 0 10px", fontSize: "1.15rem", fontWeight: 700 }}>
-                Generating Report
-              </h2>
-              <p style={{ color: "var(--muted)", margin: 0, fontSize: "0.875rem", lineHeight: 1.6 }}>
-                Capturing charts and building your PDF&hellip;
-              </p>
+          <div className="overlay overlay-report" role="status" aria-live="polite">
+            <div className="overlay-card">
+              <div className="overlay-spinner" aria-hidden="true" />
+              <h2>Generating report</h2>
+              <p>Capturing charts and building your PDF&hellip;</p>
             </div>
           </div>
         )}
@@ -1148,16 +1061,16 @@ export function App() {
         </header>
 
         <div className="print-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <div className="print-header-brand">
             <span className="print-brand-logo">
               <img src={new URL("../../Assets/PAPLens Logo Light.png", import.meta.url).href} alt="PAPLens Logo" />
             </span>
             <div>
-              <h1 style={{ margin: 0, fontSize: "1.5rem" }}>Clinical Report</h1>
-              <div style={{ color: "#555" }}>Processed securely offline</div>
+              <h1>Clinical Report</h1>
+              <div className="print-header-note">Processed securely offline</div>
             </div>
           </div>
-          <div style={{ textAlign: "right", fontSize: "0.9rem" }}>
+          <div className="print-header-meta">
             <strong>Generated:</strong> {new Date().toLocaleDateString()}
             <br />
             <strong>Patient Name:</strong> {activeProfile.name} {activeProfile.age ? `(Age: ${activeProfile.age})` : ""}
@@ -1214,7 +1127,6 @@ export function App() {
                   {/* RANGE CONTROLS ROW */}
                   <div className="control-row" style={{ marginBottom: "20px" }}>
                     <div className="page-heading">
-                      <div className="section-eyebrow">Clinical workspace</div>
                       <h2 style={{ margin: 0 }}>Therapy Overview</h2>
                     </div>
                     {renderRangeControls()}
@@ -1367,7 +1279,7 @@ export function App() {
                       return (
                         <>
                           {nights > 0 && (
-                            <div className="summary-strip">
+                            <div className={`summary-strip tone-${tone}`}>
                               <div>
                                 <p className="summary-headline">
                                   AHI was under {AHI_MILD} on {controlled} of {nights} analyzed nights
@@ -1516,9 +1428,7 @@ export function App() {
                   {/* SECTION B: Sleep Calendar — bottom of dashboard */}
                   {filteredStats.length > 0 && <SleepCalendar data={filteredStats} />}
                 </section>
-                <div style={FOOTER_CREDIT_STYLE}>
-                  PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
-                </div>
+                <div className="app-footer-credit">{FOOTER_CREDIT}</div>
               </div>
             </ErrorBoundary>
 
@@ -1528,7 +1438,6 @@ export function App() {
                   <div className="split-left">
                     <div className="control-row">
                       <div className="page-heading">
-                        <div className="section-eyebrow">Night-by-night review</div>
                         <h2>Daily Details &amp; Sessions</h2>
                       </div>
                       <div className="controls">
@@ -1570,9 +1479,7 @@ export function App() {
                     </div>
                   </div>
 
-                  <div style={FOOTER_CREDIT_STYLE}>
-                    PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
-                  </div>
+                  <div className="app-footer-credit">{FOOTER_CREDIT}</div>
                 </section>
               </ErrorBoundary>
             )}
@@ -1593,7 +1500,6 @@ export function App() {
                   {/* RANGE CONTROLS ROW */}
                   <div className="control-row" style={{ marginBottom: 0 }}>
                     <div className="page-heading">
-                      <div className="section-eyebrow">Clinical statistics</div>
                       <h2 style={{ margin: 0 }}>Analytics &amp; Explanations</h2>
                     </div>
                     {renderRangeControls()}
@@ -1601,9 +1507,7 @@ export function App() {
                   <Suspense fallback={<SkeletonPanel rows={3} />}>
                     <Insights range={range} customFrom={customFrom} customTo={customTo} />
                   </Suspense>
-                  <div style={FOOTER_CREDIT_STYLE}>
-                    PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
-                  </div>
+                  <div className="app-footer-credit">{FOOTER_CREDIT}</div>
                 </section>
               </ErrorBoundary>
             )}
@@ -1612,37 +1516,18 @@ export function App() {
 
         {showAboutModal && (
           <div
+            className="overlay overlay-about"
             onClick={() => setShowAboutModal(false)}
             onKeyDown={(e) => {
               if (e.key === "Escape") setShowAboutModal(false);
-            }}
-            style={{
-              position: "fixed",
-              inset: 0,
-              zIndex: 2000,
-              backdropFilter: "blur(14px)",
-              WebkitBackdropFilter: "blur(14px)",
-              background: "rgba(0,0,0,0.65)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center"
             }}
           >
             <div
               role="dialog"
               aria-modal="true"
               aria-label="About PAPLens"
+              className="overlay-card about-card"
               onClick={(e) => e.stopPropagation()}
-              style={{
-                background: "var(--card)",
-                border: "1px solid var(--border)",
-                borderRadius: 20,
-                padding: "48px 56px",
-                textAlign: "center",
-                boxShadow: "0 32px 100px rgba(0,0,0,0.7)",
-                maxWidth: 420,
-                width: "90%"
-              }}
             >
               <div className="about-logo-frame">
                 <img
@@ -1654,34 +1539,15 @@ export function App() {
                   alt="PAPLens"
                 />
               </div>
-              <h2 style={{ margin: "0 0 24px", fontSize: "1.5rem", fontWeight: 700, color: "var(--text)" }}>PAPLens</h2>
-              <p style={{ margin: "0 0 28px", fontSize: "0.9rem", color: "var(--muted)", lineHeight: 1.7 }}>
+              <h2>PAPLens</h2>
+              <p>
                 PAPLens processes your CPAP data entirely offline — no accounts, no cloud, no data leaving your device.
               </p>
-              <div
-                style={{
-                  borderTop: "1px solid var(--border)",
-                  paddingTop: 20,
-                  fontSize: "0.8rem",
-                  color: "var(--muted)"
-                }}
-              >
-                PAPLens by Gabriel Chavez&nbsp;&nbsp;|&nbsp;&nbsp;Developed in Mexico with love
-              </div>
+              <div className="about-credit">{FOOTER_CREDIT}</div>
               <button
                 ref={aboutCloseButtonRef}
+                className="btn-primary about-close"
                 onClick={() => setShowAboutModal(false)}
-                style={{
-                  marginTop: 24,
-                  padding: "10px 28px",
-                  background: "var(--brand)",
-                  color: "#fff",
-                  border: "none",
-                  borderRadius: 10,
-                  cursor: "pointer",
-                  fontSize: "0.9rem",
-                  fontWeight: 600
-                }}
               >
                 Close
               </button>

@@ -3,6 +3,7 @@ import { useTheme } from "../ThemeContext";
 import { filterAnalyzedDays, getCorrelationInsight } from "../utils/reportBuilder";
 import { calculatePercentile, formatMetricValue, toMetricNumber } from "../utils/therapyMetrics";
 import { formatNightLabel, summarizeFinding } from "../utils/findingSummaries";
+import { USAGE_COMPLIANCE_HOURS } from "../constants";
 import { AHITrendChart } from "../components/charts/AHITrendChart";
 import { TherapyStabilityCard } from "../components/charts/TherapyStabilityCard";
 import { LeakSeverityGauge } from "../components/charts/LeakSeverityGauge";
@@ -11,14 +12,16 @@ import { FlowLimitationChart } from "../components/charts/FlowLimitationChart";
 import { PressureHistogramChart } from "../components/charts/PressureHistogramChart";
 import { PeriodicBreathingCard } from "../components/charts/PeriodicBreathingCard";
 
-const KEY_COLOR = {
-  stability: { border: "#22D3EE", bg: "rgba(34,211,238,0.08)" },
-  mask_fit: { border: "#10b981", bg: "rgba(16,185,129,0.08)" },
-  compliance: { border: "#f59e0b", bg: "rgba(245,158,11,0.08)" },
-  outlier: { border: "#ef4444", bg: "rgba(239,68,68,0.08)" },
-  periodic_breathing: { border: "#f59e0b", bg: "rgba(245,158,11,0.08)" },
-  flow_limitation: { border: "#f59e0b", bg: "rgba(245,158,11,0.08)" },
-  default: { border: "#4F46E5", bg: "rgba(79,70,229,0.08)" }
+// Each finding carries a clinical tone, not a decorative colour. The tone
+// drives one border rule and one icon tint; the card surface stays neutral.
+const KEY_TONE = {
+  stability: "info",
+  mask_fit: "watch",
+  compliance: "watch",
+  outlier: "alert",
+  periodic_breathing: "watch",
+  flow_limitation: "watch",
+  default: "info"
 };
 
 // ── Hover tooltip content for each insight type ─────────────────────────────
@@ -107,13 +110,13 @@ const STAT_TOOLTIPS = {
   }
 };
 
-function AppIcon({ type = "default", color = "var(--muted)", size = 18 }) {
+function AppIcon({ type = "default", size = 18 }) {
   const common = {
     width: size,
     height: size,
     viewBox: "0 0 24 24",
     fill: "none",
-    stroke: color,
+    stroke: "currentColor",
     strokeWidth: "2",
     strokeLinecap: "round",
     strokeLinejoin: "round",
@@ -173,126 +176,49 @@ function CorrelationBar({ r, rho, significant, n, pair, label }) {
   const [hovered, setHovered] = useState(false);
   // Prefer rho (Spearman) when available; fall back to Pearson r
   const displayCoeff = rho != null ? rho : r;
-  const coeffLabel = rho != null ? "ρ" : "r";
+  const coeffLabel = rho != null ? "\u03c1" : "r";
   const pct = Math.abs(displayCoeff) * 100;
   const isNotSignificant = significant === false;
-  const color = isNotSignificant
-    ? "var(--muted)"
-    : displayCoeff > 0.4
-      ? "#22D3EE"
-      : displayCoeff < -0.4
-        ? "#ef4444"
-        : "var(--muted)";
   const positive = displayCoeff >= 0;
-  const tooltipText = getCorrelationInsight(pair, r);
   const absCoeff = Math.abs(displayCoeff);
-  const strength =
-    absCoeff >= 0.6
-      ? { label: "Strong", color: "#22D3EE" }
-      : absCoeff >= 0.4
-        ? { label: "Moderate", color: "#f59e0b" }
-        : absCoeff >= 0.2
-          ? { label: "Mild", color: "#9ca3af" }
-          : { label: "Negligible", color: "#4b5563" };
-
-  const rowStyle = isNotSignificant
-    ? {
-        background: "var(--bg)",
-        borderRadius: "8px",
-        padding: "14px 16px",
-        position: "relative",
-        cursor: "help",
-        opacity: 0.55
-      }
-    : { background: "var(--bg)", borderRadius: "8px", padding: "14px 16px", position: "relative", cursor: "help" };
+  const direction = isNotSignificant ? "" : positive ? "is-positive" : "is-negative";
+  const strength = absCoeff >= 0.6 ? "Strong" : absCoeff >= 0.4 ? "Moderate" : absCoeff >= 0.2 ? "Mild" : "Negligible";
+  const tooltipText = getCorrelationInsight(pair, r);
 
   return (
-    <div style={rowStyle} onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontWeight: 600, fontSize: "0.85rem" }}>{pair}</span>
-          {n != null && <span style={{ fontSize: "0.65rem", color: "var(--muted)" }}>n={n}</span>}
+    <div
+      className={`corr ${isNotSignificant ? "is-weak" : ""}`}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className="corr-head">
+        <div className="corr-pair">
+          <span className="corr-name">{pair}</span>
+          {n != null && <span className="corr-n">n={n}</span>}
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          {isNotSignificant && (
-            <span
-              style={{
-                fontSize: "0.65rem",
-                fontWeight: 600,
-                color: "#6b7280",
-                background: "rgba(107,114,128,0.15)",
-                borderRadius: 4,
-                padding: "2px 6px"
-              }}
-            >
-              not significant
-            </span>
-          )}
-          {!isNotSignificant && (
-            <span
-              style={{
-                fontSize: "0.65rem",
-                fontWeight: 600,
-                color: strength.color,
-                background: `${strength.color}20`,
-                borderRadius: 4,
-                padding: "2px 6px"
-              }}
-            >
-              {strength.label}
-            </span>
-          )}
-          <span style={{ color, fontWeight: 700, fontSize: "0.85rem" }}>
+        <div className="corr-meta">
+          <span className={`corr-strength ${absCoeff >= 0.4 && !isNotSignificant ? "is-strong" : ""}`}>
+            {isNotSignificant ? "not significant" : strength}
+          </span>
+          <span className={`corr-value ${direction}`}>
             {coeffLabel} = {Number(displayCoeff).toFixed(2)}
           </span>
         </div>
       </div>
-      <div style={{ background: "var(--card-inner)", borderRadius: 4, height: 6, position: "relative" }}>
+      <div className="corr-track">
+        <div className="corr-zero" />
         <div
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: 0,
-            width: 1,
-            height: "100%",
-            background: "var(--separator)"
-          }}
-        />
-        <div
-          style={{
-            position: "absolute",
-            height: "100%",
-            width: `${pct / 2}%`,
-            borderRadius: 4,
-            background: color,
-            left: positive ? "50%" : `calc(50% - ${pct / 2}%)`
-          }}
+          className={`corr-fill ${direction}`}
+          style={{ width: `${pct / 2}%`, left: positive ? "50%" : `calc(50% - ${pct / 2}%)` }}
         />
       </div>
-      <div style={{ marginTop: 6, fontSize: "0.75rem", color: "var(--muted)" }}>{label || "Weak correlation"}</div>
+      <div className="corr-label">{label || "Weak correlation"}</div>
       {hovered && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "calc(100% + 8px)",
-            left: 0,
-            right: 0,
-            zIndex: 50,
-            background: "var(--bg)",
-            border: "1px solid rgba(79,70,229,0.4)",
-            borderRadius: 8,
-            padding: "12px 14px",
-            fontSize: "0.78rem",
-            color: "var(--text)",
-            lineHeight: 1.7,
-            boxShadow: "0 12px 40px rgba(0,0,0,0.5)",
-            pointerEvents: "none"
-          }}
-        >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <span style={{ fontWeight: 700, color: "#22D3EE", fontSize: "0.8rem" }}>Clinical Interpretation</span>
-            <span style={{ fontSize: "0.65rem", color: "var(--text)", fontWeight: 700 }}>
-              {coeffLabel} = {Number(displayCoeff).toFixed(2)} — {strength.label}
+        <div className="hovercard is-above">
+          <div className="hovercard-head">
+            <span className="hovercard-title">Clinical interpretation</span>
+            <span className="hovercard-meta">
+              {coeffLabel} = {Number(displayCoeff).toFixed(2)} · {strength}
             </span>
           </div>
           {tooltipText}
@@ -304,101 +230,34 @@ function CorrelationBar({ r, rho, significant, n, pair, label }) {
 
 function InsightCard({ insight }) {
   const [hovered, setHovered] = useState(false);
-  const theme = KEY_COLOR[insight.key] || KEY_COLOR.default;
-  const icon = insight.key in KEY_COLOR ? insight.key : "default";
+  const tone = KEY_TONE[insight.key] || KEY_TONE.default;
+  const icon = insight.key in KEY_TONE ? insight.key : "default";
   const tooltip = INSIGHT_TOOLTIPS[insight.key] || INSIGHT_TOOLTIPS.default;
   const scopeLabel = scopeLabelFor(insight);
 
   return (
     <div
-      style={{
-        display: "flex",
-        gap: 14,
-        padding: "14px 16px",
-        background: theme.bg,
-        border: `1px solid ${theme.border}`,
-        borderLeft: `4px solid ${theme.border}`,
-        borderRadius: 8,
-        alignItems: "flex-start",
-        position: "relative",
-        cursor: "help"
-      }}
+      className={`finding tone-${tone}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <span
-        style={{
-          width: 30,
-          height: 30,
-          borderRadius: 6,
-          display: "inline-flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "var(--card-inner)",
-          border: `1px solid ${theme.border}`,
-          flexShrink: 0
-        }}
-      >
-        <AppIcon type={icon} color={theme.border} size={18} />
+      <span className="finding-icon">
+        <AppIcon type={icon} size={16} />
       </span>
       <div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4, flexWrap: "wrap" }}>
-          <span style={{ fontWeight: 700, color: "var(--text)" }}>{insight.title}</span>
-          {scopeLabel && (
-            <span
-              style={{
-                fontSize: "0.66rem",
-                fontWeight: 600,
-                color: "var(--muted)",
-                background: "var(--card-inner)",
-                border: "1px solid var(--border)",
-                borderRadius: 999,
-                padding: "1px 7px",
-                whiteSpace: "nowrap"
-              }}
-            >
-              {scopeLabel}
-            </span>
-          )}
+        <div className="finding-head">
+          <span className="finding-title">{insight.title}</span>
+          {scopeLabel && <span className="finding-scope">{scopeLabel}</span>}
         </div>
-        <div style={{ color: "var(--muted)", fontSize: "0.85rem", lineHeight: 1.5 }}>{insight.summary}</div>
+        <div className="finding-body">{insight.summary}</div>
       </div>
       {hovered && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "calc(100% + 8px)",
-            left: 0,
-            right: 0,
-            zIndex: 50,
-            background: "var(--card)",
-            border: `1px solid ${theme.border}`,
-            borderRadius: 10,
-            padding: "14px 16px",
-            fontSize: "0.78rem",
-            color: "var(--text)",
-            lineHeight: 1.7,
-            boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
-            pointerEvents: "none"
-          }}
-        >
-          <div style={{ fontWeight: 700, color: theme.border, fontSize: "0.82rem", marginBottom: 8 }}>
-            {tooltip.title}
-          </div>
-          <div style={{ color: "var(--muted)", marginBottom: 10 }}>{tooltip.what}</div>
-          <div style={{ borderTop: `1px solid ${theme.border}40`, paddingTop: 8 }}>
-            <span
-              style={{
-                fontWeight: 700,
-                color: theme.border,
-                fontSize: "0.75rem",
-                textTransform: "uppercase",
-                letterSpacing: 1
-              }}
-            >
-              How to address
-            </span>
-            <div style={{ color: "var(--text)", marginTop: 4 }}>{tooltip.action}</div>
+        <div className="hovercard is-above">
+          <div className="hovercard-title">{tooltip.title}</div>
+          <div className="hovercard-body">{tooltip.what}</div>
+          <div className="hovercard-foot">
+            <span className="hovercard-foot-label">How to address</span>
+            <p>{tooltip.action}</p>
           </div>
         </div>
       )}
@@ -418,60 +277,30 @@ function scopeLabelFor(finding) {
   return worst ?? formatNightLabel(finding.night_date);
 }
 
-function StatCard({ label, value, unit, sub, color = "#22D3EE", tooltipKey, tooltipDown = false }) {
+function StatCard({ label, value, unit, sub, tooltipKey, tooltipDown = false }) {
   const [hovered, setHovered] = useState(false);
   const tip = tooltipKey ? STAT_TOOLTIPS[tooltipKey] : null;
-  const tipPos = tooltipDown ? { top: "calc(100% + 8px)" } : { bottom: "calc(100% + 8px)" };
 
   return (
     <div
-      style={{
-        background: "var(--card)",
-        border: "1px solid var(--border)",
-        borderRadius: 8,
-        padding: "14px 16px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 4,
-        position: "relative",
-        cursor: tip ? "help" : "default"
-      }}
+      className="kpi"
+      data-tipkey={tooltipKey || undefined}
       onMouseEnter={() => tip && setHovered(true)}
       onMouseLeave={() => tip && setHovered(false)}
     >
-      <div style={{ fontSize: "0.65rem", color: "#9ca3af", textTransform: "uppercase", letterSpacing: 1 }}>{label}</div>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}>
-        <span style={{ fontSize: "1.8rem", fontWeight: 800, color, lineHeight: 1 }}>{value}</span>
-        <span style={{ fontSize: "0.75rem", color: "#9ca3af" }}>{unit}</span>
+      <div className="kpi-label">{label}</div>
+      <div className="kpi-value-row">
+        <span className="kpi-value">{value}</span>
+        {unit && <span className="kpi-unit">{unit}</span>}
       </div>
-      {sub && <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>{sub}</div>}
+      {sub && <div className="kpi-sub">{sub}</div>}
       {hovered && tip && (
-        <div
-          style={{
-            position: "absolute",
-            ...tipPos,
-            left: 0,
-            right: 0,
-            zIndex: 50,
-            background: "var(--card)",
-            border: `1px solid ${color}60`,
-            borderRadius: 10,
-            padding: "14px 16px",
-            fontSize: "0.78rem",
-            color: "var(--text)",
-            lineHeight: 1.7,
-            boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
-            pointerEvents: "none",
-            minWidth: 240
-          }}
-        >
-          <div style={{ fontWeight: 700, color, fontSize: "0.82rem", marginBottom: 8 }}>{tip.title}</div>
-          <div style={{ color: "var(--muted)", marginBottom: 10 }}>{tip.what}</div>
-          <div style={{ borderTop: `1px solid ${color}30`, paddingTop: 8 }}>
-            <span style={{ fontWeight: 700, color, fontSize: "0.72rem", textTransform: "uppercase", letterSpacing: 1 }}>
-              Therapy impact
-            </span>
-            <div style={{ color: "var(--text)", marginTop: 4 }}>{tip.impact}</div>
+        <div className={`hovercard ${tooltipDown ? "is-below" : "is-above"}`}>
+          <div className="hovercard-title">{tip.title}</div>
+          <div className="hovercard-body">{tip.what}</div>
+          <div className="hovercard-foot">
+            <span className="hovercard-foot-label">Therapy impact</span>
+            <p>{tip.impact}</p>
           </div>
         </div>
       )}
@@ -586,14 +415,7 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
   const totalNights = analyzed.length;
   const rangeLabel = range === "all" ? "All Time" : range === "custom" ? "Custom Range" : `Last ${range} Days`;
 
-  if (data === null)
-    return (
-      <div
-        style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "60vh", color: "#9ca3af" }}
-      >
-        <span style={{ fontSize: "1.2rem" }}>Loading insights...</span>
-      </div>
-    );
+  if (data === null) return <div className="insights-loading">Loading insights…</div>;
 
   return (
     <div className="insights-stack">
@@ -627,25 +449,14 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
 
           return (
             <>
-              <section className="panel insights-kpi-panel" style={{ padding: 20 }}>
-                <h3
-                  style={{
-                    margin: "0 0 16px 0",
-                    fontSize: "1rem",
-                    color: "#9ca3af",
-                    textTransform: "uppercase",
-                    letterSpacing: 1
-                  }}
-                >
-                  {rangeLabel} Averages
-                </h3>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
+              <section className="panel insights-kpi-panel">
+                <h3>{rangeLabel} averages</h3>
+                <div className="kpi-grid">
                   <StatCard
                     label="Average AHI"
                     value={formatMetricValue(avgAhi, 1)}
                     unit="events/hr"
                     sub={rangeLabel}
-                    color="#2563eb"
                     tooltipKey="ahi"
                     tooltipDown
                   />
@@ -654,7 +465,6 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                     value={formatMetricValue(avgUsage, 1)}
                     unit="hours"
                     sub="per night"
-                    color="#16a36a"
                     tooltipKey="usage"
                     tooltipDown
                   />
@@ -663,39 +473,18 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                     value={formatMetricValue(avgPress, 1)}
                     unit="cmH₂O"
                     sub="50th percentile"
-                    color="#2563eb"
                     tooltipKey="pressure"
                     tooltipDown
                   />
-                  <div
-                    style={{
-                      gridRow: "span 2",
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      padding: "14px"
-                    }}
-                  >
-                    <div
-                      style={{
-                        fontSize: "0.65rem",
-                        color: "#9ca3af",
-                        textTransform: "uppercase",
-                        letterSpacing: 1,
-                        textAlign: "center",
-                        marginBottom: 10
-                      }}
-                    >
-                      Average Mask Leak
-                    </div>
-                    <LeakSeverityGauge leak50={avgLeak50} leak95={displayLeak95} height={180} theme={theme} />
+                  <div className="kpi-gauge">
+                    <div className="kpi-label">Average mask leak</div>
+                    <LeakSeverityGauge leak50={avgLeak50} leak95={displayLeak95} height={150} theme={theme} />
                   </div>
                   <StatCard
                     label="Average Flow"
                     value={formatMetricValue(avgFlow, 1)}
                     unit="L/min"
                     sub="50th percentile"
-                    color="#0f9f91"
                     tooltipKey="flow"
                   />
                   <StatCard
@@ -703,7 +492,6 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                     value={formatMetricValue(displayTidal, 0)}
                     unit="mL"
                     sub="50th percentile"
-                    color="#0f9f91"
                     tooltipKey="tidal"
                   />
                   <StatCard
@@ -711,24 +499,13 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                     value={analyzed.length}
                     unit=""
                     sub="excluding no-data"
-                    color="#2563eb"
                     tooltipKey="nights"
                   />
                 </div>
               </section>
 
-              <section className="panel insights-trend-panel" style={{ padding: 20 }}>
-                <h3
-                  style={{
-                    margin: "0 0 16px 0",
-                    fontSize: "1rem",
-                    color: "#9ca3af",
-                    textTransform: "uppercase",
-                    letterSpacing: 1
-                  }}
-                >
-                  AHI Trend ({rangeLabel})
-                </h3>
+              <section className="panel insights-trend-panel">
+                <h3>AHI trend ({rangeLabel})</h3>
                 <div data-report-key="ahi-trend">
                   <AHITrendChart labels={labels} data={ahiData} height={220} theme={theme} />
                 </div>
@@ -762,60 +539,33 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                     : null;
                 if (wkndAhi === null && wkdyAhi === null) return null;
 
-                const compColor =
+                const compTier =
                   complianceRate === null
-                    ? "#6b7280"
+                    ? ""
                     : complianceRate >= 70
-                      ? "#10b981"
+                      ? "is-ok"
                       : complianceRate >= 50
-                        ? "#f59e0b"
-                        : "#ef4444";
+                        ? "is-watch"
+                        : "is-alert";
 
                 return (
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                    {/* Compliance rate */}
+                  <div className="insights-split">
                     {complianceRate !== null && (
-                      <section className="panel" style={{ padding: 20 }}>
-                        <h3
-                          style={{
-                            margin: "0 0 16px 0",
-                            fontSize: "1rem",
-                            color: "#9ca3af",
-                            textTransform: "uppercase",
-                            letterSpacing: 1
-                          }}
-                        >
-                          30-Day Compliance Rate
-                        </h3>
-                        <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-                          <div style={{ textAlign: "center" }}>
-                            <div style={{ fontSize: "3rem", fontWeight: 800, color: compColor, lineHeight: 1 }}>
-                              {complianceRate}%
-                            </div>
-                            <div style={{ fontSize: "0.7rem", color: "#9ca3af", marginTop: 4 }}>nights ≥ 4 hrs</div>
+                      <section className="panel">
+                        <h3>30-day compliance rate</h3>
+                        <div className="compliance-row">
+                          <div className="compliance-figure">
+                            <div className={`compliance-pct ${compTier}`}>{complianceRate}%</div>
+                            <div className="compliance-caption">nights ≥ {USAGE_COMPLIANCE_HOURS} hrs</div>
                           </div>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ background: "var(--card-inner)", borderRadius: 6, height: 10 }}>
-                              <div
-                                style={{
-                                  width: `${complianceRate}%`,
-                                  background: compColor,
-                                  height: "100%",
-                                  borderRadius: 6,
-                                  transition: "width 0.8s"
-                                }}
-                              />
+                          <div className="compliance-detail">
+                            <div className="meter">
+                              <div className={`meter-fill ${compTier}`} style={{ width: `${complianceRate}%` }} />
                             </div>
-                            <div style={{ fontSize: "0.75rem", color: "#9ca3af", marginTop: 8 }}>
+                            <div className="compliance-counts">
                               {compliantNights} of {complianceWindowNights} nights qualify
                             </div>
-                            <div
-                              style={{
-                                fontSize: "0.7rem",
-                                color: complianceRate >= 70 ? "#10b981" : "#f59e0b",
-                                marginTop: 4
-                              }}
-                            >
+                            <div className={`compliance-verdict ${complianceRate >= 70 ? "is-ok" : "is-watch"}`}>
                               {complianceRate >= 70
                                 ? "Insurance compliance threshold met"
                                 : "Below 70% CMS compliance threshold"}
@@ -825,56 +575,29 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                       </section>
                     )}
 
-                    {/* Weekend vs weekday */}
-                    <section className="panel" style={{ padding: 20 }}>
-                      <h3
-                        style={{
-                          margin: "0 0 16px 0",
-                          fontSize: "1rem",
-                          color: "#9ca3af",
-                          textTransform: "uppercase",
-                          letterSpacing: 1
-                        }}
-                      >
-                        Weekend vs Weekday
-                      </h3>
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <section className="panel">
+                      <h3>Weekend vs weekday</h3>
+                      <div className="compare-grid">
                         {[
-                          { label: "AHI", wkdy: wkdyAhi, wknd: wkndAhi, unit: "events/hr", color: "#ef4444" },
-                          { label: "Usage", wkdy: wkdyUsage, wknd: wkndUsage, unit: "hrs", color: "#10b981" }
-                        ].map(({ label, wkdy, wknd, unit, color }) => {
+                          { label: "AHI", wkdy: wkdyAhi, wknd: wkndAhi, unit: "events/hr" },
+                          { label: "Usage", wkdy: wkdyUsage, wknd: wkndUsage, unit: "hrs" }
+                        ].map(({ label, wkdy, wknd, unit }) => {
                           const delta = wkdy !== null && wknd !== null ? wknd - wkdy : null;
                           return (
-                            <div key={label} style={{ background: "var(--bg)", borderRadius: 8, padding: "12px 14px" }}>
-                              <div
-                                style={{
-                                  fontSize: "0.65rem",
-                                  color: "#9ca3af",
-                                  textTransform: "uppercase",
-                                  letterSpacing: 1,
-                                  marginBottom: 8
-                                }}
-                              >
-                                {label}
-                              </div>
-                              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
-                                <div>
-                                  <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>Weekday</div>
-                                  <div style={{ fontSize: "1.2rem", fontWeight: 700, color }}>
-                                    {wkdy !== null ? wkdy.toFixed(1) : "—"}
-                                  </div>
+                            <div key={label} className="compare-cell">
+                              <span className="kpi-label">{label}</span>
+                              <div className="compare-pair">
+                                <div className="compare-side">
+                                  <div className="compare-side-label">Weekday</div>
+                                  <div className="compare-side-value">{wkdy !== null ? wkdy.toFixed(1) : "—"}</div>
                                 </div>
-                                <div style={{ textAlign: "right" }}>
-                                  <div style={{ fontSize: "0.65rem", color: "#6b7280" }}>Weekend</div>
-                                  <div style={{ fontSize: "1.2rem", fontWeight: 700, color }}>
-                                    {wknd !== null ? wknd.toFixed(1) : "—"}
-                                  </div>
+                                <div className="compare-side is-right">
+                                  <div className="compare-side-label">Weekend</div>
+                                  <div className="compare-side-value">{wknd !== null ? wknd.toFixed(1) : "—"}</div>
                                 </div>
                               </div>
                               {delta !== null && (
-                                <div
-                                  style={{ fontSize: "0.7rem", color: Math.abs(delta) < 0.3 ? "#6b7280" : "#f59e0b" }}
-                                >
+                                <div className={`compare-delta ${Math.abs(delta) < 0.3 ? "" : "is-notable"}`}>
                                   Δ {delta > 0 ? "+" : ""}
                                   {delta.toFixed(1)} {unit} on weekends
                                 </div>
@@ -890,18 +613,8 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
 
               {/* Event type split */}
               {hasEventTypeData && (
-                <section className="panel" style={{ padding: 20 }}>
-                  <h3
-                    style={{
-                      margin: "0 0 16px 0",
-                      fontSize: "1rem",
-                      color: "#9ca3af",
-                      textTransform: "uppercase",
-                      letterSpacing: 1
-                    }}
-                  >
-                    Event Type Breakdown ({rangeLabel})
-                  </h3>
+                <section className="panel">
+                  <h3>Event type breakdown ({rangeLabel})</h3>
                   <div data-report-key="event-split">
                     <EventTypeSplitChart trends={sorted} height={220} theme={theme} />
                   </div>
@@ -910,21 +623,13 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
 
               {/* Flow limitation & RIN */}
               {hasFlowLimitationData && (
-                <section className="panel" style={{ padding: 20 }}>
-                  <h3
-                    style={{
-                      margin: "0 0 4px 0",
-                      fontSize: "1rem",
-                      color: "#9ca3af",
-                      textTransform: "uppercase",
-                      letterSpacing: 1
-                    }}
-                  >
-                    Flow Limitation & Respiratory Disturbance ({rangeLabel})
-                  </h3>
-                  <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: 14 }}>
-                    FL P95 measures airway narrowing intensity; RIN counts flow-limited breaths that didn't score as
-                    events.
+                <section className="panel">
+                  <div className="section-head">
+                    <h3 className="section-title">Flow limitation &amp; respiratory disturbance ({rangeLabel})</h3>
+                    <p className="section-note">
+                      FL P95 measures airway narrowing intensity; RIN counts flow-limited breaths that didn&rsquo;t
+                      score as events.
+                    </p>
                   </div>
                   <div data-report-key="flow-limit">
                     <FlowLimitationChart trends={sorted} height={200} theme={theme} />
@@ -973,22 +678,14 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
                     : null;
 
                 return (
-                  <section className="panel" style={{ padding: 20 }}>
-                    <h3
-                      style={{
-                        margin: "0 0 4px 0",
-                        fontSize: "1rem",
-                        color: "#9ca3af",
-                        textTransform: "uppercase",
-                        letterSpacing: 1
-                      }}
-                    >
-                      Pressure Distribution ({rangeLabel})
-                    </h3>
-                    <div style={{ fontSize: "0.75rem", color: "#6b7280", marginBottom: 14 }}>
-                      Average % of 2-second epochs at each pressure level across {parsed.length} night
-                      {parsed.length !== 1 ? "s" : ""} with high-resolution data.
-                      {avgEff !== null && ` Avg time near pressure ceiling: ${avgEff.toFixed(1)}%.`}
+                  <section className="panel">
+                    <div className="section-head">
+                      <h3 className="section-title">Pressure distribution ({rangeLabel})</h3>
+                      <p className="section-note">
+                        Average % of 2-second epochs at each pressure level across {parsed.length} night
+                        {parsed.length !== 1 ? "s" : ""} with high-resolution data.
+                        {avgEff !== null && ` Avg time near pressure ceiling: ${avgEff.toFixed(1)}%.`}
+                      </p>
                     </div>
                     <PressureHistogramChart histogram={avgHist} height={200} theme={theme} />
                   </section>
@@ -1000,40 +697,16 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
 
       {/* Periodic Breathing / Cheyne-Stokes analysis */}
       {hasPeriodicBreathingData && (
-        <section className="panel" style={{ padding: 20 }}>
-          <h3
-            style={{
-              margin: "0 0 14px 0",
-              fontSize: "1rem",
-              color: "#9ca3af",
-              textTransform: "uppercase",
-              letterSpacing: 1
-            }}
-          >
-            Periodic Breathing Analysis ({rangeLabel})
-          </h3>
+        <section className="panel">
+          <h3>Periodic breathing analysis ({rangeLabel})</h3>
           <PeriodicBreathingCard trends={trends} />
         </section>
       )}
 
       {rangeFindings.length > 0 && (
-        <section className="panel" style={{ padding: 20 }}>
-          <h3
-            style={{
-              margin: "0 0 16px 0",
-              fontSize: "1rem",
-              color: "var(--muted)",
-              textTransform: "uppercase",
-              letterSpacing: 1,
-              display: "flex",
-              alignItems: "center",
-              gap: 8
-            }}
-          >
-            <AppIcon type="default" color="var(--muted)" size={16} />
-            Findings — {rangeLabel}
-          </h3>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <section className="panel">
+          <h3>Findings — {rangeLabel}</h3>
+          <div className="finding-grid">
             {rangeFindings.map((exp) => (
               <InsightCard key={`${exp.night_id}-${exp.key}`} insight={exp} />
             ))}
@@ -1043,24 +716,10 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
 
       <TherapyStabilityCard burden={burden} totalNights={totalNights} rangeLabel={rangeLabel} />
 
-      <section className="panel" style={{ padding: 20 }}>
-        <h3
-          style={{
-            margin: "0 0 16px 0",
-            fontSize: "1rem",
-            color: "var(--muted)",
-            textTransform: "uppercase",
-            letterSpacing: 1,
-            display: "flex",
-            alignItems: "center",
-            gap: 8
-          }}
-        >
-          <AppIcon type="default" color="var(--muted)" size={16} />
-          Metric Correlations ({rangeLabel})
-        </h3>
+      <section className="panel">
+        <h3>Metric correlations ({rangeLabel})</h3>
         {correlations && correlations.length > 0 ? (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <div className="corr-grid">
             {correlations.map((c) => (
               <CorrelationBar
                 key={`${c.x}-${c.y}`}
@@ -1075,8 +734,8 @@ export function Insights({ range = "30", customFrom = "", customTo = "" }) {
             ))}
           </div>
         ) : (
-          <div style={{ display: "flex", alignItems: "center", gap: 12, color: "var(--muted)", padding: "20px 0" }}>
-            <AppIcon type="default" color="var(--muted)" size={16} />
+          <div className="empty-note">
+            <AppIcon type="default" size={16} />
             <span>Not enough data for correlations. Requires at least 2 nights of recorded sessions.</span>
           </div>
         )}

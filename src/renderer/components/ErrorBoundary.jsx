@@ -17,11 +17,9 @@ export class ErrorBoundary extends Component {
   render() {
     if (this.state.error) {
       return (
-        <section className="panel" style={{ padding: 24 }}>
-          <h2 style={{ marginTop: 0 }}>Something went wrong</h2>
-          <p style={{ color: "var(--muted)", lineHeight: 1.6 }}>
-            This view failed to render. Reload the app to reset the renderer state.
-          </p>
+        <section className="panel">
+          <h2>Something went wrong</h2>
+          <p className="section-note">This view failed to render. Reload the app to reset the renderer state.</p>
           <button className="btn-primary" onClick={() => window.location.reload()}>
             Reload
           </button>

@@ -2,15 +2,15 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
  * ChartInfoPopover — a small pinned panel that explains a clicked chart marker
- * (a scored event or a periodic-breathing episode). Mirrors the styling of the
- * PeriodicBreathingCard hover tooltip so the two surfaces read identically.
+ * (a scored event or a periodic-breathing episode). Shares the hovercard
+ * styling with the Insights panels so the two surfaces read identically.
  *
  * Positioned fixed at the click point (viewport coordinates), then nudged back
  * inside the viewport so it never spills off an edge. Dismisses on its close
  * button, on Escape, or on an outside click.
  *
  * Props:
- *   popover  — { title, what, action, accent, meta? } | null
+ *   popover  — { title, what, action, tone?, meta? } | null
  *   anchor   — { x, y } viewport pixel coordinates of the click
  *   onClose  — callback
  */
@@ -57,59 +57,30 @@ export function ChartInfoPopover({ popover, anchor, onClose }) {
   }, [popover, onClose]);
 
   if (!popover) return null;
-  const accent = popover.accent || "var(--accent, #22D3EE)";
 
   return (
     <div
       ref={ref}
       role="dialog"
       aria-label={popover.title}
-      style={{
-        position: "fixed",
-        left: pos.left,
-        top: pos.top,
-        width: WIDTH,
-        zIndex: 1000,
-        background: "var(--card)",
-        border: `1px solid ${accent}`,
-        borderLeft: `4px solid ${accent}`,
-        borderRadius: 10,
-        padding: "14px 16px",
-        fontSize: "0.78rem",
-        color: "var(--text)",
-        lineHeight: 1.6,
-        boxShadow: "0 16px 48px rgba(0,0,0,0.55)"
-      }}
+      className={`chart-popover tone-${popover.tone || "info"}`}
+      style={{ left: pos.left, top: pos.top, width: WIDTH }}
     >
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-        <span style={{ fontWeight: 700, color: accent, fontSize: "0.86rem" }}>{popover.title}</span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close"
-          style={{
-            border: "none", background: "transparent", color: "var(--muted)",
-            cursor: "pointer", fontSize: "0.95rem", lineHeight: 1, padding: 2, marginTop: -2
-          }}
-        >
+      <div className="chart-popover-head">
+        <span className="chart-popover-title">{popover.title}</span>
+        <button type="button" className="chart-popover-close" onClick={onClose} aria-label="Close">
           ✕
         </button>
       </div>
 
-      {popover.meta && (
-        <div style={{ color: "var(--muted)", fontSize: "0.72rem", marginTop: 2, marginBottom: 6 }}>
-          {popover.meta}
-        </div>
-      )}
+      {popover.meta && <div className="chart-popover-meta">{popover.meta}</div>}
 
-      <div style={{ color: "var(--muted)", marginTop: popover.meta ? 0 : 8 }}>{popover.what}</div>
+      <div className="hovercard-body">{popover.what}</div>
 
       {popover.action && (
-        <div style={{ borderTop: `1px solid ${accent}40`, paddingTop: 8, marginTop: 10 }}>
-          <span style={{ fontWeight: 700, color: accent, fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: 1 }}>
-            What to do
-          </span>
-          <div style={{ color: "var(--text)", marginTop: 4 }}>{popover.action}</div>
+        <div className="hovercard-foot">
+          <span className="hovercard-foot-label">What to do</span>
+          <p>{popover.action}</p>
         </div>
       )}
     </div>
