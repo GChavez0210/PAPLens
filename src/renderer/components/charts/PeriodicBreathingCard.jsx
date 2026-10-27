@@ -1,5 +1,5 @@
 import { memo, useMemo, useState } from "react";
-import { PB_SEVERITY_COLOR, pbSeverity } from "../../utils/periodicBreathing";
+import { PB_SEVERE_PCT, PB_SIGNIFICANT_PCT, pbSeverity, pbStatusClass } from "../../utils/periodicBreathing";
 
 const TOOLTIP = {
   title: "What this means",
@@ -46,55 +46,41 @@ function PeriodicBreathingCardComponent({ trends }) {
   // banner rather than recolouring the card — an average below the threshold is
   // not itself clinically significant.
   const severity = pbSeverity(avgPbPct);
-  const accent = severity === "elevated" && majorityConfounded ? "#a78bfa" : PB_SEVERITY_COLOR[severity];
+  const tone = pbStatusClass(avgPbPct);
 
-  // The flag banner keeps its own warning colour so a green card can still
-  // carry an amber "n nights crossed 5%" note without the two contradicting.
-  const flagAccent = majorityConfounded ? "#a78bfa" : "var(--warning)";
-
-  // The badge reports presence, the card colour reports severity — so a sub-5%
-  // average keeps the card green (the average is not clinically significant)
-  // while the badge goes amber to mark that PB was detected at all.
-  const badgeAccent = severity === "normal" ? "var(--warning)" : accent;
-
-  const borderColor = accent;
-  const bgColor = severity === "none" ? "var(--card)" : `color-mix(in srgb, ${accent} 7%, var(--card))`;
-  const badgeColor = badgeAccent;
-  const badgeBg = `color-mix(in srgb, ${badgeAccent} 15%, transparent)`;
+  // The badge reports presence, the card reports severity — so a sub-5% average
+  // keeps an "in range" tone while the badge still marks that PB was detected.
+  const badgeTone = severity === "normal" ? "is-watch" : tone;
   const badgeLabel =
     severity === "none"
       ? "None"
       : severity === "severe"
-        ? "⚠ Severe"
+        ? "Severe"
         : severity === "elevated"
           ? majorityConfounded
-            ? "? Possibly Significant"
-            : "⚠ Clinically Significant"
+            ? "Possibly significant"
+            : "Clinically significant"
           : "Detected";
+
+  // Bar scale runs 0–PB_SEVERE_PCT, so the clinical threshold sits at a fixed
+  // fraction of the track regardless of the measured value.
+  const barPct = Math.min(100, (avgPbPct / PB_SEVERE_PCT) * 100);
+  const thresholdPct = (PB_SIGNIFICANT_PCT / PB_SEVERE_PCT) * 100;
 
   return (
     <div
-      style={{
-        background: bgColor,
-        border: `1px solid ${borderColor}`,
-        borderLeft: `4px solid ${borderColor}`,
-        borderRadius: 10,
-        padding: "18px 20px",
-        position: "relative",
-        cursor: "help"
-      }}
+      className={`pb-card tone-${tone.replace("is-", "")}`}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+      <div className="pb-card-head">
+        <div className="pb-card-title">
           <svg
-            width={18}
-            height={18}
+            width={16}
+            height={16}
             viewBox="0 0 24 24"
             fill="none"
-            stroke={borderColor}
+            stroke="currentColor"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -102,148 +88,64 @@ function PeriodicBreathingCardComponent({ trends }) {
           >
             <path d="M2 12c1-4 3-6 5-6s3.5 3 5 6 3 6 5 6 4-2 5-6" />
           </svg>
-          <span style={{ fontWeight: 700, fontSize: "0.92rem", color: "var(--text)" }}>Periodic Breathing</span>
+          <span>Periodic breathing</span>
         </div>
-        <span
-          style={{
-            fontSize: "0.7rem",
-            fontWeight: 700,
-            color: badgeColor,
-            background: badgeBg,
-            borderRadius: 5,
-            padding: "3px 8px",
-            letterSpacing: "0.03em"
-          }}
-        >
-          {badgeLabel}
-        </span>
+        <span className={`pb-badge ${badgeTone}`}>{badgeLabel}</span>
       </div>
 
-      {/* Stats grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-        <StatCell label="Avg PB%" value={hasPB ? `${avgPbPct.toFixed(1)}%` : "0%"} accent={borderColor} />
-        <StatCell label="Episodes" value={hasPB ? totalEpisodes : "0"} accent={borderColor} />
-        <StatCell label="Total PB Time" value={hasPB ? formatDuration(totalPBSec) : "—"} accent={borderColor} />
-        <StatCell label="Avg Cycle" value={avgCycle ? `${avgCycle}s` : "—"} accent={borderColor} />
+      <div className="pb-stats">
+        <StatCell label="Avg PB%" value={hasPB ? `${avgPbPct.toFixed(1)}%` : "0%"} tone={tone} />
+        <StatCell label="Episodes" value={hasPB ? totalEpisodes : "0"} tone={tone} />
+        <StatCell label="Total PB time" value={hasPB ? formatDuration(totalPBSec) : "—"} tone={tone} />
+        <StatCell label="Avg cycle" value={avgCycle ? `${avgCycle}s` : "—"} tone={tone} />
       </div>
 
-      {/* PB% bar */}
       {hasPB && (
-        <div style={{ marginTop: 14 }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: "0.72rem",
-              color: "var(--muted)",
-              marginBottom: 4
-            }}
-          >
+        <div className="pb-meter">
+          <div className="pb-meter-head">
             <span>PB% across selected range</span>
-            <span style={{ fontWeight: 700, color: borderColor }}>{avgPbPct.toFixed(1)}%</span>
+            <span className={`pb-meter-value ${tone}`}>{avgPbPct.toFixed(1)}%</span>
           </div>
-          <div style={{ background: "var(--card-inner)", borderRadius: 4, height: 6 }}>
-            <div
-              style={{
-                height: "100%",
-                borderRadius: 4,
-                background: borderColor,
-                width: `${Math.min(100, avgPbPct * 5)}%`,
-                transition: "width 0.4s ease"
-              }}
-            />
+          <div className="meter pb-meter-track">
+            <div className={`meter-fill ${tone}`} style={{ width: `${barPct}%` }} />
+            <div className="pb-meter-threshold" style={{ left: `${thresholdPct}%` }} />
           </div>
-          {/* Threshold marker at 5% (= 25% of bar width since the bar scale is ×5, i.e. 0–20%) */}
-          <div style={{ position: "relative", height: 0 }}>
-            <div
-              style={{
-                position: "absolute",
-                top: 1,
-                left: "25%",
-                width: 1,
-                height: 6,
-                background: "#f59e0b60"
-              }}
-            />
-          </div>
-          {/* Scale labels aligned to their true positions on the 0–20% scale */}
-          <div style={{ position: "relative", fontSize: "0.65rem", color: "var(--muted)", marginTop: 9, height: 14 }}>
-            <span style={{ position: "absolute", left: 0 }}>0%</span>
-            <span style={{ position: "absolute", left: "25%", transform: "translateX(-50%)", color: "#f59e0b" }}>
-              5% threshold
+          <div className="pb-meter-scale">
+            <span className="pb-scale-start">0%</span>
+            <span className="pb-scale-threshold" style={{ left: `${thresholdPct}%` }}>
+              {PB_SIGNIFICANT_PCT}% threshold
             </span>
-            <span style={{ position: "absolute", right: 0 }}>20%+</span>
+            <span className="pb-scale-end">{PB_SEVERE_PCT}%+</span>
           </div>
         </div>
       )}
 
       {anySignificant && (
-        <div
-          style={{
-            marginTop: 12,
-            padding: "8px 12px",
-            borderRadius: 6,
-            background: `color-mix(in srgb, ${flagAccent} 12%, transparent)`,
-            border: `1px solid color-mix(in srgb, ${flagAccent} 30%, transparent)`,
-            fontSize: "0.78rem",
-            color: flagAccent,
-            lineHeight: 1.5
-          }}
-        >
+        <div className={`pb-flag ${majorityConfounded ? "is-muted" : "is-watch"}`}>
           {majorityConfounded ? (
             <>
               <strong>Low confidence:</strong> {significantNights.length} night
-              {significantNights.length !== 1 ? "s" : ""} met the ≥5% threshold, but most episodes coincided with mask
-              leak events — these may be arousal-driven rather than true periodic breathing. Mention to your care team
-              if leak issues are recurring.
+              {significantNights.length !== 1 ? "s" : ""} met the ≥{PB_SIGNIFICANT_PCT}% threshold, but most episodes
+              coincided with mask leak events — these may be arousal-driven rather than true periodic breathing. Mention
+              to your care team if leak issues are recurring.
             </>
           ) : (
             <>
               <strong>Clinical flag:</strong> {significantNights.length} night
-              {significantNights.length !== 1 ? "s" : ""} met the ≥5% periodic breathing threshold. Discuss with your
-              sleep physician or cardiologist.
+              {significantNights.length !== 1 ? "s" : ""} met the ≥{PB_SIGNIFICANT_PCT}% periodic breathing threshold.
+              Discuss with your sleep physician or cardiologist.
             </>
           )}
         </div>
       )}
 
-      {/* Hover tooltip */}
       {hovered && (
-        <div
-          style={{
-            position: "absolute",
-            bottom: "calc(100% + 8px)",
-            left: 0,
-            right: 0,
-            zIndex: 50,
-            background: "var(--card)",
-            border: `1px solid ${borderColor}`,
-            borderRadius: 10,
-            padding: "14px 16px",
-            fontSize: "0.78rem",
-            color: "var(--text)",
-            lineHeight: 1.7,
-            boxShadow: "0 12px 40px rgba(0,0,0,0.55)",
-            pointerEvents: "none"
-          }}
-        >
-          <div style={{ fontWeight: 700, color: borderColor, fontSize: "0.82rem", marginBottom: 8 }}>
-            {TOOLTIP.title}
-          </div>
-          <div style={{ color: "var(--muted)", marginBottom: 10 }}>{TOOLTIP.what}</div>
-          <div style={{ borderTop: `1px solid ${borderColor}40`, paddingTop: 8 }}>
-            <span
-              style={{
-                fontWeight: 700,
-                color: borderColor,
-                fontSize: "0.75rem",
-                textTransform: "uppercase",
-                letterSpacing: 1
-              }}
-            >
-              How to address
-            </span>
-            <div style={{ color: "var(--text)", marginTop: 4 }}>{TOOLTIP.action}</div>
+        <div className="hovercard is-above">
+          <div className="hovercard-title">{TOOLTIP.title}</div>
+          <div className="hovercard-body">{TOOLTIP.what}</div>
+          <div className="hovercard-foot">
+            <span className="hovercard-foot-label">How to address</span>
+            <p>{TOOLTIP.action}</p>
           </div>
         </div>
       )}
@@ -253,22 +155,11 @@ function PeriodicBreathingCardComponent({ trends }) {
 
 export const PeriodicBreathingCard = memo(PeriodicBreathingCardComponent);
 
-function StatCell({ label, value, accent }) {
+function StatCell({ label, value, tone }) {
   return (
-    <div
-      style={{
-        background: "var(--card-inner)",
-        borderRadius: 7,
-        padding: "10px 12px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 3
-      }}
-    >
-      <span style={{ fontSize: "0.68rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-        {label}
-      </span>
-      <span style={{ fontSize: "1.05rem", fontWeight: 700, color: accent }}>{value}</span>
+    <div className="pb-stat">
+      <span className="kpi-label">{label}</span>
+      <span className={`pb-stat-value ${tone}`}>{value}</span>
     </div>
   );
 }

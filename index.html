@@ -6,19 +6,18 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' ws:; object-src 'none'; base-uri 'self';" />
     <title>PAPLens</title>
     <style>
+      /* The splash runs before the app stylesheet loads, so it carries its own
+         copy of the base tokens. Keep these in step with styles.css. */
       :root {
         color-scheme: dark;
-        font-family: "Inter", "Segoe UI", sans-serif;
-        background: #09090b;
+        font-family: "Segoe UI Variable Text", "Segoe UI", Inter, system-ui, sans-serif;
+        background: #0f1216;
       }
 
       body {
         margin: 0;
-        background:
-          radial-gradient(circle at top, rgba(99, 102, 241, 0.2), transparent 32%),
-          radial-gradient(circle at bottom right, rgba(34, 211, 238, 0.14), transparent 28%),
-          #09090b;
-        color: #ffffff;
+        background: #0f1216;
+        color: #e9ecef;
       }
 
       #app-boot-splash {
@@ -36,12 +35,11 @@
       }
 
       #app-boot-splash .boot-card {
-        width: min(520px, 100%);
-        padding: 36px 32px;
-        border-radius: 28px;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        background: linear-gradient(180deg, rgba(24, 24, 27, 0.94), rgba(9, 9, 11, 0.88));
-        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+        width: min(460px, 100%);
+        padding: 40px 32px;
+        border-radius: 10px;
+        border: 1px solid #282e35;
+        background: #161a1f;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -50,30 +48,31 @@
       }
 
       #app-boot-splash .boot-spinner {
-        width: 56px;
-        height: 56px;
+        width: 30px;
+        height: 30px;
         border-radius: 50%;
-        border: 4px solid rgba(148, 163, 184, 0.18);
-        border-top-color: #3b82f6;
-        border-right-color: #2dd4bf;
-        animation: boot-spin 0.85s linear infinite;
+        border: 2px solid #282e35;
+        border-top-color: #5c9ddb;
+        animation: boot-spin 0.8s linear infinite;
       }
 
       #app-boot-splash img {
-        width: min(360px, 92%);
+        width: min(280px, 86%);
         height: auto;
       }
 
       #app-boot-splash h1 {
-        margin: 0 0 10px;
-        font-size: clamp(1.7rem, 4vw, 2.2rem);
-        letter-spacing: -0.03em;
+        margin: 0 0 8px;
+        font-size: 1.25rem;
+        font-weight: 600;
+        letter-spacing: -0.014em;
       }
 
       #app-boot-splash p {
         margin: 0;
-        color: #a1a1aa;
-        line-height: 1.6;
+        color: #949ca6;
+        font-size: 0.8125rem;
+        line-height: 1.5;
       }
 
       @keyframes boot-spin {

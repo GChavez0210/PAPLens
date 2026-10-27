@@ -1,6 +1,5 @@
 const { existsSync, mkdirSync, readdirSync, rmSync } = require("fs");
 const { join } = require("path");
-const { tmpdir } = require("os");
 const { spawnSync } = require("child_process");
 const esbuild = require("esbuild");
 
@@ -31,7 +30,11 @@ const rendererTestRoot = join(root, "src", "renderer");
 const rendererTestFiles = existsSync(rendererTestRoot) ? findTestFiles(rendererTestRoot) : [];
 
 if (rendererTestFiles.length > 0) {
-  const outDir = join(tmpdir(), "paplens-renderer-tests");
+  // Bundle inside the repo rather than the system temp directory. Endpoint
+  // security on some Windows machines denies esbuild.exe writes anywhere under
+  // %TEMP% even though the parent node process can write there, which failed
+  // the run before a single test executed.
+  const outDir = join(root, "node_modules", ".cache", "paplens-renderer-tests");
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
 

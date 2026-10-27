@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Chart from "chart.js/auto";
-import { baseLegend, baseTooltip, chartColors, formatAxisTick } from "../charts/chartTheme";
+import {
+  baseLegend,
+  baseTooltip,
+  chartColors,
+  formatAxisTick,
+  seriesPalette,
+  statusColors,
+  withAlpha
+} from "../charts/chartTheme";
 import { glossaryForEvent, glossaryForPB } from "../charts/eventGlossary";
 import { ChartInfoPopover } from "./charts/ChartInfoPopover";
 
@@ -266,7 +274,7 @@ function makePBRegionPlugin(episodes) {
  * payload so it reuses the same click/tooltip plumbing as the event markers,
  * while the amber band stays purely cosmetic.
  */
-function buildPBBadgeDataset(episodes, ampPoints) {
+function buildPBBadgeDataset(episodes, ampPoints, palette, cardSurface) {
   if (!episodes || episodes.length === 0 || !ampPoints || ampPoints.length === 0) return null;
   const g = glossaryForPB();
   const points = episodes.map((ep, i) => {
@@ -282,7 +290,7 @@ function buildPBBadgeDataset(episodes, ampPoints) {
       tip: g.tip,
       popover: {
         title: `${g.title} ${i + 1} of ${episodes.length}`,
-        accent: g.accent,
+        tone: g.tone,
         meta: `Lasted ${durStr}`,
         what: g.what,
         action: g.action
@@ -293,8 +301,8 @@ function buildPBBadgeDataset(episodes, ampPoints) {
     type: "scatter",
     label: "PB episode",
     data: points,
-    backgroundColor: g.accent,
-    borderColor: "#fff",
+    backgroundColor: palette[g.series],
+    borderColor: cardSurface,
     borderWidth: 1.5,
     pointStyle: "rectRot",
     pointRadius: 7,
@@ -318,14 +326,10 @@ function collectEvents(detail) {
     }));
 }
 
-function eventColor(text) {
-  const value = text.toLowerCase();
-  if (value.includes("obstructive") || value === "oa") return "#ef4444";
-  if (value.includes("central") || value === "ca") return "#8b5cf6";
-  if (value.includes("hypopnea") || value === "h") return "#f59e0b";
-  if (value.includes("rera")) return "#22d3ee";
-  if (value.includes("leak")) return "#10b981";
-  return "#64748b";
+/** Marker colour for an annotation, from the glossary's series key. */
+function eventColor(text, palette) {
+  const entry = glossaryForEvent(text);
+  return palette[entry?.series] ?? palette.slate;
 }
 
 /** Nearest-neighbour lookup: returns pressure Y at xMin, or null. */
@@ -347,7 +351,7 @@ function interpolatePressureAt(pressurePoints, xMin) {
  * Builds one scatter dataset per unique event type so each type gets its own
  * legend entry and colour on the pressure chart.
  */
-function buildEventOverlayDatasets(events, pressurePoints) {
+function buildEventOverlayDatasets(events, pressurePoints, palette, cardSurface) {
   if (!events || events.length === 0) return [];
 
   // Group events by canonical type label
@@ -358,7 +362,7 @@ function buildEventOverlayDatasets(events, pressurePoints) {
     // we can't explain.
     const g = glossaryForEvent(ev.text);
     if (!g) continue;
-    const color = eventColor(ev.text);
+    const color = eventColor(ev.text, palette);
     if (!groups.has(ev.text)) groups.set(ev.text, { color, points: [] });
     const xMin = ev.onsetSeconds / 60;
     const y = interpolatePressureAt(pressurePoints, xMin);
@@ -377,7 +381,7 @@ function buildEventOverlayDatasets(events, pressurePoints) {
         tip: g.tip,
         popover: {
           title: g.title,
-          accent: color,
+          tone: g.tone,
           // Match the PB popover: show only how long the event lasted. Most
           // ResMed events are zero-duration flags with no recorded length, so
           // those are labelled "Point event" instead.
@@ -394,7 +398,7 @@ function buildEventOverlayDatasets(events, pressurePoints) {
     label,
     data: points,
     backgroundColor: color,
-    borderColor: "#fff",
+    borderColor: cardSurface,
     borderWidth: 1.5,
     pointRadius: 6,
     pointHoverRadius: 8,
@@ -674,8 +678,7 @@ function MiniSparkline({ points, maxMinutes, theme }) {
     for (const p of points) ctx.lineTo(xOf(p.x), yOf(p.y));
     ctx.lineTo(xOf(points[points.length - 1].x), h);
     ctx.closePath();
-    const accent = theme === "light" ? "rgba(79,70,229,0.16)" : "rgba(34,211,238,0.16)";
-    ctx.fillStyle = accent;
+    ctx.fillStyle = withAlpha(seriesPalette(theme).blue, 0.2);
     ctx.fill();
   }, [points, maxMinutes, theme]);
 
@@ -892,12 +895,15 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
     // Breathing amplitude — computed once, stored as a plain property
     const ampPoints = flow ? buildAmplitudePoints(flow.values, brp) : null;
     const pbEpisodes = ampPoints ? detectPBFromAmplitude(ampPoints) : [];
+    const palette = seriesPalette(theme);
+    const colors = chartColors(theme);
+    const status = statusColors(theme);
     const pbPlugin = pbEpisodes.length > 0 ? makePBRegionPlugin(pbEpisodes) : null;
-    const pbBadge = buildPBBadgeDataset(pbEpisodes, ampPoints);
+    const pbBadge = buildPBBadgeDataset(pbEpisodes, ampPoints, palette, colors.tooltipBg);
 
     const pressureLinePoints = pressure.map((series) => buildPoints(series.values, pld));
     const events = collectEvents(detail);
-    const eventOverlay = buildEventOverlayDatasets(events, pressureLinePoints[0] || []);
+    const eventOverlay = buildEventOverlayDatasets(events, pressureLinePoints[0] || [], palette, colors.tooltipBg);
 
     return {
       pressure: [
@@ -905,7 +911,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
           type: "line",
           label: index === 0 ? "Mask pressure" : "EPAP/EPR pressure",
           data: pressureLinePoints[index],
-          borderColor: index === 0 ? "#ef4444" : "#10b981",
+          borderColor: index === 0 ? palette.clay : palette.sage,
           backgroundColor: "transparent",
           pointRadius: 0,
           borderWidth: 1.7,
@@ -919,8 +925,8 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
             {
               label: "Flow rate",
               data: buildPoints(flow.values, brp, 2200),
-              borderColor: theme === "light" ? "#111827" : "#e5e7eb",
-              backgroundColor: theme === "light" ? "rgba(17,24,39,0.08)" : "rgba(229,231,235,0.08)",
+              borderColor: palette.slate,
+              backgroundColor: withAlpha(palette.slate, 0.08),
               pointRadius: 0,
               borderWidth: 1,
               tension: 0.3,
@@ -938,8 +944,8 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
             {
               label: "Tidal amplitude",
               data: ampPoints,
-              borderColor: "#ef4444",
-              backgroundColor: "rgba(239,68,68,0.08)",
+              borderColor: palette.clay,
+              backgroundColor: withAlpha(palette.clay, 0.08),
               pointRadius: 0,
               borderWidth: 1.5,
               tension: 0.3,
@@ -955,8 +961,8 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
             {
               label: "Flow limitation",
               data: buildPoints(flowLimitation.values, pld),
-              borderColor: "#71717a",
-              backgroundColor: "rgba(113,113,122,0.12)",
+              borderColor: palette.plum,
+              backgroundColor: withAlpha(palette.plum, 0.1),
               pointRadius: 0,
               borderWidth: 1.5,
               fill: true,
@@ -969,8 +975,8 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
             {
               label: "Leak rate",
               data: buildPoints(toLeakLitersPerMinute(leak.values), pld),
-              borderColor: "#16a34a",
-              backgroundColor: "rgba(22,163,74,0.12)",
+              borderColor: palette.sage,
+              backgroundColor: withAlpha(palette.sage, 0.1),
               pointRadius: 0,
               borderWidth: 1.5,
               fill: true,
@@ -985,7 +991,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                   { x: dur, y: 24 }
                 ];
               })(),
-              borderColor: "#ef4444",
+              borderColor: withAlpha(status.alert, 0.6),
               pointRadius: 0,
               borderWidth: 1,
               borderDash: [5, 4],
@@ -1157,7 +1163,7 @@ export function SessionGraphsModal({ sessions = [], theme, onClose }) {
                   padding: "8px 18px",
                   borderRadius: 6,
                   cursor: reattaching ? "wait" : "pointer",
-                  background: "var(--accent, #22D3EE)",
+                  background: "var(--accent)",
                   color: "#000",
                   border: "none",
                   fontWeight: 700,
